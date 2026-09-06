@@ -38,217 +38,15 @@
     </script>
 
     <style>
-
-        /* ===== (your existing styles – unchanged) ===== */
-        /* I've omitted the full CSS for brevity – use your original file's CSS */
-        /* but ensure it includes all classes like .card, .stats-grid, etc. */
-        /* For this answer, I'll provide a minimal style; but you should copy your original CSS */
-        /* Actually, to keep this answer complete, I'll include the full CSS from your file. */
-        /* ============================================================ */
-        /* ROOT VARIABLES */
-        :root {
-            --primary: #0F4C81;
-            --primary-dark: #0A3A63;
-            --primary-light: #1A6BA8;
-            --primary-gradient: linear-gradient(135deg, #0F4C81, #0A3A63);
-            --secondary: #2DAAE1;
-            --secondary-light: #5BBDE8;
-            --secondary-gradient: linear-gradient(135deg, #2DAAE1, #1A8BC7);
-            --bg: #F8FAFC;
-            --card: #FFFFFF;
-            --card-shadow: 0 4px 20px rgba(15, 76, 129, 0.08);
-            --card-hover-shadow: 0 8px 40px rgba(15, 76, 129, 0.15);
-            --text: #1F2937;
-            --text-muted: #64748B;
-            --text-light: #94A3B8;
-            --emergency: #D62828;
-            --success: #22C55E;
-            --warning: #F59E0B;
-            --border: #E2E8F0;
-            --border-light: #F1F5F9;
-            --shadow-sm: 0 1px 2px rgba(15, 76, 129, 0.05);
-            --shadow: 0 4px 20px rgba(15, 76, 129, 0.08);
-            --shadow-lg: 0 8px 40px rgba(15, 76, 129, 0.12);
-            --shadow-xl: 0 16px 60px rgba(15, 76, 129, 0.16);
-            --radius-sm: 8px;
-            --radius: 12px;
-            --radius-lg: 16px;
-            --radius-xl: 24px;
-            --sidebar-width: 260px;
-            --header-height: 64px;
-        }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html { scroll-behavior: smooth; }
-        body {
-            font-family: 'Noto Sans Ethiopic', 'Inter', sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            line-height: 1.7;
-            overflow-x: hidden;
-        }
-        a { text-decoration: none; color: inherit; }
-        ul { list-style: none; }
-        button { cursor: pointer; border: none; font-family: inherit; }
-        input, select, textarea {
-            font-family: inherit;
-            padding: 10px 14px;
-            border: 2px solid var(--border);
-            border-radius: var(--radius-sm);
-            outline: none;
-            font-size: 0.95rem;
-            width: 100%;
-            background: #FFFFFF;
-            color: var(--text);
-            transition: 0.3s;
-        }
-        input:focus, select:focus, textarea:focus {
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(15, 76, 129, 0.12);
-        }
-        textarea { resize: vertical; min-height: 80px; }
-
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: var(--bg); }
-        ::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--primary-dark); }
-
-        .btn {
-            display: inline-block;
-            font-weight: 700;
-            padding: 10px 24px;
-            border-radius: var(--radius-sm);
-            font-size: 0.9rem;
-            font-family: inherit;
-            border: none;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-align: center;
-        }
-        .btn-primary { background: var(--primary); color: #FFFFFF; box-shadow: 0 4px 16px rgba(15, 76, 129, 0.3); }
-        .btn-primary:hover { background: var(--primary-dark); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(15, 76, 129, 0.4); }
-        .btn-secondary { background: var(--secondary); color: #FFFFFF; box-shadow: 0 4px 16px rgba(45, 170, 225, 0.3); }
-        .btn-secondary:hover { background: #1A8BC7; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(45, 170, 225, 0.4); }
-        .btn-success { background: var(--success); color: #FFFFFF; }
-        .btn-success:hover { background: #16A34A; transform: translateY(-2px); }
-        .btn-danger { background: var(--emergency); color: #FFFFFF; }
-        .btn-danger:hover { background: #B91C1C; transform: translateY(-2px); }
-        .btn-outline { background: transparent; color: var(--primary); border: 2px solid var(--primary); }
-        .btn-outline:hover { background: var(--primary); color: #FFFFFF; transform: translateY(-2px); }
-        .btn-sm { padding: 6px 14px; font-size: 0.8rem; }
-        .btn-xs { padding: 4px 10px; font-size: 0.7rem; }
-
-        .toast {
-            position: fixed;
-            bottom: 24px;
-            right: 24px;
-            padding: 16px 24px;
-            border-radius: var(--radius);
-            color: #FFFFFF;
-            font-weight: 600;
-            z-index: 9999;
-            display: none;
-            max-width: 400px;
-            box-shadow: var(--shadow-xl);
-            animation: slideUp 0.4s ease;
-        }
-        .toast.show { display: block; }
-        .toast.success { background: var(--success); }
-        .toast.error { background: var(--emergency); }
-        .toast.info { background: var(--secondary); }
         @keyframes slideUp {
             from { opacity: 0; transform: translateY(40px); }
             to { opacity: 1; transform: translateY(0); }
-        }
-
-        #loginContainer {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: var(--primary-gradient);
-            padding: 20px;
-            position: relative;
-            overflow: hidden;
-        }
-        #loginContainer::before {
-            content: '';
-            position: absolute;
-            width: 600px;
-            height: 600px;
-            background: radial-gradient(circle, rgba(45, 170, 225, 0.08) 0%, transparent 70%);
-            top: -200px;
-            right: -200px;
-            animation: floatBg 20s infinite alternate;
-        }
-        #loginContainer::after {
-            content: '';
-            position: absolute;
-            width: 500px;
-            height: 500px;
-            background: radial-gradient(circle, rgba(45, 170, 225, 0.05) 0%, transparent 70%);
-            bottom: -200px;
-            left: -200px;
-            animation: floatBg 25s infinite alternate-reverse;
         }
         @keyframes floatBg {
             0% { transform: translate(0, 0) scale(1); }
             100% { transform: translate(50px, 30px) scale(1.1); }
         }
-        .login-box {
-            background: rgba(255,255,255,0.05);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: var(--radius-xl);
-            padding: 48px 40px;
-            max-width: 400px;
-            width: 100%;
-            box-shadow: 0 25px 80px rgba(0,0,0,0.5);
-            position: relative;
-            z-index: 1;
-        }
-        .login-box .logo { text-align: center; margin-bottom: 32px; }
-        .login-box .logo img { height: 64px; width: auto; border-radius: 12px; margin-bottom: 12px; }
-        .login-box .logo h1 { font-size: 1.5rem; color: #FFFFFF; font-weight: 900; }
-        .login-box .logo h1 span { color: var(--secondary); }
-        /* ✅ NEW: ጽሁፉ ተነስቶ ሎጎው ብቻ ስለሚታይ ትንሽ አግዝፈነዋል */
-        .login-box .logo img.logo-img-only { height: 110px; margin-bottom: 0; }
-        .login-box .logo p { color: #94A3B8; font-size: 0.9rem; margin-top: 4px; }
-        .login-box .form-group { margin-bottom: 16px; }
-        .login-box .form-group label { display: block; color: #94A3B8; font-weight: 500; font-size: 0.85rem; margin-bottom: 4px; }
-        .login-box .form-group input {
-            width: 100%;
-            padding: 12px 16px;
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: var(--radius-sm);
-            background: rgba(255,255,255,0.05);
-            color: #FFFFFF;
-            font-size: 1rem;
-            transition: 0.3s;
-            outline: none;
-        }
-        .login-box .form-group input:focus {
-            border-color: var(--secondary);
-            box-shadow: 0 0 0 3px rgba(45, 170, 225, 0.15);
-        }
-        .login-box .form-group input::placeholder { color: #475569; }
-        .login-box .btn-login {
-            width: 100%;
-            padding: 14px;
-            background: var(--secondary-gradient);
-            border: none;
-            border-radius: var(--radius-sm);
-            color: #FFFFFF;
-            font-weight: 700;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: 0.3s;
-        }
-        .login-box .btn-login:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(45, 170, 225, 0.35); }
-        .login-box .btn-login:disabled { opacity: 0.5; cursor: not-allowed; }
-        .login-box .error-message { color: var(--emergency); font-size: 0.85rem; margin-top: 12px; text-align: center; display: none; }
-        .login-box .error-message.show { display: block; }
 
         #adminContainer { display: none; min-height: 100vh; }
 
@@ -303,6 +101,7 @@
         }
         .sidebar-nav a i { width: 20px; text-align: center; font-size: 1rem; }
         .sidebar-nav a .badge {
+            display: none;
             background: var(--emergency);
             color: #FFFFFF;
             font-size: 0.6rem;
@@ -310,6 +109,7 @@
             border-radius: 50px;
             margin-left: auto;
         }
+        .sidebar-nav a .badge.show { display: inline-block; }
         .sidebar-nav hr { border: none; border-top: 1px solid rgba(255,255,255,0.05); margin: 8px 16px; }
         .sidebar-nav .logout { color: var(--emergency); margin-top: 8px; }
         .sidebar-nav .logout:hover { background: rgba(214, 40, 40, 0.1); border-left-color: var(--emergency); color: var(--emergency); }
@@ -350,22 +150,9 @@
         .notif-dropdown .notif-item .notif-text { flex: 1; font-size: 0.82rem; color: var(--text); }
         .notif-dropdown .notif-item .notif-num { background: var(--emergency); color: #fff; border-radius: 50px; padding: 1px 8px; font-size: 0.7rem; font-weight: 700; }
         .notif-dropdown .notif-empty { padding: 20px 14px; text-align: center; color: var(--text-muted); font-size: 0.82rem; }
-
-        .tab-content { display: none; animation: fadeIn 0.4s ease; }
-        .tab-content.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
-        .card { background: var(--card); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; box-shadow: var(--shadow); border: 1px solid var(--border); }
-        .card-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
-        .card-header h3 { font-size: 1.05rem; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
-        .card-header h3 i { color: var(--primary); }
-
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
-        .stat-card { background: var(--card); border-radius: var(--radius); padding: 20px; border: 1px solid var(--border); text-align: center; transition: 0.3s; box-shadow: var(--shadow-sm); }
         .stat-card:hover { border-color: var(--primary); transform: translateY(-4px); box-shadow: var(--card-hover-shadow); }
         .stat-card .icon { font-size: 1.8rem; color: var(--primary); margin-bottom: 4px; }
-        .stat-card .number { font-size: 2rem; font-weight: 900; color: var(--text); }
-        .stat-card .label { font-size: 0.85rem; color: var(--text-muted); }
 
         .table-wrap { overflow-x: auto; }
         .eth-picker-part { padding:8px 6px; border:1.5px solid var(--border); border-radius:8px; font-size:0.8rem; background:#fff; }
@@ -373,11 +160,6 @@
         th { background: var(--bg); color: var(--text-muted); padding: 10px 12px; text-align: left; font-weight: 700; border-bottom: 2px solid var(--border); white-space: nowrap; }
         td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
         tr:hover td { background: var(--bg); }
-
-        .status-badge { display: inline-block; padding: 2px 12px; border-radius: 50px; font-size: 0.7rem; font-weight: 700; }
-        .status-pending { background: #FEF9C3; color: #92400E; }
-        .status-assigned { background: #DBEAFE; color: #1E40AF; }
-        .status-completed { background: #DCFCE7; color: #166534; }
         .status-active { background: #DCFCE7; color: #166534; }
         .status-free { background: #FEF9C3; color: #92400E; }
         .status-off { background: #E2E8F0; color: #475569; }
@@ -487,15 +269,6 @@
             .modal { padding: 16px; }
             .card { padding: 14px; }
         }
-
-        .flex { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-        .flex-between { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
-        .text-center { text-align: center; }
-        .text-muted { color: var(--text-muted); font-size: 0.85rem; }
-        .mt-8 { margin-top: 8px; }
-        .mb-8 { margin-bottom: 8px; }
-        .hidden { display: none !important; }
-        .w-full { width: 100%; }
         .gap-8 { gap: 8px; }
 
         /* ✅ ADDED: .timeline / .timeline-item - ለ ትዕዛዝ ታሪክ (order history) ማሳያ */
@@ -542,6 +315,7 @@
             --radius-xl: 24px;
             --header-height: 64px;
             --bottom-nav-height: 64px;
+            --sidebar-width: 260px;
         }
 
         /* ============================================================
@@ -694,6 +468,7 @@
         .btn-primary:hover {
             background: var(--primary-dark);
             transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(15, 76, 129, 0.4);
         }
         .btn-secondary {
             background: var(--secondary);
@@ -703,6 +478,7 @@
         .btn-secondary:hover {
             background: #1A8BC7;
             transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(45, 170, 225, 0.4);
         }
         .btn-success {
             background: var(--success);
@@ -728,6 +504,7 @@
         .btn-outline:hover {
             background: var(--primary);
             color: #FFFFFF;
+            transform: translateY(-2px);
         }
         .btn-sm { padding: 6px 14px; font-size: 0.8rem; }
         .btn-xs { padding: 4px 10px; font-size: 0.7rem; }
@@ -751,6 +528,7 @@
             box-shadow: var(--shadow-xl);
             animation: slideUp 0.4s ease;
             text-align: center;
+            right: 24px;
         }
         .toast.show { display: block; }
         .toast.success { background: var(--success); }
@@ -976,6 +754,8 @@
             padding: 14px 12px;
             text-align: center;
             border: 1px solid var(--border);
+            transition: 0.3s;
+            box-shadow: var(--shadow-sm);
         }
         .stat-card .number { font-size: 1.6rem; font-weight: 900; color: var(--text); }
         .stat-card .label { font-size: 0.7rem; color: var(--text-muted); }
@@ -1416,12 +1196,15 @@
                     <div class="error-message" id="loginError">❌ የተሳሳተ ስልክ ቁጥር ወይም የይለፍ ቃል</div>
                 </form>
                 <div class="login-footer" style="margin-top:14px;">
-                    <a href="#" onclick="showAuthPane('register'); return false;">📝 አካውንት የለዎትም? ይመዝገቡ</a>
+                    <a href="#" onclick="showAuthPane('register'); return false;">🔑 አድሚን ነዎት? እዚህ ይመዝገቡ</a>
                 </div>
             </div>
 
-            <!-- ===== SELF REGISTRATION (ቴክኒሻን ወይም አስተዳዳሪ) ===== -->
+            <!-- ===== SELF REGISTRATION (አድሚን ብቻ - ሰራተኛ/ቴክኒሻን ምዝገባ በአድሚን ትእዛዝ ብቻ ነው) ===== -->
             <div id="registerPane" style="display:none;">
+                <p style="color:#94A3B8; font-size:0.8rem; margin-bottom:10px; text-align:center;">
+                    ⛔ ሰራተኞች (ቴክኒሻኖች) እራሳቸውን መመዝገብ አይችሉም - አድሚን ብቻ ነው ሰራተኛ የሚመዘግበው። ይህ ቅጽ ለ አዲስ አድሚን ምዝገባ ብቻ ነው፣ የአድሚን ልዩ ኮድ ያስፈልጋል።
+                </p>
                 <form id="registerForm">
                     <div class="form-group">
                         <label>👤 ሙሉ ስም</label>
@@ -1440,9 +1223,9 @@
                         <input type="password" id="regPassword" placeholder="የይለፍ ቃል ይምረጡ" required />
                     </div>
                     <div class="form-group">
-                        <label>🔑 የአድሚን ልዩ ኮድ (አማራጭ)</label>
-                        <input type="text" id="regAdminCode" placeholder="ካለዎት ብቻ ያስገቡ" />
-                        <small style="color:#64748B; font-size:0.75rem;">ይህን በትክክል የሚያውቁ ብቻ ወዲያውኑ እንደ አስተዳዳሪ ይመዘገባሉ፤ ካልሞላ እንደ ቴክኒሻን ተመዝግበው የአስተዳዳሪ ማጽደቅ ይጠብቃሉ</small>
+                        <label>🔑 የአድሚን ልዩ ኮድ *</label>
+                        <input type="text" id="regAdminCode" placeholder="የአድሚን ልዩ ኮድ ያስፈልጋል" required />
+                        <small style="color:#64748B; font-size:0.75rem;">ይህ ኮድ ትክክል ካልሆነ ምዝገባው አይፈቀድም - ሰራተኛ (ቴክኒሻን) ለመመዝገብ አድሚንዎን ያግኙ።</small>
                     </div>
                     <button type="submit" class="btn-login" id="registerBtn">
                         <i class="fas fa-user-plus"></i> ተመዝገብ
@@ -1807,7 +1590,10 @@
                         <button class="btn btn-primary" id="addTxBtn"><i class="fas fa-save"></i> ያስገቡ</button>
                     </div>
                     <div class="card">
-                        <div class="card-header"><h3><i class="fas fa-list"></i> 📋 የግቤቶች ታሪክ</h3></div>
+                        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                            <h3><i class="fas fa-list"></i> 📋 የግቤቶች ታሪክ</h3>
+                            <button class="btn btn-secondary btn-sm" id="exportFinanceBtn" onclick="exportFinanceCSV()"><i class="fas fa-file-download"></i> የሂሳብ ማውረጃ (CSV)</button>
+                        </div>
                         <div id="txList"><p class="text-muted text-center">ምንም ግቤት የለም</p></div>
                     </div>
 
@@ -2593,6 +2379,8 @@
         // ✅ NEW: ሁለተኛ ቦት/ቻት - ሁሉም አጠቃላይ (አድሚን) ማሳወቂያዎች ወደ ሁለቱም ይላካሉ
         const BOT_TOKEN_2 = "8812023700:AAFbAdj9UZWr4Upp7NL4j3E3FHSUEjCNOQY";
         const CHAT_ID_2 = "713007386";
+        // ✅ NEW: ዋናው ቦት username - ራስ-አገልግሎት (self-service) ቀጥታ ማገናኛ deep-link ለመስራት ይጠቅማል
+        const BOT_USERNAME = "HalAlElectronics_bot";
 
         async function sendTelegramNotification(message, targetChatId) {
             try {
@@ -2656,37 +2444,36 @@
         }
 
         // ============================================================
-        // ✅ NEW: ለ እያንዳንዱ ቴክኒሻን የ ራሱ Telegram Chat ID ማግኘት
-        // (ቴክኒሻኑ አስቀድሞ ለ @HalAlElectronics_bot "/start" መጻፍ አለበት)
+        // ✅ UPDATED: ቀጥታ ማገናኛ (Direct Connect) - ለ እያንዳንዱ ቴክኒሻን የ ራሱ deep-link
+        // ችግር ቀደም ሲል፦ getUpdates ብቻ ተጠቅሞ በ username ይፈልግ ነበር (24 ሰዓት ብቻ የሚቆይ፣
+        // ብዙ ጊዜ የማይገኝ)። አሁን ግን staffId ራሱ ወደ ቦቱ deep-link ተላልፎ webhook
+        // (functions/index.js -> telegramWebhook) ቀጥታ chatId ይመዘግባል - ምንም
+        // username ማዛመድ ሳያስፈልግ። አድሚን ይህን ማገናኛ ቅዳ አድርጎ ለቴክኒሻኑ (SMS/WhatsApp)
+        // መላክ ብቻ ነው የሚያስፈልገው፣ ወይም ቴክኒሻኑ ራሱ ገብቶ 'አገናኝ' ተጭኖ ራሱ ይላከዋል።
         // ============================================================
+        function getTelegramConnectLink(staffId) {
+            return `https://t.me/${BOT_USERNAME}?start=${staffId}`;
+        }
+
         async function connectTechTelegram(techId) {
-            const tech = allTechnicians.find(t => t.id === techId);
-            if (!tech || !tech.telegramUsername) {
-                showToast('⚠️ ለዚህ ቴክኒሻን Telegram username አልተመዘገበም', 'error');
+            const tech = allTechnicians.find(t => t.id === techId) || allStaff.find(t => t.id === techId);
+            if (!tech) return;
+
+            if (tech.chatId) {
+                showToast(`✅ የ ${tech.name} Telegram አስቀድሞ ተገናኝቷል`, 'success');
                 return;
             }
-            const username = tech.telegramUsername.replace('@', '').toLowerCase().trim();
-            try {
-                const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getUpdates`);
-                const data = await res.json();
-                if (!data.ok) { showToast('⚠️ Telegram API ስህተት: ' + (data.description || ''), 'error'); return; }
-                let found = null;
-                (data.result || []).forEach(update => {
-                    const msg = update.message || update.channel_post;
-                    if (msg && msg.from && msg.from.username && msg.from.username.toLowerCase() === username) {
-                        found = msg.chat.id;
-                    }
-                });
-                if (found) {
-                    await db.collection('staff').doc(techId).update({ chatId: String(found) });
-                    showToast(`🎉 የ ${tech.name} Telegram ተገናኝቷል!`, 'success');
-                    viewTech(techId);
-                } else {
-                    showToast(`⚠️ አልተገኘም። ${tech.telegramUsername} ለ @HalAlElectronics_bot "/start" መጻፍ አለበት፣ ከዛ ድጋሚ ይሞክሩ።`, 'error');
-                }
-            } catch (e) {
-                showToast('❌ ' + e.message, 'error');
-            }
+
+            const link = getTelegramConnectLink(techId);
+            const bodyHTML = `
+                <p style="margin-bottom:10px;">👨‍🔧 <strong>${tech.name}</strong> ገና Telegram አላገናኘም። ከታች ያለውን ማገናኛ (link) ለ${tech.name} ይላኩ (SMS/WhatsApp)፤ ሲከፍቱት እና "Start" ሲጫኑ ወዲያውኑ ራስ-ሰር ይገናኛል።</p>
+                <div class="form-group">
+                    <input type="text" id="techConnectLinkInput" value="${link}" readonly onclick="this.select()" />
+                </div>
+                <button class="btn btn-primary btn-block" onclick="navigator.clipboard.writeText('${link}'); showToast('✅ ማገናኛው ተቀድቷል', 'success');"><i class="fas fa-copy"></i> ማገናኛ ቅዳ</button>
+                <a class="btn btn-secondary btn-block" style="margin-top:8px;" href="${link}" target="_blank"><i class="fab fa-telegram"></i> ራሴ ልክፈት/ልሞክር</a>
+            `;
+            openModal(`📲 የ ${tech.name} Telegram ማገናኛ`, bodyHTML);
         }
 
         // ============================================================
@@ -3009,6 +2796,15 @@
 
             if (!name || !phone || !address || !password) {
                 errorEl.textContent = '❌ እባክዎ ሁሉንም መስኮች ይሙሉ';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            // ✅ NEW: ሰራተኞች (ቴክኒሻኖች) ከአሁን ጀምሮ በአድሚን ትእዛዝ ብቻ ይመዘገባሉ - ራስ-ምዝገባ
+            // (self-registration) ለቴክኒሻን ዝግ ተደርጓል። ትክክለኛ የአድሚን ልዩ ኮድ ያለው ብቻ
+            // (አዲስ አድሚን ለመመዝገብ) ከዚህ በታች ሊቀጥል ይችላል፣ ያለ ኮድ የሚላክ ጥያቄ ሙሉ በሙሉ ይታገዳል።
+            if (!adminCode || adminCode !== currentAdminPassword) {
+                errorEl.textContent = '⛔ ሰራተኞች የሚመዘገቡት በአድሚን ብቻ ነው። እባክዎ የስራ ሃላፊዎን/አድሚንዎን ለምዝገባ ያግኙ።';
                 errorEl.classList.add('show');
                 return;
             }
@@ -3546,9 +3342,62 @@
         // ============================================================
         // LOAD CUSTOMERS
         // ============================================================
+        // ============================================================
+        // ✅ UPDATED: LOAD CUSTOMERS
+        // ከዚህ ቀደም ይህ ፈንክሽን ደንበኞችን ከ 'orders' collection ብቻ ነበር የሚያሰላው፣
+        // ስለዚህ፦
+        //  1) admin በእጅ የጨመራቸው ደንበኞች ("አዲስ ደንበኛ" ቁልፍ) ወደ 'customers'
+        //     collection ይመዘገቡ ነበር እንጂ ፈጽሞ በዚህ ታብ ላይ አይታዩም ነበር (ትዕዛዝ
+        //     እስኪልኩ ድረስ)።
+        //  2) ደንበኛ.html ላይ ትዕዛዝ ሲላክ ወደ 'customers' collection ራስ-ሰር
+        //     ስለማይመዘገብ ነበር።
+        // አሁን ሁለቱንም collections (customers + orders) በ phone ቁጥር በማጣመር
+        // ትክክለኛ፣ የተሟላ የደንበኞች ዝርዝር ይታያል።
+        // ============================================================
+        let customersFromDB = {};
+        let customersFromOrders = {};
+
+        function mergeAndRenderCustomers() {
+            const merged = {};
+            Object.values(customersFromDB).forEach(c => {
+                merged[c.phone] = {
+                    id: c.phone,
+                    name: c.name,
+                    phone: c.phone,
+                    address: c.address || '—',
+                    orders: 0,
+                    lastOrder: c.lastOrderAt || c.updatedAt || c.createdAt || null
+                };
+            });
+            Object.values(customersFromOrders).forEach(c => {
+                if (merged[c.phone]) {
+                    merged[c.phone].orders = c.orders;
+                    if (!merged[c.phone].lastOrder || (c.lastOrder && c.lastOrder > merged[c.phone].lastOrder)) {
+                        merged[c.phone].lastOrder = c.lastOrder;
+                    }
+                    if (c.name) merged[c.phone].name = c.name;
+                    if (c.address && c.address !== '—') merged[c.phone].address = c.address;
+                } else {
+                    merged[c.phone] = c;
+                }
+            });
+            allCustomers = Object.values(merged);
+            renderCustomers();
+            updateStats();
+        }
+
         function loadCustomers() {
-            const customersMap = {};
+            db.collection('customers').onSnapshot((snapshot) => {
+                customersFromDB = {};
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    if (data.phone) customersFromDB[data.phone] = data;
+                });
+                mergeAndRenderCustomers();
+            });
+
             db.collection('orders').onSnapshot((snapshot) => {
+                const customersMap = {};
                 snapshot.forEach(doc => {
                     const data = doc.data();
                     if (data.fullName && data.phone) {
@@ -3570,9 +3419,8 @@
                         }
                     }
                 });
-                allCustomers = Object.values(customersMap);
-                renderCustomers();
-                updateStats();
+                customersFromOrders = customersMap;
+                mergeAndRenderCustomers();
             });
         }
 
@@ -3754,7 +3602,9 @@
             // ✅ NEW: orderBadge (sidebar ላይ ያለው ቀይ ቁጥር) ግን ሁሉንም በመጠባበቅ ላይ ያሉ ትዕዛዞች (ታሪክ ጨምሮ)
             // ማሳየት ስላለበት - አድሚን ምንም pending ትዕዛዝ እንዳያመልጠው - ይህ የተለየ ስሌት ያስፈልገዋል
             const allPending = allOrders.filter(o => o.status === 'Pending').length;
-            document.getElementById('orderBadge').textContent = allPending;
+            const orderBadgeEl = document.getElementById('orderBadge');
+            orderBadgeEl.textContent = allPending;
+            orderBadgeEl.classList.toggle('show', allPending > 0);
 
             updateNotifBell();
         }
@@ -4166,6 +4016,19 @@ ${locationLine}
             const photoURLs = getPhotoURLs(order);
             const voiceURLs = getVoiceURLs(order);
 
+            // ✅ NEW: ደንበኛ ትዕዛዙን ሲልክ ያያያዘው ፎቶ (የችግሩ ፎቶ) - ከዚህ ቀደም ወደ
+            // Telegram ብቻ ይላክ ስለነበር እዚህ (dashboard) ፈጽሞ አይታይም ነበር
+            let customerPhotosHTML = '';
+            if (order.photoUrls && Array.isArray(order.photoUrls) && order.photoUrls.length > 0) {
+                customerPhotosHTML = '<div class="photo-gallery">';
+                order.photoUrls.forEach(url => {
+                    customerPhotosHTML += `<img src="${url}" alt="የደንበኛ ፎቶ" onclick="window.open('${url}','_blank')" />`;
+                });
+                customerPhotosHTML += '</div>';
+            } else {
+                customerPhotosHTML = '<p class="text-muted">ምንም ፎቶ የለም</p>';
+            }
+
             let photosHTML = '<p class="text-muted">ምንም ፎቶ የለም</p>';
             if (photoURLs.length > 0) {
                 photosHTML = '<div class="photo-gallery">';
@@ -4285,6 +4148,11 @@ ${locationLine}
                         </button>
                     </div>
                 </div>
+
+                <hr style="border:none; border-top:2px solid var(--border); margin:16px 0;" />
+
+                <h4>📷 ደንበኛ የላከው ፎቶ (ስለ ችግሩ)</h4>
+                ${customerPhotosHTML}
 
                 <hr style="border:none; border-top:2px solid var(--border); margin:16px 0;" />
 
@@ -5103,12 +4971,12 @@ ${locationLine}
             }
 
             try {
-                await db.collection('customers').add({
+                await db.collection('customers').doc(phone).set({
                     name: name,
                     phone: phone,
                     address: address || '—',
-                    createdAt: new Date()
-                });
+                    updatedAt: new Date()
+                }, { merge: true });
                 await db.collection('activity').add({
                     user: 'አስተዳዳሪ',
                     action: 'add_customer',
@@ -5634,6 +5502,69 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 </div>`;
             });
             container.innerHTML = html;
+        }
+
+        // ✅ NEW: የሂሳብ ማውረጃ (Financial CSV Export)
+        // ሁሉንም transactions ከ ማጠቃለያ (ጠቅላላ ገቢ/ወጪ/ትርፍ) ጋር ወደ CSV ፋይል ቀይሮ ያወርዳል
+        function exportFinanceCSV() {
+            if (!isFinanceUnlocked) {
+                showToast('❌ እባክዎ መጀመሪያ ፋይናንስ ይክፈቱ', 'error');
+                return;
+            }
+            if (!allTransactions || allTransactions.length === 0) {
+                showToast('❌ የሚወርድ ግቤት የለም', 'error');
+                return;
+            }
+
+            // Excel ላይ የአማርኛ ፊደላት በትክክል እንዲነበቡ (UTF-8 BOM)
+            const BOM = '\uFEFF';
+            const rows = [];
+            rows.push(['ቀን', 'መግለጫ', 'ዓይነት', 'ገንዘብ (ብር)']);
+
+            // ከቅርብ ጊዜ ወደ ኋላ የተደረደሩትን ወደ ጊዜ ቅደም ተከተል (አሮጌ→አዲስ) መልሶ ያደራጃል
+            const sorted = [...allTransactions].sort((a, b) => {
+                const da = a.date ? new Date(a.date) : (a.createdAt?.toDate?.() || new Date(0));
+                const db = b.date ? new Date(b.date) : (b.createdAt?.toDate?.() || new Date(0));
+                return da - db;
+            });
+
+            let totalIncome = 0, totalExpense = 0;
+            sorted.forEach(tx => {
+                const date = tx.date ? formatEthDate(new Date(tx.date)) : '—';
+                const type = tx.type === 'income' ? 'ገቢ' : 'ወጪ';
+                const amount = parseFloat(tx.amount || 0);
+                if (tx.type === 'income') totalIncome += amount; else totalExpense += amount;
+                rows.push([date, tx.description || '—', type, amount.toFixed(2)]);
+            });
+
+            rows.push([]);
+            rows.push(['', '', 'ጠቅላላ ገቢ', totalIncome.toFixed(2)]);
+            rows.push(['', '', 'ጠቅላላ ወጪ', totalExpense.toFixed(2)]);
+            rows.push(['', '', 'የተጣራ ትርፍ', (totalIncome - totalExpense).toFixed(2)]);
+
+            const csvContent = BOM + rows.map(row =>
+                row.map(cell => {
+                    const val = String(cell ?? '');
+                    // ሴል ላይ ኮማ/ጥቅስ/አዲስ መስመር ካለ በ"" ውስጥ ያስገባል (ትክክለኛ CSV escaping)
+                    if (/[",\n]/.test(val)) {
+                        return '"' + val.replace(/"/g, '""') + '"';
+                    }
+                    return val;
+                }).join(',')
+            ).join('\r\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const todayForFile = new Date().toISOString().split('T')[0];
+            a.href = url;
+            a.download = `የሂሳብ_ሪፖርት_${todayForFile}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            showToast('✅ የሂሳብ ሪፖርት ወርዷል', 'success');
         }
 
         async function addTransaction() {
@@ -7485,9 +7416,19 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     completedAt: new Date(),
                     technician: technicianName
                 });
+                // ✅ NEW: ስራው "አልተሰራም" የሚለውን ግልጽ ሁኔታ + ሁሉንም የደንበኛ/ትዕዛዝ መረጃ
+                // ወደ አድሚን መላክ (ከዚህ ቀደም ኦርደር መለያ እና አዲስ ቀን ብቻ ነበር የሚላከው)
                 await techSendTelegramNotification(`
                 📅 *ለሌላ ቀን ተዘጋጅቷል!*
+                🔴 *የስራ ሁኔታ:* አልተሰራም - ለሌላ ቀን ተላልፏል
+
                 🆔 *ትዕዛዝ:* #${orderId.substring(0,8)}
+                👤 *ደንበኛ:* ${orderData.fullName || '—'}
+                📞 *ስልክ:* ${orderData.phone || '—'}
+                📍 *አድራሻ:* ${orderData.address || '—'}
+                🔌 *እቃ:* ${orderData.appliance || '—'}
+                🛠️ *ችግር:* ${orderData.problem || '—'}
+
                 📆 *አዲስ ቀን:* ${newDate}
                 👨‍🔧 *ቴክኒሻን:* ${technicianName}
                 🔄 *እንደ አዲስ ትዕዛዝ ተፈጥሯል*
@@ -7752,10 +7693,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         }
 
         // ============================================================
-        // ✅ NEW: ራስ-አገልግሎት Telegram ማገናኘት (Self-Service Connect)
-        // ችግሩ፦ Telegram getUpdates API ~24 ሰዓት ብቻ ነው updates የሚያቆየው።
-        // አድሚን በጊዜ ካልገናኘ ለዘላለም ይጠፋል። ስለዚህ ቴክኒሻኑ ራሱ "/start" ካደረገ
-        // ወዲያውኑ (በደቂቃዎች ውስጥ) የራሱን chatId እንዲያገናኝ ይህ function ያስችላል።
+        // ✅ UPDATED: ራስ-አገልግሎት ቀጥታ Telegram ማገናኘት (Direct Self-Service Connect)
+        // ችግሩ ቀደም ሲል፦ Telegram getUpdates API ~24 ሰዓት ብቻ ነው updates የሚያቆየው፣
+        // እና username ማዛመድ ስለሚያስፈልግ ብዙ ጊዜ አይሰራም ነበር።
+        // አዲሱ መንገድ፦ ቴክኒሻኑ የራሱን ልዩ deep-link (staffId የያዘ) በቀጥታ Telegram ላይ
+        // ይከፍታል፣ "Start" ይጫናል፣ webhook (functions/index.js -> telegramWebhook)
+        // ወዲያውኑ chatId ን ከ staffId ጋር በቀጥታ ያገናኘዋል - ምንም username ወይም
+        // manual ፍለጋ ሳያስፈልግ።
         // ============================================================
         async function connectMyTelegram(clickedBtn) {
             if (!technicianId) {
@@ -7763,65 +7707,48 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 return;
             }
 
-            // ✅ NEW: telegramUsername ገና ካልተመዘገበ፣ አሁኑኑ በአንድ ጠቅታ እንዲያስገቡ መጠየቅ
-            // (አንድ-ጠቅታ flow፦ ተጠቃሚው username ባይኖረውም እንኳ ማገናኘት ይችላል)
-            if (!technicianTelegram) {
-                const entered = prompt('📱 የቴሌግራም መለያዎን ያስገቡ (ለምሳሌ: @halal_tech)፦');
-                if (!entered || !entered.trim()) {
-                    showToast('⚠️ የቴሌግራም መለያ ያስፈልጋል', 'error');
-                    return;
-                }
-                technicianTelegram = entered.trim();
-                try {
-                    await db.collection('staff').doc(technicianId).update({ telegramUsername: technicianTelegram });
-                    localStorage.setItem('techTelegram', technicianTelegram);
-                } catch (e) {
-                    showToast('❌ መለያ ማስቀመጥ አልተቻለም: ' + e.message, 'error');
-                    return;
-                }
-            }
-
             const btn = clickedBtn || document.getElementById('connectMyTelegramBtn') || document.getElementById('bannerConnectBtn');
             const originalHTML = btn ? btn.innerHTML : '';
+
+            const link = getTelegramConnectLink(technicianId);
+            window.open(link, '_blank');
+            showToast('📲 Telegram ተከፍቷል! እባክዎ "Start" የሚለውን ይጫኑ - ወዲያውኑ ራስ-ሰር ይገናኛል', 'success');
+
             if (btn) {
                 btn.disabled = true;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> በመፈለግ...';
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> በመጠባበቅ ላይ...';
             }
 
-            const username = technicianTelegram.replace('@', '').toLowerCase().trim();
-
-            try {
-                const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getUpdates`);
-                const data = await res.json();
-
-                if (!data.ok) {
-                    showToast('⚠️ Telegram API ስህተት: ' + (data.description || ''), 'error');
-                    return;
-                }
-
-                let found = null;
-                (data.result || []).forEach(update => {
-                    const msg = update.message || update.channel_post;
-                    if (msg && msg.from && msg.from.username && msg.from.username.toLowerCase() === username) {
-                        found = msg.chat.id;
+            // ✅ NEW: ተጠቃሚው ወደ Telegram ከሄደ በኋላ ስለሚመለስ፣ chatId ተመዝግቧል ወይ
+            // ብለን ለጥቂት ጊዜ በየ 3 ሰከንዱ እንፈትሻለን (webhook ስራውን እስኪጨርስ)
+            let attempts = 0;
+            const maxAttempts = 20; // ~60 ሰከንድ
+            const poll = setInterval(async () => {
+                attempts++;
+                try {
+                    const snap = await db.collection('staff').doc(technicianId).get();
+                    const data = snap.data() || {};
+                    if (data.chatId) {
+                        clearInterval(poll);
+                        showToast('🎉 Telegram ተገናኝቷል! ከአሁን ጀምሮ ማሳወቂያ ይደርስዎታል', 'success');
+                        loadProfile();
+                        if (btn) { btn.disabled = false; btn.innerHTML = originalHTML; }
+                    } else if (attempts >= maxAttempts) {
+                        clearInterval(poll);
+                        if (btn) { btn.disabled = false; btn.innerHTML = originalHTML; }
                     }
-                });
+                } catch (e) {
+                    clearInterval(poll);
+                    if (btn) { btn.disabled = false; btn.innerHTML = originalHTML; }
+                }
+            }, 3000);
 
-                if (found) {
-                    await db.collection('staff').doc(technicianId).update({ chatId: String(found) });
-                    showToast('🎉 Telegram ተገናኝቷል! ከአሁን ጀምሮ ማሳወቂያ ይደርስዎታል', 'success');
-                    loadProfile();
-                } else {
-                    showToast(`⚠️ አልተገኘም። መጀመሪያ ለ @HalAlElectronics_bot "/start" ብለው ይላኩ፣ ከዛ ደግመው ይሞክሩ።`, 'error');
-                }
-            } catch (e) {
-                showToast('❌ ' + e.message, 'error');
-            } finally {
-                if (btn) {
-                    btn.disabled = false;
-                    btn.innerHTML = originalHTML;
-                }
-            }
+            // ✅ NEW: ተጠቃሚው ከ Telegram ተመልሶ ገፁን ሲያተኩር (focus) ወዲያውኑ ደግሞ ማረጋገጫ
+            const onFocus = async () => {
+                window.removeEventListener('focus', onFocus);
+                loadProfile();
+            };
+            window.addEventListener('focus', onFocus);
         }
 
         // ============================================================
