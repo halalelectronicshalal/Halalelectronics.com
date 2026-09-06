@@ -8,7 +8,7 @@
     <meta name="author" content="Halal Electronics & Maintenance" />
     <meta property="og:title" content="ሀላል ኤሌክትሮኒክስ እና ጥገና" />
     <meta property="og:description" content="ሙያዊ የኤሌክትሮኒክስ ጥገና አገልግሎት በአዲስ አበባ" />
-    <meta property="og:image" content="images/logo.png" />
+    <meta property="og:image" content="https://halal-report-2.web.app/icon-512.png" />
     <meta name="theme-color" content="#0F4C81" />
     <link rel="manifest" href="customer-manifest.json">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -39,6 +39,8 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js">
     </script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js">
+    </script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js">
     </script>
 
     <style>
@@ -1115,24 +1117,6 @@
             gap: 50px;
             margin-top: 32px;
         }
-        .contact-info h3 {
-            font-size: 1.4rem;
-            font-weight: 800;
-            color: var(--secondary);
-            margin-bottom: 16px;
-        }
-        .contact-info p {
-            color: #94A3B8;
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-        .contact-info p i {
-            color: var(--secondary);
-            width: 24px;
-            text-align: center;
-        }
         .contact-info p a {
             color: #FFFFFF;
             transition: 0.3s;
@@ -2080,6 +2064,7 @@
         // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
+        const storage = firebase.storage();
         // ✅ halal-report-2's Firestore rules require request.auth != null
         const authReady = firebase.auth().signInAnonymously()
             .catch(err => console.error('⚠️ Anonymous auth failed - enable "Anonymous" sign-in for halal-report-2 in Firebase Console:', err));
@@ -2594,6 +2579,41 @@ orderData.suggestedWorkerName = selectedWorkerName;
                 // Save to Firebase
                 const docRef = await db.collection('orders').add(orderData);
                 console.log('✅ Order saved with ID:', docRef.id);
+
+                // ✅ NEW: ደንበኛ ስራ ሲልክ ራስ-ሰር ወደ 'customers' collection ይመዘገብ
+                // (ከዚህ ቀደም admin dashboard ላይ ያለው "ደንበኛ" ታብ ኦርደሮች ላይ ተመስርቶ
+                // በራሱ ያሰላ ስለነበር፣ admin በእጅ የጨመራቸው ደንበኞች (ገና ትዕዛዝ ያልላኩ) ፈጽሞ
+                // አይታዩም ነበር። አሁን ግን ትክክለኛ collection ውስጥ ተመዝግቦ ወዲያውኑ ይታያል።)
+                try {
+                    await db.collection('customers').doc(phone).set({
+                        name: fullName,
+                        phone: phone,
+                        address: address || '—',
+                        lastOrderId: docRef.id,
+                        lastOrderAt: new Date(),
+                        updatedAt: new Date(),
+                        totalOrders: firebase.firestore.FieldValue.increment(1)
+                    }, { merge: true });
+                } catch (custErr) {
+                    console.warn('customers upsert failed (non-fatal)', custErr);
+                }
+
+                // ✅ NEW: ደንበኛ የሚያስቀምጠው ፎቶ (ስለ ችግሩ) ወደ Firebase Storage ተጭኖ
+                // download URL ወደ ትዕዛዙ ላይ ይያያዝ - ከዚህ ቀደም ፎቶው ወደ Telegram ብቻ
+                // ይላክ ነበር እንጂ admin dashboard ላይ (ትዕዛዙን ሲከፍቱ) ፈጽሞ አይታይም ነበር።
+                if (issuePhotos.length > 0) {
+                    try {
+                        const photoUrls = [];
+                        for (let i = 0; i < issuePhotos.length; i++) {
+                            const photoRef = storage.ref(`issue_photos/${docRef.id}/photo_${i + 1}.jpg`);
+                            await photoRef.putString(issuePhotos[i], 'data_url');
+                            photoUrls.push(await photoRef.getDownloadURL());
+                        }
+                        await docRef.update({ photoUrls, photoUploadedAt: new Date() });
+                    } catch (photoErr) {
+                        console.warn('issue photo upload failed (non-fatal)', photoErr);
+                    }
+                }
 
                 // ✅ NEW: ዳሽ ቦርዱ ዝግ ቢሆንም እንኳ አድሚኖች የ push ማሳወቂያ እንዲደርሳቸው
                 // (dashboard ክፍት ከሆነ ደግሞ index.html ላይ ያለው live listener ወዲያውኑ ያሳውቃል)
