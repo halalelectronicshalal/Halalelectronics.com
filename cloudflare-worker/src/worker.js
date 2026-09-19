@@ -363,7 +363,7 @@ export default {
         }
 
         case "telegramConnectPoll": {
-          const { technicianId, expectedText, expectedTextWithMention, clearWebhookFirst } = body;
+          const { technicianId, clearWebhookFirst } = body;
           if (!technicianId) return json({ error: "technicianId required" }, 400, request, env);
 
           const token = tgToken(env, 1);
@@ -375,17 +375,27 @@ export default {
             return json({ status: "webhook_cleared" }, 200, request, env);
           }
 
+          // የሚጠበቀው መልእክት በ Worker ውስጥ ይገነባል (ከ client አይታመንም) —
+          // አለበለዚያ ማንም ሰው ማንኛውንም ጽሑፍ ልኮ የሌላ ሰው chatId ማግኘት ይችላል።
+          const expectedText = `/start ${technicianId}`;
+
           try {
-            const res = await fetch(`https://api.telegram.org/bot${token}/getUpdates?limit=100`);
+            // ⚠️ offset=-100 → የመጨረሻዎቹን 100 update ያመጣል።
+            // ቀድሞ offset ስለሌለ ቴሌግራም ሁልጊዜ ከ*አሮጌዎቹ* 100 ይጀምር ነበር፤
+            // ቦቱ ከ100 በላይ ያልተነበቡ መልእክቶች ካሉት አዲሱ "/start" ፈጽሞ አይታይም ነበር።
+            const res = await fetch(
+              `https://api.telegram.org/bot${token}/getUpdates?offset=-100&limit=100`
+            );
             const data = await res.json();
 
             if (data && data.ok && Array.isArray(data.result)) {
               const match = data.result
-                .filter((u) => u.message && u.message.text)
+                .filter((u) => u.message && typeof u.message.text === "string")
                 .reverse()
                 .find((u) => {
-                  const t = u.message.text.trim();
-                  return t === expectedText || t === expectedTextWithMention;
+                  // "/start@BotName xyz" → "/start xyz"
+                  const t = u.message.text.trim().replace(/^\/start@\w+/, "/start");
+                  return t === expectedText;
                 });
 
               if (match) {
@@ -408,9 +418,20 @@ export default {
               return json({ status: "conflict" }, 200, request, env);
             }
 
-            return json({ status: "pending" }, 200, request, env);
+            // ሌላ የቴሌግራም ስህተት (ለምሳሌ 401 = ቶክኑ ትክክል አይደለም/ተሰርዟል)
+            // ቀድሞ ይህ ዝም ብሎ "pending" ይባል ነበር → ችግሩ ፈጽሞ አይታይም ነበር።
+            return json(
+              {
+                status: "error",
+                error: (data && data.description) || "telegram error",
+                code: data && data.error_code,
+              },
+              200,
+              request,
+              env
+            );
           } catch (e) {
-            return json({ status: "error" }, 200, request, env);
+            return json({ status: "error", error: "fetch failed" }, 200, request, env);
           }
         }
 
