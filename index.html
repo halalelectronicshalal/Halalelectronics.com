@@ -2,7 +2,7 @@
 <html lang="am">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=1200" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
     <meta name="theme-color" content="#0F4C81" />
     <meta property="og:title" content="ሀላል ኤሌክትሮኒክስ" />
     <meta property="og:description" content="የሀላል ኤሌክትሮኒክስ የሥራ አስተዳደር ሥርዓት" />
@@ -1214,6 +1214,13 @@
 
             <!-- ===== UNIFIED LOGIN (ስልክ ቁጥር + የይለፍ ቃል) ===== -->
             <div id="loginPane">
+                <!-- 🔒 NEW: Fingerprint/Face quick-login (WebAuthn platform authenticator - works on phones AND PCs) -->
+                <button type="button" id="fpQuickLoginBtn" onclick="quickFingerprintLogin()" style="display:none; width:100%; margin-bottom:14px; padding:12px; border-radius:10px; border:1px solid var(--primary); background:transparent; color:var(--primary); font-size:1rem; font-weight:600; cursor:pointer; align-items:center; justify-content:center; gap:8px;">
+                    <i class="fas fa-fingerprint"></i> <span id="fpQuickLoginLabel">በአሻራ ግባ</span>
+                </button>
+                <div id="fpQuickLoginForget" style="display:none; text-align:center; margin-bottom:10px;">
+                    <a href="#" onclick="forgetFingerprintLogin(); return false;" style="font-size:0.78rem; color:#94A3B8;">🗑️ የተቀመጠውን አሻራ መግቢያ አጥፋ</a>
+                </div>
                 <form id="loginForm">
                     <div class="form-group">
                         <label>📱 ስልክ ቁጥር</label>
@@ -1228,8 +1235,9 @@
                     </button>
                     <div class="error-message" id="loginError">❌ የተሳሳተ ስልክ ቁጥር ወይም የይለፍ ቃል</div>
                 </form>
-                <div class="login-footer" style="margin-top:14px;">
+                <div class="login-footer" style="margin-top:14px; display:flex; flex-direction:column; gap:8px; align-items:center;">
                     <a href="#" onclick="showAuthPane('register'); return false;">🔑 አድሚን ነዎት? እዚህ ይመዝገቡ</a>
+                    <a href="#" onclick="openForgotPasswordModal(); return false;">❓ የይለፍ ቃል ረሱ?</a>
                 </div>
             </div>
 
@@ -2838,9 +2846,11 @@
                         completeAdminLogin(matchedDoc.id);
                         document.getElementById('loginPassword').value = '';
                         showToast('✅ እንኳን ደህና መጡ!', 'success');
+                        maybeOfferFingerprintSetup(matchedDoc.id, phone, password);
                     } else {
                         await completeTechnicianLogin(matchedDoc.id, data);
                         document.getElementById('loginPassword').value = '';
+                        maybeOfferFingerprintSetup(matchedDoc.id, phone, password);
                     }
                 } else if (await verifyAdminMasterPassword(password)) {
                     // ✅ Legacy master-admin code fallback - ወደ staff ሪከርድ በራስ-ሰር ይሸጋገራል
@@ -2848,6 +2858,7 @@
                     completeAdminLogin(adminStaffId);
                     document.getElementById('loginPassword').value = '';
                     showToast('✅ እንኳን ደህና መጡ!', 'success');
+                    maybeOfferFingerprintSetup(adminStaffId, phone, password);
                 } else if (snap.empty) {
                     errorEl.textContent = '❌ ይህ ስልክ ቁጥር (' + phone + ') በሲስተሙ ውስጥ አልተመዘገበም';
                     errorEl.classList.add('show');
@@ -2867,6 +2878,337 @@
         document.getElementById('loginPassword').addEventListener('keydown', function(e) {
             if (e.key === 'Enter') document.getElementById('loginForm').dispatchEvent(new Event('submit'));
         });
+
+        // ============================================================
+        // 👆 አሻራ/ፊት ፈጣን መግቢያ (Fingerprint/Face Quick-Login)
+        // - WebAuthn platform authenticator ይጠቀማል፣ ይህ በስልክ (Android/iOS
+        //   ጣት/ፊት) እና በፒሲ (Windows Hello) ላይ በእኩል ይሰራል - ለፒሲ ብቻ አይደለም።
+        // - ምንም server ግንኙነት አያስፈልገውም (ራሱ በዚህ ገፅ ውስጥ ብቻ ይቀመጣል)፦
+        //   ስልክ+password በዚህ device ላይ ብቻ localStorage ውስጥ ተቀምጦ፣ ሲፈለግ
+        //   አሻራ/ፊት ተረጋግጦ ብቻ ጥቅም ላይ ይውላል (ማንኛውም server-side crypto
+        //   verification አይደረግም - የ"device convenience" ደረጃ ደህንነት ነው)።
+        // ============================================================
+        const FP_STORAGE_KEY = 'he_fp_quicklogin_v1';
+
+        function fpIsWebAuthnCapable() {
+            return !!(window.PublicKeyCredential && navigator.credentials && navigator.credentials.create);
+        }
+
+        function fpBufToB64(buf) {
+            return btoa(String.fromCharCode(...new Uint8Array(buf)));
+        }
+        function fpB64ToBuf(b64) {
+            const bin = atob(b64);
+            const arr = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            return arr;
+        }
+
+        function fpGetSaved() {
+            try {
+                const raw = localStorage.getItem(FP_STORAGE_KEY);
+                return raw ? JSON.parse(raw) : null;
+            } catch (e) { return null; }
+        }
+
+        function fpRenderButtonState() {
+            const saved = fpGetSaved();
+            const btn = document.getElementById('fpQuickLoginBtn');
+            const forget = document.getElementById('fpQuickLoginForget');
+            const label = document.getElementById('fpQuickLoginLabel');
+            if (!btn) return;
+            if (saved && saved.credentialId) {
+                btn.style.display = 'flex';
+                if (forget) forget.style.display = 'block';
+                if (label) label.textContent = saved.name ? `${saved.name} - በአሻራ ግባ` : 'በአሻራ ግባ';
+            } else {
+                btn.style.display = 'none';
+                if (forget) forget.style.display = 'none';
+            }
+        }
+
+        let fpPendingSetup = null; // { staffId, phone, password } - modal onclick ላይ ደህንነቱ ባልተጠበቀ መንገድ password እንዳይካተት ለማስቀረት
+
+        async function maybeOfferFingerprintSetup(staffId, phone, password) {
+            try {
+                if (!fpIsWebAuthnCapable()) return; // ይህ device/browser አይደግፈውም
+                if (!(await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable())) return;
+                const saved = fpGetSaved();
+                if (saved && saved.staffId === staffId) return; // ቀድሞ ተችሏል
+
+                fpPendingSetup = { staffId, phone, password };
+
+                setTimeout(() => {
+                    openModal(
+                        '👆 በአሻራ/ፊት በፍጥነት ይግቡ?',
+                        `<p style="color:#94A3B8; font-size:0.88rem;">በዚህ ስልክ/ኮምፒውተር ላይ ከአሁን በኋላ ስልክ ቁጥር እና የይለፍ ቃል ሳይተይቡ በአሻራ ወይም በፊት ማወቂያ ብቻ መግባት ይችላሉ። ይህ የሚሰራው በዚህ device ላይ ብቻ ነው።</p>`,
+                        `<button class="btn btn-secondary" onclick="fpPendingSetup=null; closeModal();">አሁን አይሆንም</button>
+                         <button class="btn btn-primary" onclick="enableFingerprintQuickLogin()"><i class="fas fa-fingerprint"></i> አንቃ</button>`
+                    );
+                }, 600);
+            } catch (e) { /* WebAuthn ካልተደገፈ ችላ በል */ }
+        }
+
+        async function enableFingerprintQuickLogin() {
+            if (!fpPendingSetup) { closeModal(); return; }
+            const { staffId, phone, password } = fpPendingSetup;
+            try {
+                const challenge = crypto.getRandomValues(new Uint8Array(32));
+                const userId = crypto.getRandomValues(new Uint8Array(16));
+
+                const credential = await navigator.credentials.create({
+                    publicKey: {
+                        challenge,
+                        rp: { name: 'Halal Electronics' },
+                        user: { id: userId, name: phone, displayName: phone },
+                        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+                        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' },
+                        timeout: 60000
+                    }
+                });
+
+                if (!credential) throw new Error('አልተቻለም');
+
+                localStorage.setItem(FP_STORAGE_KEY, JSON.stringify({
+                    staffId,
+                    phone,
+                    password,
+                    credentialId: fpBufToB64(credential.rawId),
+                    createdAt: Date.now()
+                }));
+
+                closeModal();
+                fpRenderButtonState();
+                showToast('✅ የአሻራ ፈጣን መግቢያ ነቅቷል!', 'success');
+                fpPendingSetup = null;
+            } catch (e) {
+                closeModal();
+                showToast('⚠️ የአሻራ ማንቃት አልተቻለም: ' + (e && e.message ? e.message : ''), 'error');
+                fpPendingSetup = null;
+            }
+        }
+
+        async function quickFingerprintLogin() {
+            const saved = fpGetSaved();
+            if (!saved || !saved.credentialId) return;
+
+            const btn = document.getElementById('fpQuickLoginBtn');
+            const originalHTML = btn ? btn.innerHTML : '';
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> በማረጋገጥ ላይ...'; }
+
+            try {
+                const challenge = crypto.getRandomValues(new Uint8Array(32));
+                await navigator.credentials.get({
+                    publicKey: {
+                        challenge,
+                        allowCredentials: [{ id: fpB64ToBuf(saved.credentialId), type: 'public-key' }],
+                        userVerification: 'required',
+                        timeout: 60000
+                    }
+                });
+
+                // ✅ አሻራ/ፊት ተረጋግጧል → የተቀመጠውን ስልክ+password ተጠቅሞ በራስ-ሰር ይግባ
+                document.getElementById('loginPhone').value = saved.phone;
+                document.getElementById('loginPassword').value = saved.password;
+                document.getElementById('loginForm').dispatchEvent(new Event('submit'));
+            } catch (e) {
+                showToast('⚠️ የአሻራ ማረጋገጫ አልተሳካም ወይም ተሰርዟል', 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.innerHTML = originalHTML; }
+            }
+        }
+
+        function forgetFingerprintLogin() {
+            localStorage.removeItem(FP_STORAGE_KEY);
+            fpRenderButtonState();
+            showToast('🗑️ የአሻራ መግቢያ ጠፍቷል', 'success');
+        }
+
+        // ገፁ ሲከፈት፣ ቀድሞ የተቀመጠ የአሻራ መግቢያ ካለ ቁልፉን አሳይ
+        fpRenderButtonState();
+
+        // ============================================================
+        // ❓ የይለፍ ቃል ረሱ (Forgot Password)
+        // ደረጃ 1: ስልክ ቁጥር → 6-ዲጂት ኮድ በቴሌግራም (ከተገናኘ) ወይም በኤስኤምኤስ ይላካል
+        // ደረጃ 2: ኮዱን እና አዲሱን የይለፍ ቃል ያስገባሉ → password ይቀየራል
+        // (አድሚንም ሆነ ቴክኒሻን ተመሳሳይ 'staff' collection ስለሚጠቀሙ ለሁለቱም ይሰራል)
+        // ============================================================
+        let forgotPasswordState = null; // { staffId, phone, channel }
+
+        function openForgotPasswordModal() {
+            forgotPasswordState = null;
+            openModal(
+                '❓ የይለፍ ቃል ረሱ?',
+                `<p style="color:#94A3B8; font-size:0.85rem; margin-bottom:12px;">የተመዘገቡበትን ስልክ ቁጥር ያስገቡ፣ የማረጋገጫ ኮድ እንልክልዎታለን።</p>
+                 <div class="form-group">
+                    <label>📱 ስልክ ቁጥር</label>
+                    <input type="tel" id="fpPhone" placeholder="ለምሳሌ: 09XXXXXXXX" autofocus />
+                 </div>
+                 <div id="fpError" style="display:none; color:#ef4444; font-size:0.85rem; margin-top:6px;"></div>`,
+                `<button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>
+                 <button class="btn btn-primary" id="fpSendBtn" onclick="sendForgotPasswordCode()"><i class="fas fa-paper-plane"></i> ኮድ ላክ</button>`
+            );
+            setTimeout(() => {
+                const input = document.getElementById('fpPhone');
+                if (input) input.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendForgotPasswordCode(); });
+            }, 0);
+        }
+
+        async function sendForgotPasswordCode() {
+            const phoneInput = document.getElementById('fpPhone');
+            const errorEl = document.getElementById('fpError');
+            const btn = document.getElementById('fpSendBtn');
+            const phone = phoneInput.value.trim();
+            errorEl.style.display = 'none';
+
+            if (!phone) {
+                errorEl.textContent = '❌ ስልክ ቁጥር ያስፈልጋል';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> በመላክ ላይ...';
+
+            try {
+                await authReady;
+                const snap = await db.collection('staff').where('phone', '==', phone).get();
+
+                if (snap.empty) {
+                    errorEl.textContent = '❌ ይህ ስልክ ቁጥር (' + phone + ') በሲስተሙ ውስጥ አልተመዘገበም';
+                    errorEl.style.display = 'block';
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-paper-plane"></i> ኮድ ላክ';
+                    return;
+                }
+
+                const doc = snap.docs[0];
+                const data = doc.data();
+                const otp = String(Math.floor(100000 + Math.random() * 900000));
+                const expiresAt = Date.now() + 10 * 60 * 1000; // 10 ደቂቃ
+
+                await db.collection('staff').doc(doc.id).update({
+                    resetCode: otp,
+                    resetCodeExpiresAt: expiresAt
+                });
+
+                const message = `🔑 የሀላል ኤሌክትሮኒክስ የይለፍ ቃል መልሶ ማግኛ ኮድ፦ ${otp}\n\nይህ ኮድ በ10 ደቂቃ ውስጥ ያበቃል። እርስዎ ካልጠየቁ ይህን መልእክት ችላ ይበሉ።`;
+
+                let channel = 'sms';
+                if (data.chatId) {
+                    channel = 'telegram';
+                    await callWorker('sendTelegramMessage', { text: message, targetChatId: data.chatId });
+                } else {
+                    const formatted = toAfroMessagePhone(data.phone);
+                    await callWorker('sendSms', { phone: formatted, message });
+                }
+
+                forgotPasswordState = { staffId: doc.id, phone: data.phone, channel };
+                renderForgotPasswordStep2(channel);
+            } catch (e) {
+                errorEl.textContent = '❌ ' + (e && e.message ? e.message : 'ያልታወቀ ስህተት');
+                errorEl.style.display = 'block';
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-paper-plane"></i> ኮድ ላክ';
+            }
+        }
+
+        function renderForgotPasswordStep2(channel) {
+            const via = channel === 'telegram' ? 'በቴሌግራም' : 'በኤስኤምኤስ';
+            openModal(
+                '🔑 አዲስ የይለፍ ቃል ይምረጡ',
+                `<p style="color:#94A3B8; font-size:0.85rem; margin-bottom:12px;">ኮዱ ${via} ተልኳል። ኮዱን እና አዲሱን የይለፍ ቃል ከታች ያስገቡ።</p>
+                 <div class="form-group">
+                    <label>🔢 ኮድ</label>
+                    <input type="text" id="fpCode" inputmode="numeric" maxlength="6" placeholder="6 ዲጂት ኮድ" autofocus />
+                 </div>
+                 <div class="form-group">
+                    <label>🔒 አዲስ የይለፍ ቃል</label>
+                    <input type="password" id="fpNewPassword" placeholder="አዲስ የይለፍ ቃል ይምረጡ" />
+                 </div>
+                 <div class="form-group">
+                    <label>🔒 አዲስ የይለፍ ቃል ድገም</label>
+                    <input type="password" id="fpConfirmPassword" placeholder="ደግመው ያስገቡ" />
+                 </div>
+                 <div id="fpError2" style="display:none; color:#ef4444; font-size:0.85rem; margin-top:6px;"></div>`,
+                `<button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>
+                 <button class="btn btn-outline" onclick="sendForgotPasswordCode()"><i class="fas fa-redo"></i> እንደገና ላክ</button>
+                 <button class="btn btn-primary" id="fpResetBtn" onclick="confirmForgotPasswordReset()"><i class="fas fa-check"></i> ይቀይሩ</button>`
+            );
+        }
+
+        async function confirmForgotPasswordReset() {
+            const errorEl = document.getElementById('fpError2');
+            const btn = document.getElementById('fpResetBtn');
+            const code = (document.getElementById('fpCode').value || '').trim();
+            const newPassword = document.getElementById('fpNewPassword').value;
+            const confirmPassword = document.getElementById('fpConfirmPassword').value;
+            errorEl.style.display = 'none';
+
+            if (!forgotPasswordState) {
+                errorEl.textContent = '❌ እባክዎ ከመጀመሪያው ይጀምሩ';
+                errorEl.style.display = 'block';
+                return;
+            }
+            if (!code || !newPassword || !confirmPassword) {
+                errorEl.textContent = '❌ እባክዎ ሁሉንም መስኮች ይሙሉ';
+                errorEl.style.display = 'block';
+                return;
+            }
+            if (newPassword.length < 4) {
+                errorEl.textContent = '❌ የይለፍ ቃል ቢያንስ 4 ፊደል/ቁጥር ሊኖረው ይገባል';
+                errorEl.style.display = 'block';
+                return;
+            }
+            if (newPassword !== confirmPassword) {
+                errorEl.textContent = '❌ ሁለቱ የይለፍ ቃሎች አይመሳሰሉም';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> በማስቀመጥ ላይ...';
+
+            try {
+                await authReady;
+                const docRef = db.collection('staff').doc(forgotPasswordState.staffId);
+                const docSnap = await docRef.get();
+                const data = docSnap.data() || {};
+
+                if (!data.resetCode || data.resetCode !== code) {
+                    errorEl.textContent = '❌ የገባው ኮድ ትክክል አይደለም';
+                    errorEl.style.display = 'block';
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-check"></i> ይቀይሩ';
+                    return;
+                }
+                if (!data.resetCodeExpiresAt || Date.now() > data.resetCodeExpiresAt) {
+                    errorEl.textContent = '❌ ኮዱ ጊዜው አልፎበታል፣ "እንደገና ላክ" ይጫኑ';
+                    errorEl.style.display = 'block';
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-check"></i> ይቀይሩ';
+                    return;
+                }
+
+                await docRef.update({
+                    password: newPassword,
+                    resetCode: firebase.firestore.FieldValue.delete(),
+                    resetCodeExpiresAt: firebase.firestore.FieldValue.delete()
+                });
+
+                forgotPasswordState = null;
+                closeModal();
+                showToast('✅ የይለፍ ቃል ተቀይሯል! አሁን በአዲሱ የይለፍ ቃል ይግቡ', 'success');
+                document.getElementById('loginPhone').value = data.phone || '';
+                document.getElementById('loginPassword').value = '';
+                document.getElementById('loginPassword').focus();
+            } catch (e) {
+                errorEl.textContent = '❌ ' + (e && e.message ? e.message : 'ያልታወቀ ስህተት');
+                errorEl.style.display = 'block';
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-check"></i> ይቀይሩ';
+            }
+        }
 
         // ============================================================
         // ✅ NEW: ራስ-ምዝገባ (Registration) - ቴክኒሻን ወይም (በኮድ) አድሚን
