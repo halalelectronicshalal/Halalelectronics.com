@@ -7615,9 +7615,11 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             safe(() => {
                 document.getElementById('reportWarrantyPhotos').addEventListener('change', function(e) {
                     previewFiles(e.target.files, 'warrantyPreview');
+                    e.target.value = ''; // ተመሳሳይ ፎቶ እንደገና መምረጥ እንዲቻል
                 });
                 document.getElementById('reportBankReceipts').addEventListener('change', function(e) {
                     previewFiles(e.target.files, 'receiptPreview');
+                    e.target.value = '';
                 });
             }, 'file previews');
 
@@ -7821,15 +7823,42 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             document.getElementById('reportCompanyAmount').value = companyAmount.toFixed(2);
         }
 
+        // ✅ NEW: የተመረጡ ፎቶዎች ዝርዝር (ሪፖርት ከመላኩ በፊት ማየት እና ✕ ን ነክቶ ማጥፋት ይቻላል)።
+        // ቀድሞ የፋይል ምርጫው (input) ራሱ ብቻ ነበር የሚይዛቸው፣ ስለዚህ አንድ ፎቶ ብቻ ማጥፋት አይቻልም ነበር።
+        const reportPhotoSel = { warrantyPreview: [], receiptPreview: [] };
+        const reportPhotoUrls = {};
         function previewFiles(files, containerId) {
+            const list = reportPhotoSel[containerId];
+            Array.from(files || []).forEach(f => {
+                const dup = list.some(x => x.name === f.name && x.size === f.size && x.lastModified === f.lastModified);
+                if (!dup) list.push(f);
+            });
+            renderPhotoSel(containerId);
+        }
+        function renderPhotoSel(containerId) {
             const container = document.getElementById(containerId);
+            (reportPhotoUrls[containerId] || []).forEach(u => URL.revokeObjectURL(u));
+            reportPhotoUrls[containerId] = [];
             container.innerHTML = '';
-            for (let f of files) {
+            reportPhotoSel[containerId].forEach((f, idx) => {
+                const url = URL.createObjectURL(f);
+                reportPhotoUrls[containerId].push(url);
                 const div = document.createElement('div');
                 div.className = 'file-item';
-                div.innerHTML = `<i class="fas fa-file-image"></i> ${f.name} (${(f.size/1024).toFixed(0)}KB)`;
+                div.style.position = 'relative';
+                div.innerHTML = `<img src="${url}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:6px;" />
+                    <span style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.name.replace(/</g,'&lt;')} (${(f.size/1024).toFixed(0)}KB)</span>
+                    <button type="button" aria-label="ሰርዝ" onclick="removeReportPhoto('${containerId}', ${idx})"
+                        style="border:none;background:#ef4444;color:#fff;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:14px;line-height:24px;padding:0;">✕</button>`;
                 container.appendChild(div);
-            }
+            });
+        }
+        function removeReportPhoto(containerId, idx) {
+            reportPhotoSel[containerId].splice(idx, 1);
+            renderPhotoSel(containerId);
+        }
+        function clearReportPhotoSel() {
+            Object.keys(reportPhotoSel).forEach(id => { reportPhotoSel[id].length = 0; renderPhotoSel(id); });
         }
 
         // ============================================================
@@ -9222,30 +9251,55 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             // ✅ NEW: የወጪ ዝርዝር (ቦታ + መጠን)
             const expenseItems = getExpenseItems();
 
-            // Upload warranty photos (compressed first so uploads are fast and data-friendly)
-            const warrantyFiles = document.getElementById('reportWarrantyPhotos').files;
+            // Upload warranty photos + bank receipts (compressed first so uploads are fast and data-friendly)
+            // ✅ FIX: ይህ ክፍል ቀድሞ ከ try ውጭ ስለነበር ፎቶ መጫን ቢያቅት/ቢዘገይ ምንም መልእክት ሳይታይ
+            // ሁሉም ነገር ዝም ይል ነበር። አሁን ወዲያውኑ "በመላክ ላይ" ያሳያል፣ ስህተትም ቢኖር ይነግራል።
+            const btn0 = document.getElementById('submitReportBtn');
+            if (btn0.disabled) return; // ቀድሞ በመላክ ላይ ከሆነ ድጋሚ መላክን ይከላከላል
+            btn0.disabled = true;
+            btn0.innerHTML = '<i class="fas fa-spinner fa-spin"></i> በመፈተሽ ላይ...';
+
+            // ✅ NEW: የዛሬ ሪፖርት አስቀድሞ ተልኮ ከሆነ ድጋሚ አይላክም
+            try {
+                const dupSnap = await db.collection('dailyReports')
+                    .where('technicianId', '==', technicianId)
+                    .where('dateKey', '==', getDateKey(new Date()))
+                    .limit(1).get();
+                if (!dupSnap.empty) {
+                    showToast('⚠️ የዛሬ ሪፖርት አስቀድሞ ተልኳል፣ ድጋሚ መላክ አይቻልም። ለማስተካከል አድሚኑን ያነጋግሩ።', 'error');
+                    btn0.disabled = false;
+                    btn0.innerHTML = '<i class="fas fa-paper-plane"></i> ሪፖርት አስገባ';
+                    return;
+                }
+            } catch (dupErr) { console.warn('Duplicate report check failed (non-fatal):', dupErr); }
+            btn0.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ፎቶ በመጫን ላይ...';
+
+            const withTimeout = (promise, ms, label) => Promise.race([
+                promise,
+                new Promise((_, rej) => setTimeout(() => rej(new Error(label + ' ጊዜ ወሰደ - ኢንተርኔት/ፈቃድ (Storage rules) ያረጋግጡ')), ms))
+            ]);
             const warrantyPhotoURLs = [];
             const warrantyCompressed = [];
-            for (let file of warrantyFiles) {
-                const compressed = await compressImageFile(file);
-                warrantyCompressed.push(compressed);
-                const ref = storage.ref(`reports/${technicianName}/${Date.now()}_${file.name}`);
-                await ref.put(compressed);
-                const url = await ref.getDownloadURL();
-                warrantyPhotoURLs.push(url);
-            }
-
-            // Upload bank receipts (compressed first)
-            const receiptFiles = document.getElementById('reportBankReceipts').files;
             const receiptURLs = [];
             const receiptCompressed = [];
-            for (let file of receiptFiles) {
-                const compressed = await compressImageFile(file);
-                receiptCompressed.push(compressed);
-                const ref = storage.ref(`reports/${technicianName}/${Date.now()}_${file.name}`);
-                await ref.put(compressed);
-                const url = await ref.getDownloadURL();
-                receiptURLs.push(url);
+            try {
+                const uploadAll = async (files, urlsOut, compressedOut) => {
+                    for (let file of files) {
+                        const compressed = await compressImageFile(file);
+                        compressedOut.push(compressed);
+                        const ref = storage.ref(`reports/${technicianName}/${Date.now()}_${file.name}`);
+                        await withTimeout(ref.put(compressed), 90000, 'ፎቶ መጫን');
+                        urlsOut.push(await withTimeout(ref.getDownloadURL(), 30000, 'የፎቶ ሊንክ ማምጣት'));
+                    }
+                };
+                await uploadAll(reportPhotoSel.warrantyPreview.slice(), warrantyPhotoURLs, warrantyCompressed);
+                await uploadAll(reportPhotoSel.receiptPreview.slice(), receiptURLs, receiptCompressed);
+            } catch (upErr) {
+                console.error('Report photo upload failed:', upErr);
+                showToast('❌ ፎቶ መጫን አልተቻለም: ' + (upErr && upErr.message ? upErr.message : upErr), 'error');
+                btn0.disabled = false;
+                btn0.innerHTML = '<i class="fas fa-paper-plane"></i> ሪፖርት አስገባ';
+                return;
             }
 
             // Build report object
@@ -9349,8 +9403,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 // Reset file inputs
                 document.getElementById('reportWarrantyPhotos').value = '';
                 document.getElementById('reportBankReceipts').value = '';
-                document.getElementById('warrantyPreview').innerHTML = '';
-                document.getElementById('receiptPreview').innerHTML = '';
+                clearReportPhotoSel();
 
                 // ✅ NEW: userEdited ምልክት ማጽዳት - ለቀጣዩ ቀን auto-aggregation ዳግም እንዲሰራ
                 delete document.getElementById('reportTotalIncome').dataset.userEdited;
