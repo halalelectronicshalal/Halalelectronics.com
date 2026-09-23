@@ -1356,6 +1356,9 @@
             ============================================================ -->
             <div id="tab-dashboard" class="tab-content active">
 
+                <!-- ✅ NEW: ያልጸደቁ የቴክኒሻን ሪፖርቶች (ከላይ በግልጽ ይታያል፤ ምንም ከሌለ ይደበቃል) -->
+                <div id="pendingReportsCard"></div>
+
                 <!-- Stats -->
                 <div class="stats-grid" id="dashboardStats">
                     <div class="stat-card">
@@ -4114,7 +4117,75 @@
         // ============================================================
         // ✅ NEW: TOPBAR NOTIFICATION BELL (አዲስ ትዕዛዝ + ምዝገባ + ያልፀደቀ ሪፖርት በአንድ ቀይ ቁጥር)
         // ============================================================
+        // ============================================================
+        // ✅ NEW: ያልጸደቁ ሪፖርቶች ካርድ (ዳሽቦርድ አናት ላይ) + ሙሉ ዝርዝር ማየት + ቀጥታ ማጽደቅ
+        // ============================================================
+        function escHtml(v) {
+            return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+        function renderPendingReportsCard() {
+            const box = document.getElementById('pendingReportsCard');
+            if (!box) return;
+            const pending = (allDailyReports || []).filter(r => !r.approved)
+                .slice().sort((a, b) => (b.dateKey || '').localeCompare(a.dateKey || ''));
+            if (pending.length === 0) { box.innerHTML = ''; return; }
+            const rows = pending.map(r => {
+                const income = r.totalIncome != null ? r.totalIncome : (r.income || 0);
+                const photos = ((r.warrantyPhotoURLs || []).length + (r.receiptURLs || []).length);
+                return `
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px; background:#fff; border:1px solid var(--border); border-radius:10px; margin-bottom:8px;">
+                        <div style="flex:1; min-width:150px;">
+                            <strong>👤 ${escHtml(r.technicianName || r.technician || '—')}</strong>
+                            <div style="font-size:0.8rem; color:var(--text-muted);">📅 ${escHtml(r.date || r.dateKey || '')} · 💰 ${escHtml(income)} ብር${photos ? ' · 📸 ' + photos : ''}</div>
+                        </div>
+                        <button class="btn btn-outline btn-sm" onclick="viewReportDetail('${r.id}')"><i class="fas fa-eye"></i> ተመልከት</button>
+                        <button class="btn btn-success btn-sm" onclick="approveReportFromCard('${r.id}')"><i class="fas fa-check"></i> አጽድቅ</button>
+                    </div>`;
+            }).join('');
+            box.innerHTML = `
+                <div style="border:2px solid #f59e0b; background:#FFFBEB; border-radius:12px; padding:14px; margin-bottom:16px;">
+                    <div class="flex-between" style="margin-bottom:10px;">
+                        <h3 style="margin:0; font-size:1.05rem;">⏳ ያልጸደቁ ሪፖርቶች <span class="status-badge status-pending">${pending.length}</span></h3>
+                    </div>
+                    <div style="max-height:340px; overflow-y:auto;">${rows}</div>
+                </div>`;
+        }
+        function approveReportFromCard(reportId) {
+            const r = allDailyReports.find(x => x.id === reportId);
+            if (!confirm(`የ ${r ? (r.technicianName || r.technician || '') : ''} ሪፖርት (${r ? (r.date || r.dateKey || '') : ''}) ይጽደቅ?`)) return;
+            approveReport(reportId, r ? r.technicianId : null, true);
+        }
+        function viewReportDetail(reportId) {
+            const r = allDailyReports.find(x => x.id === reportId);
+            if (!r) return;
+            const n = (v) => (v == null || v === '') ? '—' : escHtml(v);
+            const jobs = (r.jobStatuses || []).map((j, i) =>
+                `<div style="font-size:0.85rem;">${i + 1}. ${escHtml(j.customer || '—')} — ${j.status === 'completed' ? '✅ ተሰርቷል' : '❌ አልተሰራም' + (j.reason ? ' (' + escHtml(j.reason) + ')' : '')}</div>`).join('');
+            const gallery = (urls, label) => (urls && urls.length)
+                ? `<div style="font-size:0.8rem; margin-top:10px; color:var(--text-muted);">${label}</div><div class="photo-gallery">${urls.map(u => `<img src="${u}" alt="" onclick="window.open('${u}','_blank')" />`).join('')}</div>` : '';
+            const html = `
+                <div style="font-size:0.9rem; line-height:1.7;">
+                    <div><strong>👤 ${n(r.technicianName || r.technician)}</strong> · 📅 ${n(r.date || r.dateKey)} ${r.day ? '(' + escHtml(r.day) + ')' : ''}</div>
+                    <div>📊 የተላኩ: ${n(r.totalSent != null ? r.totalSent : r.jobs)} | ተጠናቀቁ: ${n(r.completedCount)} | አልተጠናቀቁ: ${n(r.notCompletedCount)}</div>
+                    ${jobs ? `<div style="margin:8px 0; padding:8px; background:var(--bg); border-radius:8px;">${jobs}</div>` : ''}
+                    <div>💰 ገቢ: ${n(r.totalIncome != null ? r.totalIncome : r.income)} ብር | ወጪ: ${n(r.totalExpense)} ብር | ትርፍ: ${n(r.profit)} ብር</div>
+                    <div>📊 ድርሻ: ${n(r.techSharePercent)}% (ባለሙያ ${n(r.techShareAmount)} | ድርጅት ${n(r.companyAmount)})</div>
+                    <div>🏦 የተቀማጭ: ${n(r.deposited)} ብር</div>
+                    ${r.expenseDetails ? `<div>🧾 ወጪ: ${escHtml(r.expenseDetails)}</div>` : ''}
+                    <div>📝 ${n(r.remarks || r.notes)}</div>
+                    ${r.readyTomorrow ? `<div>✅ ለነገ ዝግጁ: ${r.readyTomorrow === 'yes' ? 'አዎ' : 'አይ'}</div>` : ''}
+                    ${r.photosPending ? '<div style="color:#b45309;">⏳ ፎቶዎች አሁንም እየተጫኑ ሊሆን ይችላል</div>' : ''}
+                    ${gallery(r.warrantyPhotoURLs, '📸 ዋራንቲ ካርድ')}
+                    ${gallery(r.receiptURLs, '🏦 የባንክ ደረሰኝ')}
+                </div>`;
+            const footer = r.approved
+                ? '<button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>'
+                : `<button class="btn btn-success" onclick="approveReport('${r.id}','${r.technicianId || ''}', true)"><i class="fas fa-check"></i> አጽድቅ</button> <button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>`;
+            openModal('📋 የሪፖርት ዝርዝር', html, footer);
+        }
+
         function updateNotifBell() {
+            try { renderPendingReportsCard(); } catch (e) { console.warn('pending reports card failed', e); }
             const countEl = document.getElementById('notifBellCount');
             const bodyEl = document.getElementById('notifDropdownBody');
             if (!countEl || !bodyEl) return;
@@ -5103,16 +5174,19 @@ ${locationLine}
             }
         }
 
-        async function approveReport(reportId, techId) {
+        async function approveReport(reportId, techId, fromCard) {
             try {
                 const report = allDailyReports.find(r => r.id === reportId);
+                if (!techId && report) techId = report.technicianId;
                 await db.collection('dailyReports').doc(reportId).update({
                     approved: true,
                     approvedAt: new Date()
                 });
-                await db.collection('staff').doc(techId).update({
-                    lastApprovedDateKey: report ? report.dateKey : null
-                });
+                if (techId) {
+                    await db.collection('staff').doc(techId).update({
+                        lastApprovedDateKey: report ? report.dateKey : null
+                    });
+                }
                 await db.collection('activity').add({
                     user: 'አስተዳዳሪ',
                     action: 'approve_report',
@@ -5120,7 +5194,7 @@ ${locationLine}
                     timestamp: new Date()
                 });
                 showToast('✅ ሪፖርት ጸድቋል!', 'success');
-                viewTechReportHistory(techId);
+                if (fromCard) closeModal(); else viewTechReportHistory(techId);
             } catch (error) {
                 showToast('❌ ' + error.message, 'error');
             }
