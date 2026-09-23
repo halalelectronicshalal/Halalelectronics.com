@@ -4334,32 +4334,35 @@
                     resolve(file);
                     return;
                 }
-                const img = new Image();
-                const reader = new FileReader();
-                reader.onload = (e) => { img.src = e.target.result; };
-                reader.onerror = () => resolve(file);
-                img.onload = () => {
-                    try {
-                        let { width, height } = img;
-                        if (width > maxWidth) {
-                            height = Math.round(height * (maxWidth / width));
-                            width = maxWidth;
-                        }
-                        const canvas = document.createElement('canvas');
-                        canvas.width = width;
-                        canvas.height = height;
-                        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-                        canvas.toBlob((blob) => {
-                            if (!blob) { resolve(file); return; }
-                            resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
-                        }, 'image/jpeg', quality);
-                    } catch (err) {
-                        console.error('Image compression failed, using original:', err);
-                        resolve(file);
-                    }
+                let done = false;
+                const finish = (v) => { if (!done) { done = true; clearTimeout(guard); resolve(v); } };
+                const guard = setTimeout(() => finish(file), 20000); // ፎቶው ካልተዘጋጀ ዋናውን ፋይል ተጠቀም
+                const toJpeg = (source, w, h) => {
+                    let width = w, height = h;
+                    if (width > maxWidth) { height = Math.round(height * (maxWidth / width)); width = maxWidth; }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width; canvas.height = height;
+                    canvas.getContext('2d').drawImage(source, 0, 0, width, height);
+                    canvas.toBlob((blob) => {
+                        if (!blob) { finish(file); return; }
+                        finish(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
+                    }, 'image/jpeg', quality);
                 };
-                img.onerror = () => resolve(file);
-                reader.readAsDataURL(file);
+                const legacy = () => {
+                    const img = new Image();
+                    const reader = new FileReader();
+                    reader.onload = (e) => { img.src = e.target.result; };
+                    reader.onerror = () => finish(file);
+                    img.onload = () => { try { toJpeg(img, img.width, img.height); } catch (err) { console.error('Image compression failed, using original:', err); finish(file); } };
+                    img.onerror = () => finish(file);
+                    reader.readAsDataURL(file);
+                };
+                // ፈጣን መንገድ (createImageBitmap) - ትልልቅ የስልክ ፎቶዎችን በፍጥነት ያጨቃል
+                if (window.createImageBitmap) {
+                    createImageBitmap(file).then((bmp) => {
+                        try { toJpeg(bmp, bmp.width, bmp.height); } catch (err) { legacy(); }
+                    }).catch(legacy);
+                } else { legacy(); }
             });
         }
 
@@ -7823,6 +7826,38 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             document.getElementById('reportCompanyAmount').value = companyAmount.toFixed(2);
         }
 
+        // ✅ NEW: ፎቶዎችን Firebase Storage ላይ በአንድ ጊዜ (parallel) መጫን፤ እያንዳንዱ ጊዜ ገደብ አለው፣
+        // አንዱ ቢወድቅ ሌሎቹ አይጎዱም። ውጤቱ (URLs) ወደ ሪፖርቱ ሰነድ ይታከላል።
+        function putWithTimeout(ref, file, ms) {
+            return new Promise((resolve, reject) => {
+                const task = ref.put(file);
+                const t = setTimeout(() => { try { task.cancel(); } catch (_) {} reject(new Error('timeout')); }, ms);
+                task.then(() => { clearTimeout(t); resolve(); }, (e) => { clearTimeout(t); reject(e); });
+            });
+        }
+        async function uploadReportPhotosToStorage(repRef, warrantyFiles, receiptFiles, techName) {
+            const total = warrantyFiles.length + receiptFiles.length;
+            if (total === 0) return { failed: 0, total: 0 };
+            try { storage.setMaxUploadRetryTime(45000); storage.setMaxOperationRetryTime(30000); } catch (_) {}
+            const uploadOne = async (file) => {
+                const ref = storage.ref(`reports/${techName}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}_${file.name}`);
+                await putWithTimeout(ref, file, 75000);
+                return await ref.getDownloadURL();
+            };
+            const [w, r] = await Promise.all([
+                Promise.allSettled(warrantyFiles.map(uploadOne)),
+                Promise.allSettled(receiptFiles.map(uploadOne))
+            ]);
+            const pick = (arr) => arr.filter(x => x.status === 'fulfilled').map(x => x.value);
+            const wUrls = pick(w), rUrls = pick(r);
+            [...w, ...r].filter(x => x.status === 'rejected').forEach(x => console.warn('Photo upload failed:', x.reason));
+            const failed = total - wUrls.length - rUrls.length;
+            try {
+                await repRef.update({ warrantyPhotoURLs: wUrls, receiptURLs: rUrls, photosPending: false, photosFailed: failed });
+            } catch (e) { console.warn('Report photo URL update failed:', e); }
+            return { failed, total };
+        }
+
         // ✅ NEW: የተመረጡ ፎቶዎች ዝርዝር (ሪፖርት ከመላኩ በፊት ማየት እና ✕ ን ነክቶ ማጥፋት ይቻላል)።
         // ቀድሞ የፋይል ምርጫው (input) ራሱ ብቻ ነበር የሚይዛቸው፣ ስለዚህ አንድ ፎቶ ብቻ ማጥፋት አይቻልም ነበር።
         const reportPhotoSel = { warrantyPreview: [], receiptPreview: [] };
@@ -9274,29 +9309,22 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             } catch (dupErr) { console.warn('Duplicate report check failed (non-fatal):', dupErr); }
             btn0.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ፎቶ በመጫን ላይ...';
 
-            const withTimeout = (promise, ms, label) => Promise.race([
-                promise,
-                new Promise((_, rej) => setTimeout(() => rej(new Error(label + ' ጊዜ ወሰደ - ኢንተርኔት/ፈቃድ (Storage rules) ያረጋግጡ')), ms))
-            ]);
+            // ✅ FIX (ዝግታ): ፎቶዎች ቀድሞ ሪፖርቱን ከመላክ በፊት አንድ በአንድ Firebase Storage ላይ ይጫኑ ነበር፤
+            // ኢንተርኔቱ ቀርፋፋ ሲሆን ሁሉም ነገር ይቆም/ይቋረጥ ነበር። አሁን፦
+            //   1) ፎቶዎች በስልኩ ላይ ይጨመቃሉ (ትንሽ ፋይል)
+            //   2) ሪፖርቱ መጀመሪያ ይመዘገባል + ጽሁፉ ወደ ቴሌግራም ይላካል (በፎቶ አይዘገይም)
+            //   3) ፎቶዎቹ ወደ ቴሌግራም እና ወደ Storage በአንድ ጊዜ (parallel) ይላካሉ፤ ካልተሳካ ሪፖርቱ አይጠፋም
             const warrantyPhotoURLs = [];
             const warrantyCompressed = [];
             const receiptURLs = [];
             const receiptCompressed = [];
             try {
-                const uploadAll = async (files, urlsOut, compressedOut) => {
-                    for (let file of files) {
-                        const compressed = await compressImageFile(file);
-                        compressedOut.push(compressed);
-                        const ref = storage.ref(`reports/${technicianName}/${Date.now()}_${file.name}`);
-                        await withTimeout(ref.put(compressed), 90000, 'ፎቶ መጫን');
-                        urlsOut.push(await withTimeout(ref.getDownloadURL(), 30000, 'የፎቶ ሊንክ ማምጣት'));
-                    }
-                };
-                await uploadAll(reportPhotoSel.warrantyPreview.slice(), warrantyPhotoURLs, warrantyCompressed);
-                await uploadAll(reportPhotoSel.receiptPreview.slice(), receiptURLs, receiptCompressed);
+                btn0.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ፎቶ በማጨቅ ላይ...';
+                for (const f of reportPhotoSel.warrantyPreview.slice()) warrantyCompressed.push(await compressImageFile(f, 1280, 0.68));
+                for (const f of reportPhotoSel.receiptPreview.slice()) receiptCompressed.push(await compressImageFile(f, 1280, 0.68));
             } catch (upErr) {
-                console.error('Report photo upload failed:', upErr);
-                showToast('❌ ፎቶ መጫን አልተቻለም: ' + (upErr && upErr.message ? upErr.message : upErr), 'error');
+                console.error('Report photo compress failed:', upErr);
+                showToast('❌ ፎቶ ማዘጋጀት አልተቻለም: ' + (upErr && upErr.message ? upErr.message : upErr), 'error');
                 btn0.disabled = false;
                 btn0.innerHTML = '<i class="fas fa-paper-plane"></i> ሪፖርት አስገባ';
                 return;
@@ -9338,6 +9366,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 readyTomorrow: readyTomorrow,
                 warrantyPhotoURLs: warrantyPhotoURLs,
                 receiptURLs: receiptURLs,
+                photoCount: warrantyCompressed.length + receiptCompressed.length,
+                photosPending: (warrantyCompressed.length + receiptCompressed.length) > 0,
                 submittedAt: new Date()
             };
 
@@ -9346,7 +9376,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 btn.disabled = true;
                 btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> በመላክ ላይ...';
 
-                await db.collection('dailyReports').add(reportData);
+                const repRef = await db.collection('dailyReports').add(reportData);
 
                 // ✅ ሁሉም የተዘገበ ስራ (የተሰራም ያልተሰራም) በመልእክቱ ውስጥ ይካተታል
                 const jobLinesArr = jobStatuses.map((j, i) => {
@@ -9374,10 +9404,19 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 }
 
                 // ✅ NEW: የዋራንቲ ካርድ እና የባንክ ደረሰኝ ፎቶዎች ወደ ቴሌግራም (ከሪፖርቱ ጽሁፍ ቀጥሎ)
-                let photosTgOk = true;
                 const repCap = `${technicianName} — ${reportData.date}`;
-                if (warrantyCompressed.length) photosTgOk = (await techSendPhotosToTelegram(warrantyCompressed, `📸 ዋራንቲ ካርድ — ${repCap}`)) && photosTgOk;
-                if (receiptCompressed.length) photosTgOk = (await techSendPhotosToTelegram(receiptCompressed, `🏦 የባንክ ደረሰኝ — ${repCap}`)) && photosTgOk;
+                let tgPhotoJob = Promise.resolve(true), storageJob = Promise.resolve({ failed: 0, total: 0 });
+                if (warrantyCompressed.length || receiptCompressed.length) {
+                    showToast('✅ ሪፖርት ተመዝግቧል! ፎቶዎች በመላክ ላይ ናቸው - ገጹን አይዝጉ', 'success');
+                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ፎቶ በመላክ ላይ... (ገጹን አይዝጉ)';
+                    tgPhotoJob = (async () => {
+                        let ok = true;
+                        if (warrantyCompressed.length) ok = (await techSendPhotosToTelegram(warrantyCompressed, `📸 ዋራንቲ ካርድ — ${repCap}`)) && ok;
+                        if (receiptCompressed.length) ok = (await techSendPhotosToTelegram(receiptCompressed, `🏦 የባንክ ደረሰኝ — ${repCap}`)) && ok;
+                        return ok;
+                    })();
+                    storageJob = uploadReportPhotosToStorage(repRef, warrantyCompressed, receiptCompressed, technicianName);
+                }
 
                 // ✅ ወደ አድሚኖች ስልክ ፑሽ ማሳወቂያም (ቴሌግራም ቢዘገይ/ባይደርስ እንኳ)
                 try {
@@ -9392,7 +9431,10 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     })));
                 } catch (pushErr) { console.warn('Report admin push queue failed (non-fatal)', pushErr); }
 
-                if (!photosTgOk) showToast('⚠️ የሪፖርቱ ፎቶዎች ተመዝግበዋል፣ ነገር ግን ወደ ቴሌግራም አልደረሱም።', 'error');
+                const photosTgOk = await tgPhotoJob;
+                const storageRes = await storageJob;
+                if (!photosTgOk) showToast('⚠️ ፎቶዎች ወደ ቴሌግራም አልደረሱም።', 'error');
+                if (storageRes.failed > 0) showToast(`⚠️ ${storageRes.failed} ፎቶ በአፑ ውስጥ (Firebase) አልተቀመጠም${photosTgOk ? '፣ በቴሌግራም ግን ደርሷል' : ''}።`, 'error');
                 if (!tgOk) showToast('⚠️ ሪፖርቱ ተመዝግቧል፣ ነገር ግን ወደ ቴሌግራም አልደረሰም። በሌሊቱ አውቶ Excel ሪፖርት ውስጥ ይካተታል።', 'error');
 
                 showToast('✅ ሪፖርት ተልኳል! አመሰግናለሁ!', 'success');
