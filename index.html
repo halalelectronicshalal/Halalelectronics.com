@@ -5070,6 +5070,8 @@ ${locationLine}
                                 ${r.income ? `💰 ገቢ: ${r.income} ብር<br>` : ''}
                                 ${r.notes ? `📝 ${r.notes}` : ''}
                             </div>
+                            ${(r.warrantyPhotoURLs && r.warrantyPhotoURLs.length) ? `<div style="font-size:0.8rem; margin-top:8px; color:var(--text-muted);">📸 ዋራንቲ ካርድ</div><div class="photo-gallery">${r.warrantyPhotoURLs.map(u => `<img src="${u}" alt="ዋራንቲ" onclick="window.open('${u}','_blank')" />`).join('')}</div>` : ''}
+                            ${(r.receiptURLs && r.receiptURLs.length) ? `<div style="font-size:0.8rem; margin-top:8px; color:var(--text-muted);">🏦 የባንክ ደረሰኝ</div><div class="photo-gallery">${r.receiptURLs.map(u => `<img src="${u}" alt="ደረሰኝ" onclick="window.open('${u}','_blank')" />`).join('')}</div>` : ''}
                             ${!r.approved ? `<button class="btn btn-success btn-sm mt-8" onclick="approveReport('${r.id}','${techId}')"><i class="fas fa-check"></i> አጽድቅ</button>` : ''}
                         </div>
                     `;
@@ -7306,6 +7308,38 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 return ok;
             } catch (e) { console.warn('⚠️ Telegram send failed:', e); return false; }
         }
+        // ✅ NEW: ፎቶዎችን ወደ ቴሌግራም መላክ (ቴክኒሻን የሚያያይዛቸው ፎቶዎች ቀድሞ Firebase ላይ ብቻ ይቀመጡ ነበር)።
+        // ፎቶዎቹ ከመላካቸው በፊት compressImageFile ተጠቅመው ተጨምቀዋል። 1 ፎቶ → sendPhoto፣
+        // 2+ → media group (በ10 ተከፍሎ)። ስህተት ቢኖር ዋናውን ሥራ አያቋርጥም - true/false ብቻ ይመልሳል።
+        function fileToDataUrl(file) {
+            return new Promise((resolve, reject) => {
+                const r = new FileReader();
+                r.onload = () => resolve(r.result);
+                r.onerror = () => reject(r.error || new Error('read failed'));
+                r.readAsDataURL(file);
+            });
+        }
+        async function techSendPhotosToTelegram(files, captionText) {
+            const list = Array.from(files || []).filter(Boolean);
+            if (list.length === 0) return true;
+            let allOk = true;
+            try {
+                const dataUrls = [];
+                for (const f of list) dataUrls.push(await fileToDataUrl(f));
+                if (dataUrls.length === 1) {
+                    const res = await callWorker('sendTelegramPhoto', { dataUrl: dataUrls[0], caption: captionText });
+                    if (!(res && res.ok)) allOk = false;
+                } else {
+                    for (let i = 0; i < dataUrls.length; i += 10) {
+                        const chunk = dataUrls.slice(i, i + 10);
+                        const captions = chunk.map((_, k) => `${captionText} (${i + k + 1}/${dataUrls.length})`);
+                        const res = await callWorker('sendTelegramMediaGroup', { images: chunk, captions });
+                        if (!(res && res.ok)) allOk = false;
+                    }
+                }
+            } catch (e) { console.warn('⚠️ Telegram photo send failed:', e); return false; }
+            return allOk;
+        }
         // Telegram (Markdown) ልዩ ምልክቶችን (_ * ` [) በተጠቃሚ በተጻፈ ጽሁፍ ውስጥ ማምለጥ
         function tgEsc(v) { return String(v == null ? '' : v).replace(/([_*`\[])/g, '\\$1'); }
 
@@ -8416,9 +8450,11 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
             try {
                 let photoURL = null;
-                if (warrantyPhoto) {
+                // ✅ NEW: ፎቶው ከመጫኑ በፊት ይጨመቃል (ፈጣን + ዳታ ቆጣቢ)፤ ያው የተጨመቀው ፋይል ወደ ቴሌግራምም ይላካል
+                const warrantyPhotoC = warrantyPhoto ? await compressImageFile(warrantyPhoto) : null;
+                if (warrantyPhotoC) {
                     const storageRef = storage.ref(`warranty_photos/${orderId}/${warrantyPhoto.name}`);
-                    await storageRef.put(warrantyPhoto);
+                    await storageRef.put(warrantyPhotoC);
                     photoURL = await storageRef.getDownloadURL();
                 }
 
@@ -8482,7 +8518,14 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 📅 ${formatEthDateTime(new Date())}
                 `);
 
+                // ✅ NEW: የዋራንቲ ፎቶውን ወደ ቴሌግራም መላክ
+                let photoTgOk = true;
+                if (warrantyPhotoC) {
+                    photoTgOk = await techSendPhotosToTelegram([warrantyPhotoC], `📸 ዋራንቲ — ስራ #${orderId.substring(0,8)} (${technicianName})`);
+                }
+
                 showToast(`✅ ስራ ተጠናቋል! ${price} ብር ገቢ ተጨምሯል`, 'success');
+                if (!photoTgOk) showToast('⚠️ ፎቶው ተመዝግቧል፣ ነገር ግን ወደ ቴሌግራም አልደረሰም።', 'error');
 
                 document.getElementById('donePrice').value = '';
                 document.getElementById('doneWarrantyPhoto').value = '';
@@ -9182,8 +9225,10 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             // Upload warranty photos (compressed first so uploads are fast and data-friendly)
             const warrantyFiles = document.getElementById('reportWarrantyPhotos').files;
             const warrantyPhotoURLs = [];
+            const warrantyCompressed = [];
             for (let file of warrantyFiles) {
                 const compressed = await compressImageFile(file);
+                warrantyCompressed.push(compressed);
                 const ref = storage.ref(`reports/${technicianName}/${Date.now()}_${file.name}`);
                 await ref.put(compressed);
                 const url = await ref.getDownloadURL();
@@ -9193,8 +9238,10 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             // Upload bank receipts (compressed first)
             const receiptFiles = document.getElementById('reportBankReceipts').files;
             const receiptURLs = [];
+            const receiptCompressed = [];
             for (let file of receiptFiles) {
                 const compressed = await compressImageFile(file);
+                receiptCompressed.push(compressed);
                 const ref = storage.ref(`reports/${technicianName}/${Date.now()}_${file.name}`);
                 await ref.put(compressed);
                 const url = await ref.getDownloadURL();
@@ -9272,6 +9319,12 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     tgOk = await techSendTelegramNotification(reportMsg);
                 }
 
+                // ✅ NEW: የዋራንቲ ካርድ እና የባንክ ደረሰኝ ፎቶዎች ወደ ቴሌግራም (ከሪፖርቱ ጽሁፍ ቀጥሎ)
+                let photosTgOk = true;
+                const repCap = `${technicianName} — ${reportData.date}`;
+                if (warrantyCompressed.length) photosTgOk = (await techSendPhotosToTelegram(warrantyCompressed, `📸 ዋራንቲ ካርድ — ${repCap}`)) && photosTgOk;
+                if (receiptCompressed.length) photosTgOk = (await techSendPhotosToTelegram(receiptCompressed, `🏦 የባንክ ደረሰኝ — ${repCap}`)) && photosTgOk;
+
                 // ✅ ወደ አድሚኖች ስልክ ፑሽ ማሳወቂያም (ቴሌግራም ቢዘገይ/ባይደርስ እንኳ)
                 try {
                     const adminsSnap = await db.collection('staff').where('role', '==', 'admin').where('status', '==', 'active').get();
@@ -9285,6 +9338,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     })));
                 } catch (pushErr) { console.warn('Report admin push queue failed (non-fatal)', pushErr); }
 
+                if (!photosTgOk) showToast('⚠️ የሪፖርቱ ፎቶዎች ተመዝግበዋል፣ ነገር ግን ወደ ቴሌግራም አልደረሱም።', 'error');
                 if (!tgOk) showToast('⚠️ ሪፖርቱ ተመዝግቧል፣ ነገር ግን ወደ ቴሌግራም አልደረሰም። በሌሊቱ አውቶ Excel ሪፖርት ውስጥ ይካተታል።', 'error');
 
                 showToast('✅ ሪፖርት ተልኳል! አመሰግናለሁ!', 'success');
