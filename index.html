@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ሀላል ኤሌክትሮኒክስ</title>
+<link rel="manifest" href="manifest.json" />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Ethiopic:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+ html,body{margin:0;min-height:100%;background:#14171A;color:#ECECE9;font-family:'Noto Sans Ethiopic',sans-serif}
+ .box{max-width:360px;margin:0 auto;padding:48px 20px;text-align:center}
+ img{width:96px;height:96px;border-radius:20px}
+ a.btn{display:block;margin:14px 0;padding:16px;border-radius:12px;text-decoration:none;font-weight:700;font-size:1.05rem}
+ .a{background:#F5A623;color:#14171A}.t{background:#2E343A;color:#ECECE9;border:1px solid #F5A623}
+</style>
+<script>
+ // የገባ ተጠቃሚ ካለ በቀጥታ ወደ ገፁ ይወስዳል
+ try {
+   var q = location.search + location.hash;
+   if (/approveRequest=|assignOrder=/.test(location.search) || localStorage.getItem('adminLoggedIn') === 'true') location.replace('admin.html' + q);
+   else if (localStorage.getItem('techId') && localStorage.getItem('techName')) location.replace('technician.html' + q);
+ } catch (e) {}
+</script>
+</head>
+<body>
+ <div class="box">
+  <img src="icon-512.png" alt="ሀላል ኤሌክትሮኒክስ">
+  <h2>ሀላል ኤሌክትሮኒክስ</h2>
+  <a class="btn a" href="admin.html">👨‍💼 አድሚን</a>
+  <a class="btn t" href="technician.html">👷 ቴክኒሻን</a>
+  <a class="btn t" href="customer.html">🛒 ደንበኛ</a>
+ </div>
+</body>
+</html>
