@@ -2061,7 +2061,7 @@
                     </div>
                     <div style="margin-bottom:8px;">
                         <label style="font-weight:600; display:block; margin-bottom:4px; font-size:0.85rem;">🆔 የስራ መለያ</label>
-                        <input type="text" id="completeOrderId" placeholder="ለም: 2d1VyvOpD7SSkAwW4tWr" />
+                        <input type="text" id="completeOrderId" placeholder="ለም: 2d1VyvOpD7SSkAwW4tWr" dir="ltr" lang="en" inputmode="latin" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
                     </div>
                     <div class="completion-options" id="completionOptions">
                         <button class="option-btn a" data-value="done">ሀ. ተሰራ</button>
@@ -8768,10 +8768,40 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         }
 
         // ============================================================
+        // ORDER ID VALIDATION (shared by all completion submits)
+        // ============================================================
+        // Returns the clean order id if the order exists, otherwise shows a friendly
+        // Amharic error and returns null (nothing is uploaded or written).
+        async function validateCompleteOrderId(rawId) {
+            const orderId = (rawId || '').replace(/\s+/g, '');
+            if (!orderId) {
+                showToast('እባክዎ የስራ መለያ ያስገቡ', 'error');
+                return null;
+            }
+            // Firestore IDs are Latin letters/digits. Amharic characters mean the keyboard was on Amharic.
+            if (/[\u1200-\u137F]/.test(orderId) || /[\/]/.test(orderId)) {
+                showToast('❌ የስራ መለያው ትክክል አይደለም (የአማርኛ ፊደል አለው)። ኪቦርድዎን ወደ English ቀይረው ይተይቡ፣ ወይም ከ«ስራዎች» ዝርዝር ላይ «አጠናቅ» ይጫኑ', 'error');
+                return null;
+            }
+            try {
+                const snap = await db.collection('orders').doc(orderId).get();
+                if (!snap.exists) {
+                    showToast('❌ ይህ የስራ መለያ በዳታቤዝ ውስጥ አልተገኘም። ከ«ስራዎች» ዝርዝር ላይ «አጠናቅ» ይጫኑ', 'error');
+                    return null;
+                }
+            } catch (e) {
+                showToast('❌ ትዕዛዙን ማረጋገጥ አልተቻለም: ' + e.message, 'error');
+                return null;
+            }
+            return orderId;
+        }
+
+        // ============================================================
         // SUBMIT: DONE - FIXED with arrays
         // ============================================================
         async function submitDone() {
-            const orderId = document.getElementById('completeOrderId').value.trim();
+            const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
+            if (!orderId) return;
             const price = document.getElementById('donePrice').value;
             const warrantyPhoto = document.getElementById('doneWarrantyPhoto').files[0];
             const voiceNote = document.getElementById('doneVoiceNote').files[0];
@@ -8779,10 +8809,6 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const warrantyPeriod = document.getElementById('doneWarrantyPeriod').value;
             const notes = document.getElementById('doneNotes').value.trim();
 
-            if (!orderId) {
-                showToast('እባክዎ የስራ መለያ ያስገቡ', 'error');
-                return;
-            }
             if (!price || parseFloat(price) <= 0) {
                 showToast('እባክዎ ትክክለኛ ዋጋ ያስገቡ', 'error');
                 return;
@@ -8888,9 +8914,9 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // SUBMIT: Price Not Agreed, Another Day, Not Today, Other (shortened)
         // ============================================================
         async function submitPriceNotAgreed() {
-            const orderId = document.getElementById('completeOrderId').value.trim();
+            const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
+            if (!orderId) return;
             const called = document.getElementById('priceNotAgreedCalled').value;
-            if (!orderId) { showToast('እባክዎ የስራ መለያ ያስገቡ', 'error'); return; }
             try {
                 await db.collection('orders').doc(orderId).update({
                     status: 'PriceNotAgreed',
@@ -8912,9 +8938,10 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         }
 
         async function submitAnotherDay() {
-            const orderId = document.getElementById('completeOrderId').value.trim();
             const newDate = document.getElementById('anotherDayDate').value;
-            if (!orderId || !newDate) { showToast('እባክዎ ሁሉንም መስኮች ይሙሉ', 'error'); return; }
+            if (!newDate) { showToast('እባክዎ ሁሉንም መስኮች ይሙሉ', 'error'); return; }
+            const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
+            if (!orderId) return;
             try {
                 const orderRef = db.collection('orders').doc(orderId);
                 const orderSnap = await orderRef.get();
@@ -8965,9 +8992,10 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         }
 
         async function submitNotToday() {
-            const orderId = document.getElementById('completeOrderId').value.trim();
             const reason = document.getElementById('notTodayReason').value.trim();
-            if (!orderId || !reason) { showToast('እባክዎ ሁሉንም መስኮች ይሙሉ', 'error'); return; }
+            if (!reason) { showToast('እባክዎ ሁሉንም መስኮች ይሙሉ', 'error'); return; }
+            const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
+            if (!orderId) return;
             try {
                 await db.collection('orders').doc(orderId).update({
                     status: 'NotToday',
@@ -8989,9 +9017,10 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         }
 
         async function submitOther() {
-            const orderId = document.getElementById('completeOrderId').value.trim();
             const reason = document.getElementById('otherReason').value.trim();
-            if (!orderId || !reason) { showToast('እባክዎ ሁሉንም መስኮች ይሙሉ', 'error'); return; }
+            if (!reason) { showToast('እባክዎ ሁሉንም መስኮች ይሙሉ', 'error'); return; }
+            const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
+            if (!orderId) return;
             try {
                 await db.collection('orders').doc(orderId).update({
                     status: 'Other',
