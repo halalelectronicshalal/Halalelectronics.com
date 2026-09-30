@@ -8208,15 +8208,17 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // ============================================================
         // STATUS BUTTONS
         // ============================================================
+        let freeLocationBusy = false;
         function setupStatusButtons() {
             document.querySelectorAll('.status-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
+                btn.addEventListener('click', async function() {
                     if (!checkRulesAccepted()) {
                         showToast('እባክዎ መጀመሪያ ህጎቹን ያንብቡ እና ይስማሙ', 'error');
                         return;
                     }
 
                     const status = this.dataset.status;
+                    let freePosition = null;
 
                     // ✅ NEW: Availability Gate (fraud prevention) - ኮድ ደረጃ enforcement
                     // ቴክኒሻን የተመደበለት ስራ (Assigned) ገና ሳያጠናቅቅ "ነፃ ነኝ" ማለት በጭራሽ አይችልም።
@@ -8225,6 +8227,28 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         const hasUnfinishedJob = myOrders.some(o => o.status === 'Assigned');
                         if (hasUnfinishedJob) {
                             showToast('🔒 የተመደበልዎት ስራ አለ! መጀመሪያ ስራውን ያጠናቅቁ (ወይም ውጤቱን ያስመዝግቡ) ከዚያ "ነፃ" ማለት ይችላሉ', 'error');
+                            return;
+                        }
+                    }
+
+                    // 📍 ግዴታ፦ "ነጻ" ለማለት ቦታ (Location) መላክ አለበት። ቦታ ካልተገኘ ሁኔታው አይቀየርም።
+                    if (status === 'free') {
+                        if (freeLocationBusy) return; // ድርብ ንክኪ መከላከያ
+                        freeLocationBusy = true;
+                        const allBtns = document.querySelectorAll('.status-btn');
+                        allBtns.forEach(b => b.disabled = true);
+                        showToast('📍 ቦታዎ በመፈለግ ላይ... (ፍቃድ ከተጠየቀ «Allow» ይጫኑ)', 'info');
+                        try {
+                            freePosition = await getPositionWithFallback();
+                        } catch (e) {
+                            freePosition = null;
+                        }
+                        allBtns.forEach(b => b.disabled = false);
+                        freeLocationBusy = false;
+                        if (!freePosition) {
+                            const st = document.getElementById('locationStatus');
+                            if (st) { st.textContent = '❌ ቦታ ባለመገኘቱ «ነጻ» አልተመዘገበም'; st.style.color = 'var(--emergency)'; }
+                            showToast('🔒 «ነጻ» ለማለት ቦታ መላክ ግዴታ ነው። GPS እና የአካባቢ (Location) ፍቃድ ያብሩና እንደገና ይሞክሩ', 'error');
                             return;
                         }
                     }
@@ -8254,7 +8278,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
                     // ✅ NEW: "ነፃ" ሲሉ GPS ቦታ ራሱ በራስ-ሰር ለ admin ይላክ (fraud prevention አካል)
                     if (status === 'free') {
-                        autoSendLocationOnFree();
+                        autoSendLocationOnFree(freePosition);
                     }
 
                     // ✅ NEW: Online/On Duty toggle - status "off-duty" ካልሆነ live tracking ይጀምር፣ ከሆነ ይቆም
@@ -8338,17 +8362,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             });
         }
 
-        async function autoSendLocationOnFree() {
-            // በተደጋጋሚ ቁልፉን ሲጫኑ መልእክት እንዳይደጋገም (30 ሰከንድ)
-            const now = Date.now();
-            if (now - lastFreeLocationSentAt < 30000) return;
-            lastFreeLocationSentAt = now;
-
+        async function autoSendLocationOnFree(readyPosition) {
             const statusEl = document.getElementById('locationStatus');
-            if (statusEl) { statusEl.textContent = '⏳ ቦታ በመፈለግ ላይ...'; statusEl.style.color = 'var(--warning)'; }
-
-            let position = null;
-            try { position = await getPositionWithFallback(); } catch (e) { position = null; }
+            let position = readyPosition || null;
+            if (!position) {
+                if (statusEl) { statusEl.textContent = '⏳ ቦታ በመፈለግ ላይ...'; statusEl.style.color = 'var(--warning)'; }
+                try { position = await getPositionWithFallback(); } catch (e) { position = null; }
+            }
 
             const safeName = (typeof tgEsc === 'function') ? tgEsc(technicianName) : technicianName;
 
