@@ -1566,7 +1566,7 @@
                 <div class="card">
                     <div class="card-header">
                         <h3><i class="fas fa-user-cog"></i> 🔧 ቴክኒሻኖች</h3>
-                        <button class="btn btn-success btn-sm" onclick="showAddTechModal()"><i class="fas fa-plus"></i> አዲስ</button>
+                        <div class="flex" style="gap:6px;"><button class="btn btn-secondary btn-sm" onclick="showSendMessageModal(null)"><i class="fas fa-bullhorn"></i> ለሁሉም መልእክት</button><button class="btn btn-success btn-sm" onclick="showAddTechModal()"><i class="fas fa-plus"></i> አዲስ</button></div>
                     </div>
                     <div class="table-wrap">
                         <table>
@@ -5044,6 +5044,7 @@ ${locationLine}
                     <td>${jobs}</td>
                     <td>
                         <button class="btn btn-xs btn-primary" onclick="viewTech('${tech.id}')"><i class="fas fa-eye"></i></button>
+                        <button class="btn btn-xs btn-secondary" title="መልእክት ላክ" onclick="showSendMessageModal('${tech.id}')"><i class="fas fa-comment-dots"></i></button>
                         ${(tech.isPhoneOperator || allTechnicians.filter(x => x.isPhoneOperator).length < 2) ? `<button class="btn btn-xs btn-secondary" title="ኦፕሬተር (ስልክ/ሾፕ) አድርግ" onclick="togglePhoneOperator('${tech.id}')"><i class="fas fa-headset"></i></button>` : ''}
                         <button class="btn btn-xs btn-danger" onclick="deleteTech('${tech.id}')"><i class="fas fa-trash"></i></button>
                     </td>
@@ -5355,18 +5356,118 @@ ${locationLine}
             openModal(`📋 ${tech ? tech.name : ''} - የሪፖርት ታሪክ`, html);
         }
 
+
+        // ============================================================
+        // 💬 አድሚን → ቴክኒሻን መልእክት (ከትዕዛዝ ጋር ሳይያያዝ በቀጥታ)
+        // - በአፑ ውስጥ (ቴክኒሻኑ "ከአስተዳዳሪ የመጡ አስተያየቶች" ላይ ያያል + ድምጽ/ማንቂያ)
+        // - በቴሌግራም (ቴክኒሻን ቦት፣ ከተገናኘ)
+        // - በፑሽ ማሳወቂያ (ከተፈቀደ)
+        // - በ SMS (አማራጭ፣ ተጨማሪ ወጪ ስላለው በምርጫ ብቻ)
+        // ============================================================
+        async function deliverAdminMessage(tech, message, alsoSms) {
+            const res = { tg: false, push: false, sms: false };
+            await db.collection('comments').add({
+                technician: tech.name,
+                message: message,
+                from: 'admin',
+                type: 'message',
+                createdAt: new Date()
+            });
+            if (tech.chatId) {
+                try {
+                    const safe = (typeof tgEsc === 'function') ? tgEsc(message) : message;
+                    const r = await callWorker('sendTelegramMessage', {
+                        text: `💬 *ከአስተዳዳሪ መልእክት*\n\n${safe}\n\n⏰ ${formatEthDateTime(new Date())}`,
+                        targetChatId: tech.chatId, bot: 'tech'
+                    });
+                    res.tg = !!(r && r.ok !== false);
+                } catch (e) { console.warn('Admin message Telegram failed:', e); }
+            }
+            if (tech.fcmToken) {
+                try {
+                    await db.collection('pushQueue').add({
+                        toStaffId: tech.id,
+                        title: '💬 ከአስተዳዳሪ መልእክት',
+                        body: message.length > 140 ? message.slice(0, 137) + '...' : message,
+                        locationUrl: null,
+                        createdAt: Date.now(),
+                        sent: false
+                    });
+                    res.push = true;
+                } catch (e) { console.warn('Admin message push failed:', e); }
+            }
+            if (alsoSms && tech.phone && tech.phone !== '—') {
+                try { await sendSmsNotification('Halal Electronics: ' + message, tech.phone); res.sms = true; } catch (e) {}
+            }
+            return res;
+        }
+
+        // techId = የአንድ ቴክኒሻን id፤ ባዶ/null ከሆነ ለሁሉም ንቁ ቴክኒሻኖች
+        function showSendMessageModal(techId) {
+            const single = techId ? allTechnicians.find(t => t.id === techId) : null;
+            const everyone = fieldTechs().filter(t => !t.status || t.status === 'active');
+            const targetHTML = single
+                ? `<p style="margin-bottom:8px;"><strong>👤 ለ: ${escHtml(single.name)}</strong> ${single.chatId ? '<span class="status-badge status-completed">📲 ቴሌግራም ተገናኝቷል</span>' : '<span class="status-badge status-pending">ቴሌግራም አልተገናኘም - በአፑ ውስጥ ብቻ ይታያል</span>'}</p>`
+                : `<p style="margin-bottom:8px;"><strong>📢 ለሁሉም ንቁ ቴክኒሻኖች (${everyone.length})</strong></p>`;
+            const html = `
+                ${targetHTML}
+                <input type="hidden" id="msgTargetId" value="${single ? single.id : 'all'}" />
+                <div class="form-group">
+                    <label>💬 መልእክት *</label>
+                    <textarea id="adminMsgText" rows="4" placeholder="ለቴክኒሻኑ የሚላከውን መልእክት ይጻፉ..." style="width:100%;"></textarea>
+                </div>
+                <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem; margin:6px 0 12px;">
+                    <input type="checkbox" id="adminMsgSms" style="width:auto;" /> 📱 በ SMS ጽሁፍም ላክ (ቴሌግራም ባይኖረውም ይደርሰዋል)
+                </label>
+                <button class="btn btn-primary btn-block" id="adminMsgSendBtn" onclick="sendAdminMessageToTechs()"><i class="fas fa-paper-plane"></i> ላክ</button>
+            `;
+            openModal(single ? `💬 ለ ${single.name} መልእክት` : '📢 ለሁሉም ቴክኒሻኖች መልእክት', html);
+            setTimeout(() => { const t = document.getElementById('adminMsgText'); if (t) t.focus(); }, 100);
+        }
+
+        async function sendAdminMessageToTechs() {
+            const targetId = document.getElementById('msgTargetId').value;
+            const message = document.getElementById('adminMsgText').value.trim();
+            const alsoSms = document.getElementById('adminMsgSms').checked;
+            const btn = document.getElementById('adminMsgSendBtn');
+            if (!message) { showToast('⚠️ እባክዎ መልእክት ይጻፉ', 'error'); return; }
+
+            const targets = targetId === 'all'
+                ? fieldTechs().filter(t => !t.status || t.status === 'active')
+                : allTechnicians.filter(t => t.id === targetId);
+            if (targets.length === 0) { showToast('⚠️ ተቀባይ ቴክኒሻን አልተገኘም', 'error'); return; }
+
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> በመላክ ላይ...'; }
+            let tg = 0, push = 0, sms = 0, failed = 0;
+            for (const tech of targets) {
+                try {
+                    const r = await deliverAdminMessage(tech, message, alsoSms);
+                    if (r.tg) tg++; if (r.push) push++; if (r.sms) sms++;
+                } catch (e) { failed++; console.warn('Send message failed for', tech.name, e); }
+            }
+            try {
+                await db.collection('activity').add({
+                    user: 'አስተዳዳሪ', action: 'send_message',
+                    details: `መልእክት ተላከ → ${targetId === 'all' ? 'ለሁሉም (' + targets.length + ')' : targets[0].name}`,
+                    timestamp: new Date()
+                });
+            } catch (e) {}
+
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> ላክ'; }
+            const ok = targets.length - failed;
+            if (failed === targets.length) { showToast('❌ መልእክቱ አልተላከም', 'error'); return; }
+            showToast(`✅ ለ ${ok} ቴክኒሻን ተልኳል (ቴሌግራም ${tg}፣ ፑሽ ${push}${alsoSms ? '፣ SMS ' + sms : ''})`, 'success');
+            closeModal();
+        }
+
         async function sendQuickReply(techId) {
             const tech = allTechnicians.find(t => t.id === techId);
             const input = document.getElementById('quickReplyText');
             const message = input.value.trim();
             if (!message) { showToast('⚠️ መልዕክት ይጻፉ', 'error'); return; }
             try {
-                await db.collection('comments').add({
-                    technician: tech ? tech.name : '',
-                    message: message,
-                    from: 'admin',
-                    createdAt: new Date()
-                });
+                if (!tech) throw new Error('ቴክኒሻኑ አልተገኘም');
+                await deliverAdminMessage(tech, message, false);
                 input.value = '';
                 showToast('✅ መልዕክት ተልኳል!', 'success');
                 viewTechReportHistory(techId);
@@ -9093,36 +9194,65 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // ============================================================
         // LOAD COMMENTS
         // ============================================================
+        let techCommentsUnsub = null;
+        function techNotifyAdminMessage(data) {
+            try { playNewOrderBeep(); } catch (e) {}
+            const preview = String(data.message || '').slice(0, 80);
+            showToast('💬 ከአስተዳዳሪ አዲስ መልእክት፦ ' + preview, 'info');
+            if (document.hidden) { try { flashDocTitle('💬 አዲስ መልእክት!'); } catch (e) {} }
+            try {
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification('💬 ከአስተዳዳሪ መልእክት', { body: preview, icon: 'icon-192.png' });
+                }
+            } catch (e) {}
+            const homeTab = document.querySelector('#bottomNav a[data-tab="home"]');
+            if (homeTab && !homeTab.classList.contains('active')) homeTab.classList.add('has-new-job');
+        }
+
         function techLoadComments() {
-            db.collection('comments')
+            // ✅ FIX: where + orderBy (የተለያዩ መስኮች) composite index ይጠይቅ ነበር (ካልተፈጠረ ዝም ብሎ ይከሽፋል)
+            // → orderBy ተወግዶ መደርደሩ በ JS ይደረጋል። እንዲሁም ተደጋጋሚ listener እንዳይከማች ቀዳሚው ይቋረጣል።
+            if (techCommentsUnsub) { try { techCommentsUnsub(); } catch (e) {} techCommentsUnsub = null; }
+            let first = true;
+            techCommentsUnsub = db.collection('comments')
                 .where('technician', '==', technicianName)
-                .orderBy('createdAt', 'desc')
-                .limit(20)
                 .onSnapshot((snapshot) => {
+                    if (!first) {
+                        snapshot.docChanges().forEach(ch => {
+                            const d = ch.doc.data();
+                            if (ch.type === 'added' && d.from === 'admin' && !ch.doc.metadata.hasPendingWrites) techNotifyAdminMessage(d);
+                        });
+                    }
+                    first = false;
+
                     const container = document.getElementById('adminCommentsContainer');
-                    if (snapshot.empty) {
+                    const items = snapshot.docs.map(doc => doc.data()).sort((a, b) => {
+                        const dA = a.createdAt?.toDate?.() || new Date(a.createdAt || 0);
+                        const dB = b.createdAt?.toDate?.() || new Date(b.createdAt || 0);
+                        return dB - dA;
+                    }).slice(0, 20);
+                    if (items.length === 0) {
                         container.innerHTML = '<p class="text-center text-muted">ምንም አስተያየት የለም</p>';
                         return;
                     }
+                    const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                     let html = '';
-                    snapshot.forEach(doc => {
-                        const data = doc.data();
+                    items.forEach(data => {
                         const time = formatEthDateTime(data.createdAt) || '—';
                         const from = data.from === 'admin' ? '👨‍💼 አስተዳዳሪ' : '📤 እርስዎ';
-                        const style = data.from === 'admin' ? 'border-left-color: var(--primary);' :
-                            'border-left-color: var(--success);';
+                        const style = data.from === 'admin' ? 'border-left-color: var(--primary);' : 'border-left-color: var(--success);';
                         html += `
                             <div class="comment-box" style="${style}">
                                 <div class="flex-between">
                                     <span class="from">${from}</span>
                                     <span class="time">${time}</span>
                                 </div>
-                                <div class="text">${data.message || '—'}</div>
+                                <div class="text">${esc(data.message) || '—'}</div>
                             </div>
                         `;
                     });
                     container.innerHTML = html;
-                });
+                }, (err) => console.warn('Comments listener error:', err));
         }
 
         // ============================================================
