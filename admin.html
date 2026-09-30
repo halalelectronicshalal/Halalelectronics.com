@@ -159,6 +159,21 @@
         .stat-card:hover { border-color: var(--primary); transform: translateY(-4px); box-shadow: var(--card-hover-shadow); }
         .stat-card .icon { font-size: 1.8rem; color: var(--primary); margin-bottom: 4px; }
 
+        /* ✅ ዳሽቦርድ ላይ ያሉት 9 ካርዶች ትንሽ እንዲሆኑ (ሌሎች ገጾች - ፋይናንስ/ዋራንቲ - አይነኩም) */
+        #dashboardStats { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; margin-bottom: 12px; }
+        #dashboardStats .stat-card { padding: 8px 6px; border-radius: 10px; }
+        #dashboardStats .stat-card:hover { transform: translateY(-2px); }
+        #dashboardStats .stat-card .icon { font-size: 1rem; margin-bottom: 2px; }
+        #dashboardStats .stat-card .number { font-size: 1.05rem; line-height: 1.25; }
+        #dashboardStats .stat-card .label { font-size: 0.62rem; line-height: 1.25; }
+        @media (max-width: 992px) { #dashboardStats { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 480px) {
+            #dashboardStats { gap: 6px; }
+            #dashboardStats .stat-card { padding: 7px 4px; }
+            #dashboardStats .stat-card .number { font-size: 0.95rem; }
+            #dashboardStats .stat-card .label { font-size: 0.58rem; }
+        }
+
         .table-wrap { overflow-x: auto; }
         .eth-picker-part { padding:8px 6px; border:1.5px solid var(--border); border-radius:8px; font-size:0.8rem; background:#fff; }
         table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
