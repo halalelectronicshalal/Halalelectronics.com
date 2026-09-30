@@ -1990,19 +1990,7 @@
                         <button class="status-btn off" data-status="off-duty">⚪ ዛሬ አልወጣሁም</button>
                     </div>
                     <div class="status-display" id="statusDisplay">ሁኔታ: 🟢 ነጻ</div>
-                </div>
-
-                <!-- Location -->
-                <div class="card">
-                    <div class="card-header">
-                        <h3><i class="fas fa-map-pin"></i> 📍 ቦታዎን ያጋሩ</h3>
-                    </div>
-                    <div class="location-row">
-                        <input type="text" id="manualLat" placeholder="ላቲቱድ" />
-                        <input type="text" id="manualLng" placeholder="ሎንጊቱድ" />
-                        <button id="getLocationBtn" class="btn btn-secondary btn-sm"><i class="fas fa-crosshairs"></i> አግኝ</button>
-                        <button id="sendLocationBtn" class="btn btn-success btn-sm"><i class="fas fa-paper-plane"></i> ላክ</button>
-                    </div>
+                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:6px;">📍 «ነጻ» ሲነኩ ቦታዎ በራስ-ሰር ለአድሚን ይላካል</div>
                     <div id="locationStatus" style="font-size:0.85rem; color:var(--text-muted); margin-top:4px;"></div>
                 </div>
 
@@ -8382,10 +8370,6 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const lat = position.coords.latitude.toFixed(6);
             const lng = position.coords.longitude.toFixed(6);
             const accuracy = position.coords.accuracy ? Math.round(position.coords.accuracy) : null;
-            const latEl = document.getElementById('manualLat');
-            const lngEl = document.getElementById('manualLng');
-            if (latEl) latEl.value = lat;
-            if (lngEl) lngEl.value = lng;
 
             // 1) ወደ Firestore (Admin ካርታ)
             let saved = true;
@@ -8495,89 +8479,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // ============================================================
         // LOCATION
         // ============================================================
-        function setupLocation() {
-            document.getElementById('getLocationBtn').addEventListener('click', function() {
-                if (!checkRulesAccepted()) {
-                    showToast('እባክዎ መጀመሪያ ህጎቹን ያንብቡ እና ይስማሙ', 'error');
-                    return;
-                }
-
-                const status = document.getElementById('locationStatus');
-                if (!navigator.geolocation) {
-                    status.textContent = '⚠️ ጂፒኤስ አይደግፍም';
-                    status.style.color = 'var(--emergency)';
-                    return;
-                }
-
-                status.textContent = '⏳ ቦታ በመፈለግ...';
-                status.style.color = 'var(--warning)';
-
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const lat = position.coords.latitude.toFixed(6);
-                        const lng = position.coords.longitude.toFixed(6);
-                        document.getElementById('manualLat').value = lat;
-                        document.getElementById('manualLng').value = lng;
-                        status.textContent = '✅ ቦታ: ' + lat + ', ' + lng;
-                        status.style.color = 'var(--success)';
-                    },
-                    () => {
-                        status.textContent = '❌ ቦታ ማግኘት አልተቻለም';
-                        status.style.color = 'var(--emergency)';
-                    }, {
-                        enableHighAccuracy: true,
-                        timeout: 10000
-                    }
-                );
-            });
-
-            document.getElementById('sendLocationBtn').addEventListener('click', async function() {
-                if (!checkRulesAccepted()) {
-                    showToast('እባክዎ መጀመሪያ ህጎቹን ያንብቡ እና ይስማሙ', 'error');
-                    return;
-                }
-
-                const lat = parseFloat(document.getElementById('manualLat').value);
-                const lng = parseFloat(document.getElementById('manualLng').value);
-
-                if (isNaN(lat) || isNaN(lng)) {
-                    showToast('እባክዎ ትክክለኛ ቁጥሮች ያስገቡ', 'error');
-                    return;
-                }
-
-                const status = document.getElementById('locationStatus');
-                status.textContent = '⏳ በመላክ ላይ...';
-                status.style.color = 'var(--warning)';
-
-                try {
-                    await db.collection('technician_locations').add({
-                        technician: technicianName,
-                        latitude: lat,
-                        longitude: lng,
-                        status: currentStatus,
-                        timestamp: new Date()
-                    });
-
-                    status.textContent = '✅ ቦታ ተልኳል! (' + lat + ', ' + lng + ')';
-                    status.style.color = 'var(--success)';
-
-                    showToast('✅ ቦታ ተልኳል!', 'success');
-
-                    await sendTelegramNotification(
-                        `📍 *ቦታ ተጋርቷል!* 🗺️\n` +
-                        `👨‍🔧 *ቴክኒሻን:* ${typeof tgEsc === 'function' ? tgEsc(technicianName) : technicianName}\n` +
-                        `📌 *ቦታ:* ${lat}, ${lng}\n` +
-                        `🟢 *ሁኔታ:* ${currentStatus === 'working' ? 'በስራ ላይ' : currentStatus === 'free' ? 'ነጻ' : 'ከመስመር ውጭ'}\n` +
-                        `🔗 https://www.google.com/maps?q=${lat},${lng}`
-                    );
-
-                } catch (error) {
-                    status.textContent = '❌ ስህተት: ' + error.message;
-                    status.style.color = 'var(--emergency)';
-                    showToast('❌ ቦታ መላክ አልተቻለም', 'error');
-                }
-            });
-        }
+        // ቦታ በእጅ የማጋራት ክፍል ተወግዷል - ቦታ የሚላከው "ነጻ" ሲነካ በራስ-ሰር ነው (autoSendLocationOnFree)
+        function setupLocation() { /* no-op */ }
 
         // ============================================================
         // LOAD MY ORDERS - FIXED for arrays
