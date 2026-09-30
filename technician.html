@@ -8360,22 +8360,52 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             });
         }
 
+        // አሳሹ ለዚህ ድረ-ገጽ የሰጠው ፍቃድ ሁኔታ: granted | denied | prompt | unknown
+        async function getGeoPermState() {
+            try {
+                if (navigator.permissions && navigator.permissions.query) {
+                    const r = await navigator.permissions.query({ name: 'geolocation' });
+                    return r.state;
+                }
+            } catch (e) {}
+            return 'unknown';
+        }
+        // በቴሌግራም/ፌስቡክ/ቲክቶክ ወዘተ ውስጥ የተከፈተ ገጽ (in-app browser) - እዚህ ቦታ አብዛኛውን ጊዜ አይሰራም
+        function isInAppBrowser() {
+            return /Telegram|FBAN|FBAV|Instagram|TikTok|musical_ly|BytedanceWebview|Line\/|MicroMessenger|; wv\)/i.test(navigator.userAgent || '');
+        }
+        const OS_LOCATION_STEPS = [
+            'የስልክ Settings → Apps → <b>የሚጠቀሙት አሳሽ (Chrome/Opera…)</b> → Permissions → Location → <b>«Allow only while using the app»</b> ይምረጡ፤ «Use precise location» ያብሩ',
+            'ከላይ ወደታች ጎትተው «Location (GPS)» መብራቱን ያረጋግጡ፤ Settings → Location → «Google Location Accuracy» ያብሩ',
+            'አሳሹን ሙሉ በሙሉ ዝጉና (Recent apps ውስጥ ጠርገው) እንደገና ይክፈቱ፣ ከዚያ «ነጻ» ን ይንኩ'
+        ];
+
         // ቦታ ባልተገኘ ጊዜ ትክክለኛውን ምክንያት እና መፍትሄ ያሳያል
-        function showLocationProblem(err) {
+        async function showLocationProblem(err) {
             const code = err && err.code;
+            const state = await getGeoPermState();
             let title, steps;
-            if (code === 1) {
+            if (code === 1 && isInAppBrowser()) {
+                title = '❌ ገጹ በሌላ መተግበሪያ ውስጥ (ቴሌግራም/ፌስቡክ/ቲክቶክ…) ተከፍቷል - እዚህ ቦታ አይፈቀድም';
+                steps = [
+                    'የገጹን አድራሻ ይቅዱ ወይም ከላይ ያለውን ⋮ ምናሌ ይንኩ → «Open in browser / በ Chrome ክፈት»',
+                    'በ Chrome ውስጥ ከተከፈተ በኋላ «ነጻ» ን ይንኩና «Allow» ይምረጡ'
+                ];
+            } else if (code === 1 && state === 'granted') {
+                title = '❌ አሳሹ ፍቃድ ሰጥቷል፣ ግን የስልኩ ሲስተም ለአሳሹ ቦታ አልፈቀደም';
+                steps = OS_LOCATION_STEPS;
+            } else if (code === 1) {
                 title = '❌ ለዚህ ድረ-ገጽ የአካባቢ (Location) ፍቃድ ተከልክሏል';
                 steps = [
                     'በአድራሻ መስመሩ (ከድረ-ገጹ ስም ግራ) ያለውን 🔒 ወይም ⚙️ ምልክት ይንኩ',
-                    '«Site settings / የድረ-ገጽ ቅንብሮች» → «Location / አካባቢ» → «Allow / ፍቀድ» ይምረጡ',
+                    '«Permissions» → «Location» → «Allow / ፍቀድ» ይምረጡ',
                     'ገጹን ያድሱ (Refresh) እና «ነጻ» ን እንደገና ይንኩ'
                 ];
             } else if (code === 2) {
                 title = '❌ ስልክዎ ቦታዎን ማግኘት አልቻለም (Location Service ጠፍቷል ወይም ሲግናል የለም)';
                 steps = [
                     'የስልክዎን ማሳወቂያ ፓነል ወደታች ጎትተው «Location / ቦታ (GPS)» ያብሩ',
-                    'Settings → Location → «Use location» ON እና «High accuracy / ከፍተኛ ትክክለኛነት» ይምረጡ',
+                    'Settings → Location → «High accuracy / ከፍተኛ ትክክለኛነት» ይምረጡ',
                     'ክፍት ቦታ ላይ ሆነው እንደገና «ነጻ» ን ይንኩ (ኮምፒውተር ላይ ከሆኑ GPS የለውም፤ ስልክ ይጠቀሙ)'
                 ];
             } else if (code === 3) {
@@ -8395,7 +8425,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (st) {
                 st.style.color = 'var(--emergency)';
                 st.innerHTML = '<b>' + title + '</b><ol style="margin:6px 0 0 18px; padding:0;">' +
-                    steps.map(x => '<li>' + x + '</li>').join('') + '</ol>';
+                    steps.map(x => '<li>' + x + '</li>').join('') + '</ol>' +
+                    '<div style="margin-top:6px; font-size:0.7rem; color:var(--text-muted);">ቴክኒካል መረጃ: ኮድ=' + code + ' · የአሳሽ ፍቃድ=' + state + (err && err.message ? ' · ' + err.message : '') + '</div>';
             }
             showToast(title, 'error');
         }
@@ -8540,7 +8571,12 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             function render(state) {
                 if (state === 'granted') { banner.style.display = 'none'; return; }
                 banner.style.display = 'block';
-                if (state === 'denied') {
+                if (state === 'os') {
+                    text.innerHTML = '⚠️ አሳሹ ፍቃድ ሰጥቷል፣ ግን የስልኩ ሲስተም ለአሳሹ ቦታ አልፈቀደም፦' +
+                        '<ol style="margin:6px 0 0 18px; padding:0; font-weight:400;">' +
+                        OS_LOCATION_STEPS.map(x => '<li>' + x + '</li>').join('') + '</ol>';
+                    btn.style.display = 'inline-block';
+                } else if (state === 'denied') {
                     text.innerHTML = '🔒 የአካባቢ ፍቃድ ተከልክሏል። አሳሹ እንደገና ሊጠይቅ አይችልም፤ በእጅ ይፍቀዱ፦' +
                         '<ol style="margin:6px 0 0 18px; padding:0; font-weight:400;">' +
                         '<li>በአድራሻ መስመሩ ግራ ያለውን 🔒 (ወይም ⚙️) ይንኩ</li>' +
@@ -8556,13 +8592,27 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             function requestPermission() {
                 if (!navigator.geolocation || !window.isSecureContext) return;
                 navigator.geolocation.getCurrentPosition(
-                    () => { render('granted'); },
-                    (err) => { render(err && err.code === 1 ? 'denied' : 'prompt'); },
+                    () => {
+                        render('granted');
+                        const ls = document.getElementById('locationStatus');
+                        if (ls) ls.innerHTML = '';
+                    },
+                    async (err) => {
+                        if (err && err.code === 1) {
+                            const st = await getGeoPermState();
+                            render(st === 'granted' ? 'os' : 'denied');
+                        } else { render('prompt'); }
+                    },
                     { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
                 );
             }
 
             btn.addEventListener('click', requestPermission);
+
+            // ከቅንብሮች ተመልሰው ወደ አፑ ሲገቡ በራስ-ሰር እንደገና ይፈትሻል (ገጹን ማደስ አያስፈልግም)
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible' && banner.style.display !== 'none') requestPermission();
+            });
 
             if (navigator.permissions && navigator.permissions.query) {
                 navigator.permissions.query({ name: 'geolocation' }).then(res => {
