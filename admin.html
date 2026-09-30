@@ -10929,5 +10929,132 @@ document.addEventListener('DOMContentLoaded', function () {
   } catch (e) { console.warn('role tweak failed', e); }
 });
 </script>
+<script>
+// ================================================================
+// ⬅️ የኋላ (Back) ቁልፍ/ጌስቸር አሰሳ
+// ከአንድ ገጽ (tab) / ብቅ-ባይ (modal) / ሙሉ ካርታ ውስጥ ከገቡ በኋላ ስልኩ ላይ የኋላ (Back) ሲነኩ
+// አፑን ከመውጣት ይልቅ ወደ ቀዳሚው ገጽ ይመልሳል።
+// ================================================================
+(function () {
+    var isAdmin = window.APP_ROLE === 'admin';
+    var cur = isAdmin ? 'dashboard' : 'home';
+    var pendingBack = 0;   // በራሳችን history.back() የተነሳ popstate ን ለመዝለል
+    var suppress = false;  // popstate ምክንያት የሚደረግ ማዞር አዲስ history እንዳይጨምር
+    var layers = { modal: false, map: false };
+
+    function url(tab) { return location.pathname + location.search + '#' + tab; }
+    function isOpen(k) {
+        if (k === 'modal') { var m = document.getElementById('modalOverlay'); return !!(m && m.classList.contains('show')); }
+        var o = document.getElementById('fullMapOverlay'); return !!(o && o.style.display === 'block');
+    }
+    function pushLayer(k) {
+        if (layers[k]) return;
+        layers[k] = true;
+        try { history.pushState({ layer: k, tab: cur }, '', location.href); } catch (e) {}
+    }
+    // ብቅ-ባዩ ተዘግቶ ወዲያው ሌላ ከተከፈተ (ተመሳሳይ tick) history ን እንደገና እንጠቀማለን
+    function releaseLayer(k) {
+        setTimeout(function () {
+            if (layers[k] && !isOpen(k)) {
+                layers[k] = false;
+                pendingBack++;
+                try { history.back(); } catch (e) { pendingBack--; }
+            }
+        }, 0);
+    }
+    function pushTab(tab) {
+        if (suppress || tab === cur) { cur = tab; return; }
+        try {
+            if (layers.modal && !isOpen('modal')) { // ተዘግቶ ያለቀ ብቅ-ባይ entry ን እንተካዋለን
+                layers.modal = false;
+                history.replaceState({ tab: tab }, '', url(tab));
+            } else {
+                history.pushState({ tab: tab }, '', url(tab));
+            }
+        } catch (e) {}
+        cur = tab;
+    }
+
+    try { history.replaceState({ tab: cur }, '', location.href); } catch (e) {}
+
+    // ---------- modal ----------
+    if (typeof window.openModal === 'function') {
+        var _open = window.openModal;
+        window.openModal = function () { var r = _open.apply(this, arguments); pushLayer('modal'); return r; };
+    }
+    if (typeof window.closeModal === 'function') {
+        var _close = window.closeModal;
+        window.closeModal = function () { var r = _close.apply(this, arguments); releaseLayer('modal'); return r; };
+    }
+
+    // ---------- full map (admin) ----------
+    var _closeMapOrig = null;
+    if (typeof window.openFullMap === 'function') {
+        var _openMap = window.openFullMap;
+        window.openFullMap = function () { var r = _openMap.apply(this, arguments); pushLayer('map'); return r; };
+    }
+    if (typeof window.closeFullMap === 'function') {
+        _closeMapOrig = window.closeFullMap;
+        window.closeFullMap = function () { var r = _closeMapOrig.apply(this, arguments); releaseLayer('map'); return r; };
+    }
+
+    // ---------- admin: sidebar tabs ----------
+    if (isAdmin && typeof window.switchTab === 'function') {
+        var _sw = window.switchTab;
+        window.switchTab = function (tab) {
+            var r = _sw.apply(this, arguments);
+            document.querySelectorAll('.sidebar-nav a[data-tab]').forEach(function (a) {
+                a.classList.toggle('active', a.dataset.tab === tab);
+            });
+            pushTab(tab);
+            return r;
+        };
+    }
+
+    // ---------- technician: bottom nav ----------
+    if (!isAdmin) {
+        document.addEventListener('click', function (e) {
+            var a = e.target && e.target.closest ? e.target.closest('#bottomNav a') : null;
+            if (a && a.dataset.tab) pushTab(a.dataset.tab);
+        }, false);
+        if (typeof window.startCompletion === 'function') {
+            var _sc = window.startCompletion;
+            window.startCompletion = function () { var r = _sc.apply(this, arguments); pushTab('complete'); return r; };
+        }
+    }
+
+    // ---------- Back ----------
+    window.addEventListener('popstate', function (e) {
+        if (pendingBack > 0) { pendingBack--; return; }
+
+        if (layers.modal && isOpen('modal')) {
+            layers.modal = false;
+            var m = document.getElementById('modalOverlay');
+            if (m) m.classList.remove('show');
+            return;
+        }
+        if (layers.map && isOpen('map')) {
+            layers.map = false;
+            if (_closeMapOrig) _closeMapOrig();
+            return;
+        }
+        layers.modal = false; layers.map = false;
+
+        var tab = (e.state && e.state.tab) || (isAdmin ? 'dashboard' : 'home');
+        if (tab === cur) return;
+        suppress = true;
+        try {
+            if (isAdmin) {
+                if (typeof window.switchTab === 'function') window.switchTab(tab);
+            } else {
+                var link = document.querySelector('#bottomNav a[data-tab="' + tab + '"]');
+                if (link) link.click();
+            }
+        } finally { suppress = false; }
+        cur = tab;
+    });
+})();
+</script>
+
 </body>
 </html>
