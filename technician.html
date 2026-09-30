@@ -8319,45 +8319,85 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             );
         }
 
-        // ✅ NEW: "ነፃ" ሲባል ራስ-ሰር ቦታ መያዝ እና መላክ - ተጠቃሚው ተጨማሪ ቁልፍ መጫን አያስፈልገውም
-        function autoSendLocationOnFree() {
-            if (!navigator.geolocation) return;
-            navigator.geolocation.getCurrentPosition(
-                async (position) => {
-                    const lat = position.coords.latitude.toFixed(6);
-                    const lng = position.coords.longitude.toFixed(6);
-                    document.getElementById('manualLat').value = lat;
-                    document.getElementById('manualLng').value = lng;
-                    const statusEl = document.getElementById('locationStatus');
-                    try {
-                        await db.collection('technician_locations').add({
-                            technician: technicianName,
-                            latitude: parseFloat(lat),
-                            longitude: parseFloat(lng),
-                            status: 'free',
-                            timestamp: new Date(),
-                            autoSent: true
-                        });
-                        if (statusEl) {
-                            statusEl.textContent = `✅ ቦታ በራስ-ሰር ተልኳል (${lat}, ${lng})`;
-                            statusEl.style.color = 'var(--success)';
-                        }
-                        await tgMuted(`
-                        📍 *ነፃ ሆነው ቦታ ተላከ (ራስ-ሰር)* 🗺️
-                        👨‍🔧 *ቴክኒሻን:* ${technicianName}
-                        📌 *ቦታ:* ${lat}, ${lng}
-                        🔗 https://www.google.com/maps?q=${lat},${lng}
-                        `);
-                    } catch (e) {
-                        console.warn('Auto location send failed:', e);
-                    }
-                },
-                (error) => {
-                    // ዝም ብሎ ማለፍ - ቦታ ማግኘት ካልተቻለ status change ራሱ አይስተጓጎልም፣ ግን ማስጠንቀቅ ጠቃሚ ነው
-                    showToast('⚠️ ቦታ በራስ-ሰር መላክ አልተቻለም (ፍቃድ ወይም ሲግናል ችግር)', 'error');
-                },
-                { enableHighAccuracy: true, timeout: 15000 }
+        // ✅ UPDATED: "ነፃ" ሲባል ቦታ ተይዞ ወደ አድሚን (Telegram + ካርታ/Firestore) አብሮ ይላካል
+        // - መጀመሪያ High-accuracy GPS፤ ካልተሳካ ዝቅተኛ ትክክለኛነት (network) ይሞክራል
+        // - Telegram መላክ ከ Firestore ጽሁፍ ነጻ ነው (አንዱ ቢወድቅ ሌላው ይቀጥላል)
+        // - ቦታ ማግኘት ባይቻል እንኳ "ነጻ ሆኗል" የሚል መልእክት (ያለ ቦታ) ለአድሚን ይላካል
+        let lastFreeLocationSentAt = 0;
+        function getPositionWithFallback() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) { reject(new Error('GPS አይደገፍም')); return; }
+                navigator.geolocation.getCurrentPosition(
+                    resolve,
+                    () => navigator.geolocation.getCurrentPosition(
+                        resolve, reject,
+                        { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
+                    ),
+                    { enableHighAccuracy: true, timeout: 12000 }
+                );
+            });
+        }
+
+        async function autoSendLocationOnFree() {
+            // በተደጋጋሚ ቁልፉን ሲጫኑ መልእክት እንዳይደጋገም (30 ሰከንድ)
+            const now = Date.now();
+            if (now - lastFreeLocationSentAt < 30000) return;
+            lastFreeLocationSentAt = now;
+
+            const statusEl = document.getElementById('locationStatus');
+            if (statusEl) { statusEl.textContent = '⏳ ቦታ በመፈለግ ላይ...'; statusEl.style.color = 'var(--warning)'; }
+
+            let position = null;
+            try { position = await getPositionWithFallback(); } catch (e) { position = null; }
+
+            const safeName = (typeof tgEsc === 'function') ? tgEsc(technicianName) : technicianName;
+
+            if (!position) {
+                if (statusEl) { statusEl.textContent = '⚠️ ቦታ ማግኘት አልተቻለም (የአካባቢ ፍቃድ/GPS ያብሩ)'; statusEl.style.color = 'var(--emergency)'; }
+                showToast('⚠️ ቦታ ማግኘት አልተቻለም። የአካባቢ (Location) ፍቃድ እና GPS ያብሩ', 'error');
+                await sendTelegramNotification(`🟢 *ነፃ ሆኗል* (ቦታ አልተላከም - GPS አልተገኘም)\n👨‍🔧 *ቴክኒሻን:* ${safeName}\n📅 ${formatEthDateTime(new Date())}`);
+                return;
+            }
+
+            const lat = position.coords.latitude.toFixed(6);
+            const lng = position.coords.longitude.toFixed(6);
+            const accuracy = position.coords.accuracy ? Math.round(position.coords.accuracy) : null;
+            const latEl = document.getElementById('manualLat');
+            const lngEl = document.getElementById('manualLng');
+            if (latEl) latEl.value = lat;
+            if (lngEl) lngEl.value = lng;
+
+            // 1) ወደ Firestore (Admin ካርታ)
+            let saved = true;
+            try {
+                await db.collection('technician_locations').add({
+                    technician: technicianName,
+                    latitude: parseFloat(lat),
+                    longitude: parseFloat(lng),
+                    accuracy: accuracy,
+                    status: 'free',
+                    timestamp: new Date(),
+                    autoSent: true
+                });
+            } catch (e) {
+                saved = false;
+                console.warn('Auto location save failed:', e);
+            }
+
+            // 2) ወደ አድሚን Telegram (ከ Firestore ውጤት ነጻ)
+            await sendTelegramNotification(
+                `📍 *ነፃ ሆኗል - ቦታ ተላከ* 🗺️\n` +
+                `👨‍🔧 *ቴክኒሻን:* ${safeName}\n` +
+                `📌 *ቦታ:* ${lat}, ${lng}${accuracy ? ` (±${accuracy}ሜ)` : ''}\n` +
+                `🔗 https://www.google.com/maps?q=${lat},${lng}\n` +
+                `📅 ${formatEthDateTime(new Date())}`
             );
+
+            if (statusEl) {
+                statusEl.textContent = `✅ ነፃ ሆነው ቦታ ተልኳል (${lat}, ${lng})`;
+                statusEl.style.color = 'var(--success)';
+            }
+            showToast(saved ? '📍 ቦታዎ ለአድሚን ተልኳል' : '📍 ቦታ ለአድሚን ተልኳል (ካርታ ላይ መመዝገብ አልተቻለም)', saved ? 'success' : 'error');
         }
 
         // ============================================================
@@ -8503,13 +8543,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
                     showToast('✅ ቦታ ተልኳል!', 'success');
 
-                    await tgMuted(`
-                    📍 *ቦታ ተጋርቷል!* 🗺️
-                    👨‍🔧 *ቴክኒሻን:* ${technicianName}
-                    📌 *ቦታ:* ${lat}, ${lng}
-                    🟢 *ሁኔታ:* ${currentStatus === 'working' ? 'በስራ ላይ' : currentStatus === 'free' ? 'ነጻ' : 'ከመስመር ውጭ'}
-                    🔗 https://www.google.com/maps?q=${lat},${lng}
-                    `);
+                    await sendTelegramNotification(
+                        `📍 *ቦታ ተጋርቷል!* 🗺️\n` +
+                        `👨‍🔧 *ቴክኒሻን:* ${typeof tgEsc === 'function' ? tgEsc(technicianName) : technicianName}\n` +
+                        `📌 *ቦታ:* ${lat}, ${lng}\n` +
+                        `🟢 *ሁኔታ:* ${currentStatus === 'working' ? 'በስራ ላይ' : currentStatus === 'free' ? 'ነጻ' : 'ከመስመር ውጭ'}\n` +
+                        `🔗 https://www.google.com/maps?q=${lat},${lng}`
+                    );
 
                 } catch (error) {
                     status.textContent = '❌ ስህተት: ' + error.message;
