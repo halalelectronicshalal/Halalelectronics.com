@@ -4463,8 +4463,20 @@
         // ============================================================
         // 💬 ቴክስት አይከን - የሁሉም ኮንታክት ዝርዝር + ለሁሉም ላክ + ተጽፎላቸው ከላይ (እንደ ቴሌግራም)
         // ============================================================
+        // ሁሉም የተመዘገቡ (ቴክኒሻን፣ ኦፕሬተር፣ ሠራተኛ፣ ሪፖርተር...) - ንቁ፣ የተዘጋ እና ማጽደቅ የሚጠባበቁ ጭምር
         function cpContacts() {
-            return allTechnicians.filter(t => !t.status || t.status === 'active');
+            const seen = new Set();
+            return [...allTechnicians, ...(typeof allPendingRegistrations !== 'undefined' ? allPendingRegistrations : [])]
+                .filter(t => t && t.id && t.role !== 'admin' && t.status !== 'rejected' && !seen.has(t.id) && seen.add(t.id));
+        }
+        // "ለሁሉም ላክ" - ንቁ የሆኑት ብቻ (የተዘጉና ያልጸደቁ አይካተቱም)
+        function cpBroadcastTargets() {
+            return cpContacts().filter(t => !t.status || t.status === 'active');
+        }
+        function cpRoleLabel(t) {
+            if (t.status === 'pending') return '⏳ ማጽደቅ ይጠብቃል';
+            const base = t.isPhoneOperator ? '📞 ኦፕሬተር' : t.role === 'technician' ? '🔧 ቴክኒሻን' : t.role === 'staff' ? '👔 ሠራተኛ' : '📝 ሪፖርተር';
+            return base + (t.status === 'inactive' ? ' · ⛔ የተዘጋ' : '');
         }
         function cpLastTime(name) {
             return allComments.filter(c => c.technician === name).reduce((m, c) => Math.max(m, chatTime(c).getTime()), 0);
@@ -4474,13 +4486,13 @@
             if (!box) return;
             const rows = cpContacts().map(t => ({ t, last: cpLastTime(t.name), unread: adminUnreadFor(t.name) }))
                 .sort((a, b) => (b.last - a.last) || String(a.t.name).localeCompare(String(b.t.name)));
-            const all = `<div class="cp-all" onclick="chatPanelOpen('all')"><div class="avatar" style="width:36px;height:36px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;">📢</div><span>ለሁሉም ላክ (${rows.length})</span></div>`;
+            const all = `<div class="cp-all" onclick="chatPanelOpen('all')"><div class="avatar" style="width:36px;height:36px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;">📢</div><span>ለሁሉም ንቁዎች ላክ (${cpBroadcastTargets().length})</span></div>`;
             box.innerHTML = all + (rows.length ? rows.map(r => `
                 <div class="msg-item" onclick="chatPanelOpen('${r.t.id}')">
                     <div class="avatar">${chatEsc((r.t.name || '?').charAt(0))}</div>
                     <div class="info">
                         <div class="name"><span>${chatEsc(r.t.name)}</span>${r.unread ? `<span class="unread">${r.unread}</span>` : ''}</div>
-                        <div class="prev">${chatEsc(r.t.phone || '')}</div>
+                        <div class="prev">${chatEsc(cpRoleLabel(r.t))}${r.t.phone && r.t.phone !== '—' ? ' · ' + chatEsc(r.t.phone) : ''}</div>
                     </div>
                 </div>`).join('') : '<p class="text-muted text-center" style="padding:16px;">ምንም ኮንታክት የለም</p>');
             const b = document.getElementById('chatFabBadge');
@@ -4506,9 +4518,9 @@
         }
         function chatPanelOpen(target) {
             const p = document.getElementById('chatPanel');
-            const tech = target === 'all' ? null : allTechnicians.find(t => t.id === target);
+            const tech = target === 'all' ? null : cpContacts().find(t => t.id === target);
             document.getElementById('cpTarget').value = target;
-            document.getElementById('cpTitle').textContent = target === 'all' ? `📢 ለሁሉም (${cpContacts().length})` : '✉️ ለ ' + (tech ? tech.name : '');
+            document.getElementById('cpTitle').textContent = target === 'all' ? `📢 ለሁሉም ንቁዎች (${cpBroadcastTargets().length})` : '✉️ ለ ' + (tech ? tech.name : '');
             document.getElementById('cpBack').style.display = '';
             p.classList.add('composing');
             setTimeout(() => { const t = document.getElementById('cpText'); if (t) t.focus(); }, 80);
@@ -4520,7 +4532,7 @@
             const sms = document.getElementById('cpSms').checked;
             const btn = document.getElementById('cpSendBtn');
             if (!message) { showToast('⚠️ እባክዎ መልእክት ይጻፉ', 'error'); return; }
-            const targets = target === 'all' ? cpContacts() : allTechnicians.filter(t => t.id === target);
+            const targets = target === 'all' ? cpBroadcastTargets() : cpContacts().filter(t => t.id === target);
             if (!targets.length) { showToast('⚠️ ተቀባይ አልተገኘም', 'error'); return; }
             btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> በመላክ ላይ...';
             let ok = 0;
