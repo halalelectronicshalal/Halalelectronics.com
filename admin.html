@@ -532,7 +532,6 @@
             color: var(--text);
             line-height: 1.7;
             overflow-x: hidden;
-            padding-bottom: calc(var(--bottom-nav-height) + 20px);
         }
         a { text-decoration: none; color: inherit; }
         ul { list-style: none; }
@@ -781,8 +780,8 @@
         #appContainer {
             display: none;
             min-height: 100vh;
+            padding-bottom: calc(var(--bottom-nav-height) + 20px);
         }
-
         .app-header {
             background: var(--primary-gradient);
             color: #FFFFFF;
@@ -1543,7 +1542,6 @@
                         <button class="btn btn-primary" onclick="switchTab('orders')"><i class="fas fa-clipboard-list"></i> ትዕዛዞች</button>
                         <button class="btn btn-success" onclick="switchTab('technicians')"><i class="fas fa-user-plus"></i> አዲስ ቴክኒሻን</button>
                         <button class="btn btn-secondary" onclick="switchTab('finance')"><i class="fas fa-coins"></i> ፋይናንስ</button>
-                        <button class="btn btn-outline" onclick="exportAllData()"><i class="fas fa-download"></i> ውሂብ አውርድ</button>
                         <button class="btn btn-primary" style="background:#7c3aed;" onclick="showTechReportsModal()"><i class="fas fa-file-alt"></i> የባለሙያዎች ሪፖርት</button>
                     </div>
                 </div>
@@ -1938,6 +1936,11 @@
                         <button class="btn btn-danger" onclick="clearAll('technicians')"><i class="fas fa-trash"></i> ሁሉንም ቴክኒሻኖች አጥፋ</button>
                         <button class="btn btn-danger" onclick="clearAll('customers')"><i class="fas fa-trash"></i> ሁሉንም ደንበኞች አጥፋ</button>
                     </div>
+                </div>
+                 <div class="card">
+                    <div class="card-header"><h3><i class="fas fa-download"></i> 💾 ውሂብ አውርድ</h3></div>
+                    <p class="text-muted" style="margin-bottom:12px; font-size:0.88rem;">ትዕዛዞች፣ ደንበኞች፣ ቴክኒሻኖች፣ እቃዎች፣ ፋይናንስ እና ዋራንቲዎችን በአንድ JSON ፋይል ያወርዳል።</p>
+                    <button class="btn btn-outline" onclick="exportAllData()"><i class="fas fa-download"></i> ውሂብ አውርድ</button>
                 </div>
                 <div class="card" style="border:2px solid var(--emergency);">
                     <div class="card-header"><h3><i class="fas fa-redo"></i> 🔄 አፑን እንዳዲስ አስጀምር</h3></div>
