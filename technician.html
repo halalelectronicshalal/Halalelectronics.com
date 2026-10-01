@@ -276,6 +276,45 @@
         }
         .gap-8 { gap: 8px; }
 
+        /* 💬 ውይይት (chat) ሳጥን - ቋሚ ቁመት፣ ከበዛ ስክሮል ይደረጋል፣ አዲስ መልእክት ሲመጣ ወደ ታች ይሄዳል */
+        .chat-box { height: 340px; max-height: 55vh; overflow-y: auto; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; gap: 8px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+        .chat-msg { max-width: 84%; padding: 8px 12px; border-radius: 14px; font-size: 0.88rem; line-height: 1.5; word-wrap: break-word; overflow-wrap: anywhere; white-space: pre-wrap; }
+        .chat-msg .meta { font-size: 0.64rem; opacity: 0.7; margin-top: 3px; white-space: normal; }
+        .chat-msg .tag { font-size: 0.66rem; font-weight: 700; opacity: 0.85; margin-bottom: 2px; white-space: normal; }
+        .chat-msg.mine { align-self: flex-end; background: var(--primary); color: #fff; border-bottom-right-radius: 4px; }
+        .chat-msg.theirs { align-self: flex-start; background: var(--card); color: var(--text); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+        .chat-day { align-self: center; font-size: 0.66rem; color: var(--text-muted); background: var(--card); padding: 1px 10px; border-radius: 50px; border: 1px solid var(--border); }
+        .chat-empty { margin: auto; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
+        .chat-wrap { position: relative; }
+        .chat-jump { display: none; position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); background: var(--secondary); color: #fff; border: none; border-radius: 50px; padding: 5px 14px; font-size: 0.75rem; font-weight: 700; box-shadow: var(--shadow-lg); cursor: pointer; z-index: 2; }
+        .chat-input-row { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; }
+        .chat-input-row textarea { flex: 1; min-height: 44px; max-height: 120px; resize: none; }
+        .chat-input-row .btn { height: 44px; flex: 0 0 auto; }
+
+
+        /* 💬 መልእክቶች ታብ (አድሚን) + የቴክኒሻን ታችኛ ናቪጌሽን ቁጥር ምልክት */
+        .msg-layout { display: grid; grid-template-columns: 280px 1fr; gap: 12px; align-items: stretch; }
+        .msg-list { max-height: 72vh; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--card); }
+        .msg-item { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--border-light); cursor: pointer; }
+        .msg-item:hover, .msg-item.active { background: var(--bg); }
+        .msg-item .avatar { width: 36px; height: 36px; flex: 0 0 36px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; }
+        .msg-item .info { flex: 1; min-width: 0; }
+        .msg-item .name { font-weight: 700; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+        .msg-item .prev { font-size: 0.76rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .msg-item .unread { background: var(--emergency); color: #fff; border-radius: 50px; font-size: 0.65rem; font-weight: 700; padding: 1px 7px; min-width: 18px; text-align: center; }
+        .msg-pane { border: 1px solid var(--border); border-radius: 12px; background: var(--card); padding: 10px; min-height: 440px; }
+        .msg-pane-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+        .msg-back { display: none; }
+        @media (max-width: 768px) {
+            .msg-layout { grid-template-columns: 1fr; }
+            .msg-layout .msg-pane { display: none; }
+            .msg-layout.chat-open .msg-list { display: none; }
+            .msg-layout.chat-open .msg-pane { display: block; }
+            .msg-back { display: inline-block; }
+        }
+        .bottom-nav a { position: relative; }
+        .nav-badge { display: none; position: absolute; top: 0; right: 14%; background: var(--emergency); color: #fff; border-radius: 50px; font-size: 0.55rem; font-weight: 700; min-width: 15px; padding: 0 4px; line-height: 15px; text-align: center; border: 1.5px solid var(--primary-dark); }
+
         /* ✅ ADDED: .timeline / .timeline-item - ለ ትዕዛዝ ታሪክ (order history) ማሳያ */
         .timeline { position: relative; padding-left: 24px; margin: 12px 0; }
         .timeline-item { position: relative; padding: 8px 0 8px 16px; border-left: 2px solid var(--border); font-size: 0.85rem; color: var(--text); }
@@ -1315,6 +1354,7 @@
                 <a href="#" data-tab="orders"><i class="fas fa-clipboard-list"></i> ትዕዛዞች <span class="badge" id="orderBadge">0</span></a>
                 <a href="#" data-tab="customers"><i class="fas fa-users"></i> ደንበኞች</a>
                 <a href="#" data-tab="technicians"><i class="fas fa-user-cog"></i> ቴክኒሻኖች</a>
+                <a href="#" data-tab="messages"><i class="fas fa-comments"></i> መልእክቶች <span class="badge" id="msgBadge">0</span></a>
                 <a href="#" data-tab="staff"><i class="fas fa-user-tie"></i> ሠራተኞች</a>
                 <a href="#" data-tab="inventory"><i class="fas fa-boxes"></i> እቃዎች</a>
                 <a href="#" data-tab="finance"><i class="fas fa-money-bill-wave"></i> ፋይናንስ</a>
@@ -1873,6 +1913,44 @@
                 </div>
             </div>
 
+
+            <!-- ============================================================
+            TAB: MESSAGES (አድሚን ↔ ቴክኒሻን መላላኪያ)
+            ============================================================ -->
+            <div id="tab-messages" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-comments"></i> 💬 መልእክቶች</h3>
+                        <button class="btn btn-secondary btn-sm" onclick="showSendMessageModal(null)"><i class="fas fa-bullhorn"></i> ለሁሉም መልእክት</button>
+                    </div>
+                    <div class="msg-layout" id="msgLayout">
+                        <div class="msg-list" id="msgTechList"></div>
+                        <div class="msg-pane" id="msgPane">
+                            <div id="msgPaneEmpty" class="chat-empty" style="padding:60px 10px;">👈 ውይይት ለመጀመር ከዝርዝሩ ቴክኒሻን ይምረጡ</div>
+                            <div id="msgPaneBody" style="display:none;">
+                                <input type="hidden" id="adminChatTechId" value="" />
+                                <div class="msg-pane-head">
+                                    <button type="button" class="btn btn-xs btn-outline msg-back" onclick="closeChatPane()"><i class="fas fa-arrow-left"></i> ተመለስ</button>
+                                    <strong id="msgPaneName"></strong>
+                                    <span id="msgPaneStatus"></span>
+                                </div>
+                                <div class="chat-wrap">
+                                    <div id="adminChatThread" class="chat-box" style="height:52vh; max-height:60vh;"></div>
+                                    <button type="button" class="chat-jump" onclick="chatJump(this)">⬇️ አዲስ መልእክት</button>
+                                </div>
+                                <div class="chat-input-row">
+                                    <textarea id="adminChatInput" rows="2" placeholder="መልእክት ይጻፉ... (Enter = ላክ)"></textarea>
+                                    <button class="btn btn-primary" id="adminChatSendBtn" onclick="sendAdminChat()" title="ላክ"><i class="fas fa-paper-plane"></i></button>
+                                </div>
+                                <label style="display:flex; align-items:center; gap:6px; font-size:0.75rem; margin-top:6px; color:var(--text-muted);">
+                                    <input type="checkbox" id="adminChatSms" style="width:auto;" /> 📱 በ SMS ጽሁፍም ላክ
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </main>
     </div>
 
@@ -2009,21 +2087,27 @@
                     </div>
                 </div>
 
-                <!-- Admin Comments (Advice) -->
+            </div>
+
+            <!-- ============================================================
+            TAB: MESSAGES (ከአስተዳዳሪ ጋር ውይይት)
+            ============================================================ -->
+            <div id="tab-techmessages" class="tab-content">
+                <!-- 💬 መልእክቶች (ከአስተዳዳሪ ጋር ውይይት) -->
                 <div class="card">
                     <div class="card-header">
-                        <h3><i class="fas fa-comment"></i> 💬 ከአስተዳዳሪ የመጡ አስተያየቶች</h3>
+                        <h3><i class="fas fa-comment"></i> 💬 ከአስተዳዳሪ ጋር ውይይት</h3>
                         <button id="refreshCommentsBtn" class="btn btn-sm btn-secondary"><i class="fas fa-sync"></i></button>
                     </div>
-                    <div id="adminCommentsContainer">
-                        <p class="text-center text-muted">ምንም አስተያየት የለም</p>
-                    </div>
-                    <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:12px;">
-                        <h4 style="margin-bottom:6px; font-size:0.9rem;">📤 ለአስተዳዳሪ ላክ</h4>
-                        <div class="flex">
-                            <textarea id="techCommentInput" placeholder="አስተያየትዎን ይጻፉ..." style="flex:3; min-height:50px; resize:vertical;"></textarea>
-                            <button id="sendTechCommentBtn" class="btn btn-success" style="flex:0 0 auto; height:auto;"><i class="fas fa-paper-plane"></i></button>
+                    <div class="chat-wrap">
+                        <div id="adminCommentsContainer" class="chat-box" style="height:58vh; max-height:65vh;">
+                            <div class="chat-empty">💬 ገና ምንም መልእክት የለም</div>
                         </div>
+                        <button type="button" class="chat-jump" onclick="chatJump(this)">⬇️ አዲስ መልእክት</button>
+                    </div>
+                    <div class="chat-input-row">
+                        <textarea id="techCommentInput" rows="2" placeholder="ለአስተዳዳሪ መልእክት ይጻፉ... (Enter = ላክ)"></textarea>
+                        <button id="sendTechCommentBtn" class="btn btn-success" title="ላክ"><i class="fas fa-paper-plane"></i></button>
                     </div>
                 </div>
             </div>
@@ -2364,6 +2448,7 @@
             <a href="#" data-tab="report"><i class="fas fa-file-invoice"></i> ሪፖርት</a>
             <a href="#" data-tab="complete"><i class="fas fa-check-circle"></i> አጠናቅ</a>
             <a href="#" data-tab="history"><i class="fas fa-history"></i> ታሪክ</a>
+            <a href="#" data-tab="messages"><i class="fas fa-comments"></i> መልእክት<span class="nav-badge" id="techMsgBadge">0</span></a>
             <a href="#" data-tab="profile"><i class="fas fa-user"></i> መገለጫ</a>
         </nav>
     </div>
@@ -3543,6 +3628,7 @@
                 if (tab === 'map') {
                     setTimeout(loadTechMap, 300);
                 }
+                if (tab === 'messages') { try { renderAdminChat(); } catch (e) {} }
             }
         }
 
@@ -3559,7 +3645,8 @@
                 'map': '🗺️ ካርታ',
                 'warranty': '🛡️ ዋራንቲ',
                 'settings': '⚙️ ቅንብሮች',
-                'activity': '📋 እንቅስቃሴ'
+                'activity': '📋 እንቅስቃሴ',
+                'messages': '💬 መልእክቶች'
             };
             return titles[tab] || tab;
         }
@@ -3984,14 +4071,28 @@
 
         // ✅ NEW: ከ/ወደ ቴክኒሻን የተላኩ ሁሉንም መልዕክቶች መጫን (ምንም where clause ስለሌለው
         // composite index ችግር አያመጣም - ማጣራት/መደርደር ሁሉ በ JS ራሱ ይደረጋል)
+        let commentsFirstLoad = true;
         function loadComments() {
             db.collection('comments').onSnapshot((snapshot) => {
+                if (!commentsFirstLoad) {
+                    snapshot.docChanges().forEach(ch => {
+                        const d = ch.doc.data();
+                        if (ch.type === 'added' && d.from === 'technician' && !ch.doc.metadata.hasPendingWrites) {
+                            try { playNewOrderBeep(); } catch (e) {}
+                            const openNow = msgTabActive() && !document.hidden && (allTechnicians.find(t => t.id === msgSelectedTechId) || {}).name === d.technician;
+                            if (!openNow) showToast('💬 ' + (d.technician || 'ቴክኒሻን') + ': ' + String(d.message || '').slice(0, 70), 'info');
+                            if (document.hidden) { try { flashDocTitle('💬 አዲስ መልእክት!'); } catch (e) {} }
+                        }
+                    });
+                }
+                commentsFirstLoad = false;
                 allComments = [];
                 snapshot.forEach(doc => {
                     const data = doc.data();
                     data.id = doc.id;
                     allComments.push(data);
                 });
+                try { renderAdminChat(); } catch (e) { console.warn('chat refresh failed', e); }
             });
         }
 
@@ -4229,7 +4330,10 @@
             const newOrdersCount = (allOrders || []).filter(o => o.status === 'Pending').length;
             const pendingRegCount = (allPendingRegistrations || []).length;
             const unapprovedReportsCount = (allDailyReports || []).filter(r => !r.approved).length;
-            const total = newOrdersCount + pendingRegCount + unapprovedReportsCount;
+            const unreadMsgCount = (typeof adminUnreadTotal === 'function') ? adminUnreadTotal() : 0;
+            const msgBadgeEl = document.getElementById('msgBadge');
+            if (msgBadgeEl) { msgBadgeEl.textContent = unreadMsgCount; msgBadgeEl.classList.toggle('show', unreadMsgCount > 0); }
+            const total = newOrdersCount + pendingRegCount + unapprovedReportsCount + unreadMsgCount;
 
             countEl.textContent = total > 99 ? '99+' : total;
             countEl.style.display = total > 0 ? 'flex' : 'none';
@@ -4251,6 +4355,13 @@
                 items.push({
                     icon: '📋', text: `${unapprovedReportsCount} ያልፀደቀ የቴክኒሻን ሪፖርት`, num: unapprovedReportsCount,
                     onclick: "closeNotifDropdown(); showTechReportsModal();"
+                });
+            }
+
+            if (unreadMsgCount > 0) {
+                items.push({
+                    icon: '💬', text: `${unreadMsgCount} አዲስ የቴክኒሻን መልእክት`, num: unreadMsgCount,
+                    onclick: "closeNotifDropdown(); switchTab('messages');"
                 });
             }
 
@@ -5381,6 +5492,7 @@ ${locationLine}
 
         // techId = የአንድ ቴክኒሻን id፤ ባዶ/null ከሆነ ለሁሉም ንቁ ቴክኒሻኖች
         function showSendMessageModal(techId) {
+            if (techId) { openAdminChat(techId); return; } // አንድ ቴክኒሻን → ውይይት ሳጥን
             const single = techId ? allTechnicians.find(t => t.id === techId) : null;
             const everyone = fieldTechs().filter(t => !t.status || t.status === 'active');
             const targetHTML = single
@@ -5435,6 +5547,111 @@ ${locationLine}
             if (failed === targets.length) { showToast('❌ መልእክቱ አልተላከም', 'error'); return; }
             showToast(`✅ ለ ${ok} ቴክኒሻን ተልኳል (ቴሌግራም ${tg}፣ ፑሽ ${push}${alsoSms ? '፣ SMS ' + sms : ''})`, 'success');
             closeModal();
+        }
+
+
+        // ============================================================
+        // 💬 አድሚን ↔ ቴክኒሻን ውይይት ሳጥን (አንድ ሳጥን ውስጥ፣ ከበዛ ስክሮል)
+        // ============================================================
+        // ============================================================
+        // 💬 መልእክቶች ታብ (አድሚን) - የቴክኒሻኖች ዝርዝር + ውይይት ሳጥን + ያልተነበበ ቁጥር
+        // ============================================================
+        let msgSelectedTechId = null;
+        function adminReadKey(name) { return 'he_chat_read_admin:' + name; }
+        function adminUnreadFor(name) {
+            const last = chatGetRead(adminReadKey(name));
+            return allComments.filter(c => c.technician === name && c.from === 'technician' && chatTime(c).getTime() > last).length;
+        }
+        function adminUnreadTotal() {
+            const names = {};
+            allComments.forEach(c => { if (c.from === 'technician' && c.technician) names[c.technician] = 1; });
+            return Object.keys(names).reduce((s, n) => s + adminUnreadFor(n), 0);
+        }
+        function adminMarkRead(name) {
+            const t = allComments.filter(c => c.technician === name && c.from === 'technician')
+                .reduce((m, c) => Math.max(m, chatTime(c).getTime()), 0);
+            if (t) chatSetRead(adminReadKey(name), t);
+        }
+        function msgTabActive() { const el = document.getElementById('tab-messages'); return !!(el && el.classList.contains('active')); }
+
+        function renderMsgList() {
+            const box = document.getElementById('msgTechList');
+            if (!box) return;
+            const rows = allTechnicians.filter(t => !t.isPhoneOperator).map(t => {
+                const msgs = allComments.filter(c => c.technician === t.name);
+                const last = msgs.length ? chatSort(msgs)[msgs.length - 1] : null;
+                return { t, last, unread: adminUnreadFor(t.name) };
+            });
+            rows.sort((a, b) => (b.last ? chatTime(b.last).getTime() : 0) - (a.last ? chatTime(a.last).getTime() : 0)
+                || String(a.t.name).localeCompare(String(b.t.name)));
+            box.innerHTML = rows.length ? rows.map(r => `
+                <div class="msg-item ${r.t.id === msgSelectedTechId ? 'active' : ''}" onclick="selectChatTech('${r.t.id}')">
+                    <div class="avatar">${chatEsc((r.t.name || '?').charAt(0))}</div>
+                    <div class="info">
+                        <div class="name"><span>${chatEsc(r.t.name)}</span>${r.unread ? `<span class="unread">${r.unread}</span>` : ''}</div>
+                        <div class="prev">${r.last ? (r.last.from === 'admin' ? 'እርስዎ: ' : '') + chatEsc(r.last.message) : '— ምንም መልእክት የለም —'}</div>
+                    </div>
+                </div>`).join('') : '<p class="text-muted text-center" style="padding:16px;">ምንም ቴክኒሻን የለም</p>';
+        }
+
+        function renderAdminChat() {
+            try {
+                const tech = allTechnicians.find(t => t.id === msgSelectedTechId);
+                const box = document.getElementById('adminChatThread');
+                if (tech && box) {
+                    chatRender(box, chatSort(allComments.filter(c => c.technician === tech.name)), 'admin');
+                    if (msgTabActive() && !document.hidden) adminMarkRead(tech.name);
+                }
+                renderMsgList();
+                updateNotifBell();
+            } catch (e) { console.warn('renderAdminChat failed', e); }
+        }
+
+        function selectChatTech(id) {
+            const tech = allTechnicians.find(t => t.id === id);
+            if (!tech) return;
+            msgSelectedTechId = id;
+            document.getElementById('adminChatTechId').value = id;
+            document.getElementById('msgPaneName').textContent = '💬 ' + tech.name;
+            document.getElementById('msgPaneStatus').innerHTML = tech.chatId
+                ? '<span class="status-badge status-completed">📲 ቴሌግራም ተገናኝቷል</span>'
+                : '<span class="status-badge status-pending">ቴሌግራም አልተገናኘም - በአፑ ውስጥ ብቻ ይታያል</span>';
+            document.getElementById('msgPaneEmpty').style.display = 'none';
+            document.getElementById('msgPaneBody').style.display = 'block';
+            document.getElementById('msgLayout').classList.add('chat-open');
+            const box = document.getElementById('adminChatThread');
+            delete box.dataset.rendered; delete box.dataset.count;
+            renderAdminChat();
+            const input = document.getElementById('adminChatInput');
+            chatBindEnter(input, sendAdminChat);
+            if (window.matchMedia && window.matchMedia('(pointer: fine)').matches) setTimeout(() => input && input.focus(), 120);
+        }
+        function closeChatPane() { document.getElementById('msgLayout').classList.remove('chat-open'); }
+
+        // 💬 ቁልፍ (ቴክኒሻኖች ገጽ) → ወደ መልእክቶች ታብ ሄዶ ያንን ቴክኒሻን ይከፍታል
+        function openAdminChat(techId) {
+            switchTab('messages');
+            selectChatTech(techId);
+        }
+
+        async function sendAdminChat() {
+            const techId = (document.getElementById('adminChatTechId') || {}).value;
+            const tech = allTechnicians.find(t => t.id === techId);
+            const input = document.getElementById('adminChatInput');
+            const btn = document.getElementById('adminChatSendBtn');
+            const message = input ? input.value.trim() : '';
+            if (!tech || !message) return;
+            const sms = !!(document.getElementById('adminChatSms') || {}).checked;
+            if (btn) btn.disabled = true;
+            try {
+                input.value = '';
+                await deliverAdminMessage(tech, message, sms);
+            } catch (e) {
+                input.value = message;
+                showToast('❌ መልእክቱ አልተላከም: ' + e.message, 'error');
+            }
+            if (btn) btn.disabled = false;
+            if (input) input.focus();
         }
 
         async function sendQuickReply(techId) {
@@ -7979,6 +8196,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 const dayNames = ['እሁድ', 'ሰኞ', 'ማክሰኞ', 'ረቡዕ', 'ሐሙስ', 'አርብ', 'ቅዳሜ'];
                 document.getElementById('reportDay').value = dayNames[new Date().getDay()];
             }, 'reportDay');
+            safe(techFillReportDate, 'techFillReportDate');
 
             // Report form submit
             safe(() => { document.getElementById('dailyReportForm').addEventListener('submit', techSubmitDailyReport); }, 'dailyReportForm submit');
@@ -8285,8 +8503,10 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     else if (tab === 'complete') document.getElementById('tab-complete').classList.add('active');
                     else if (tab === 'history') document.getElementById('tab-history').classList.add('active');
                     else if (tab === 'profile') document.getElementById('tab-profile').classList.add('active');
+                    else if (tab === 'messages') { document.getElementById('tab-techmessages').classList.add('active'); techOpenMessagesTab(); }
                     else if (tab === 'report') {
                         document.getElementById('tab-report').classList.add('active');
+                        techFillReportDate();
                         loadReportJobs();
                     }
 
@@ -8670,6 +8890,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (!banner || !text || !btn) return;
 
             function render(state) {
+                // ቢጫው የፍቃድ ማስታወቂያ ሳጥን እንዳይታይ ተደርጓል (ፍቃድ አሁንም አፑ ሲከፈት ይጠየቃል)
+                banner.style.display = 'none'; return;
                 if (state === 'granted') { banner.style.display = 'none'; return; }
                 banner.style.display = 'block';
                 if (state === 'os') {
@@ -9319,22 +9541,41 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         function techNotifyAdminMessage(data) {
             try { playNewOrderBeep(); } catch (e) {}
             const preview = String(data.message || '').slice(0, 80);
-            showToast('💬 ከአስተዳዳሪ አዲስ መልእክት፦ ' + preview, 'info');
+            if (!(techMsgTabActive() && !document.hidden)) showToast('💬 ከአስተዳዳሪ አዲስ መልእክት፦ ' + preview, 'info');
             if (document.hidden) { try { flashDocTitle('💬 አዲስ መልእክት!'); } catch (e) {} }
             try {
                 if ('Notification' in window && Notification.permission === 'granted') {
                     new Notification('💬 ከአስተዳዳሪ መልእክት', { body: preview, icon: 'icon-192.png' });
                 }
             } catch (e) {}
-            const homeTab = document.querySelector('#bottomNav a[data-tab="home"]');
-            if (homeTab && !homeTab.classList.contains('active')) homeTab.classList.add('has-new-job');
+        }
+
+        // ---- ያልተነበበ መልእክት ቁጥር (ታችኛው ናቪጌሽን ላይ) ----
+        let techChatItems = [];
+        function techReadKey() { return 'he_chat_read_tech:' + (technicianId || technicianName); }
+        function techMsgTabActive() { const el = document.getElementById('tab-techmessages'); return !!(el && el.classList.contains('active')); }
+        function techUpdateMsgBadge() {
+            const last = chatGetRead(techReadKey());
+            const n = techChatItems.filter(c => c.from === 'admin' && chatTime(c).getTime() > last).length;
+            const b = document.getElementById('techMsgBadge');
+            if (b) { b.textContent = n > 99 ? '99+' : n; b.style.display = n > 0 ? 'block' : 'none'; }
+        }
+        function techMarkChatRead() {
+            const t = techChatItems.filter(c => c.from === 'admin').reduce((m, c) => Math.max(m, chatTime(c).getTime()), 0);
+            if (t) chatSetRead(techReadKey(), t);
+            techUpdateMsgBadge();
+        }
+        function techOpenMessagesTab() {
+            techMarkChatRead();
+            const box = document.getElementById('adminCommentsContainer');
+            if (box) setTimeout(() => { box.scrollTop = box.scrollHeight; }, 60);
         }
 
         function techLoadComments() {
-            // ✅ FIX: where + orderBy (የተለያዩ መስኮች) composite index ይጠይቅ ነበር (ካልተፈጠረ ዝም ብሎ ይከሽፋል)
-            // → orderBy ተወግዶ መደርደሩ በ JS ይደረጋል። እንዲሁም ተደጋጋሚ listener እንዳይከማች ቀዳሚው ይቋረጣል።
+            // ✅ where + orderBy (የተለያዩ መስኮች) composite index ይጠይቅ ነበር → orderBy ተወግዶ በ JS ይደረደራል።
             if (techCommentsUnsub) { try { techCommentsUnsub(); } catch (e) {} techCommentsUnsub = null; }
             let first = true;
+            const sendBtn = document.getElementById('sendTechCommentBtn');
             techCommentsUnsub = db.collection('comments')
                 .where('technician', '==', technicianName)
                 .onSnapshot((snapshot) => {
@@ -9345,34 +9586,11 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         });
                     }
                     first = false;
-
                     const container = document.getElementById('adminCommentsContainer');
-                    const items = snapshot.docs.map(doc => doc.data()).sort((a, b) => {
-                        const dA = a.createdAt?.toDate?.() || new Date(a.createdAt || 0);
-                        const dB = b.createdAt?.toDate?.() || new Date(b.createdAt || 0);
-                        return dB - dA;
-                    }).slice(0, 20);
-                    if (items.length === 0) {
-                        container.innerHTML = '<p class="text-center text-muted">ምንም አስተያየት የለም</p>';
-                        return;
-                    }
-                    const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                    let html = '';
-                    items.forEach(data => {
-                        const time = formatEthDateTime(data.createdAt) || '—';
-                        const from = data.from === 'admin' ? '👨‍💼 አስተዳዳሪ' : '📤 እርስዎ';
-                        const style = data.from === 'admin' ? 'border-left-color: var(--primary);' : 'border-left-color: var(--success);';
-                        html += `
-                            <div class="comment-box" style="${style}">
-                                <div class="flex-between">
-                                    <span class="from">${from}</span>
-                                    <span class="time">${time}</span>
-                                </div>
-                                <div class="text">${esc(data.message) || '—'}</div>
-                            </div>
-                        `;
-                    });
-                    container.innerHTML = html;
+                    const items = chatSort(snapshot.docs.map(doc => doc.data())).slice(-150);
+                    chatRender(container, items, 'technician');
+                    techChatItems = items;
+                    if (techMsgTabActive() && !document.hidden) techMarkChatRead(); else techUpdateMsgBadge();
                 }, (err) => console.warn('Comments listener error:', err));
         }
 
@@ -9380,6 +9598,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // SETUP COMMENTS
         // ============================================================
         function setupComments() {
+            chatBindEnter(document.getElementById('techCommentInput'), function () { document.getElementById('sendTechCommentBtn').click(); });
             document.getElementById('sendTechCommentBtn').addEventListener('click', async function() {
                 if (!checkRulesAccepted()) {
                     showToast('እባክዎ መጀመሪያ ህጎቹን ያንብቡ እና ይስማሙ', 'error');
@@ -9399,6 +9618,18 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     });
                     document.getElementById('techCommentInput').value = '';
                     showToast('✅ አስተያየት ተልኳል', 'success');
+                    // ወደ አድሚኖች ስልክ ፑሽ ማሳወቂያ (ከተፈቀደላቸው)
+                    try {
+                        const adminsSnap = await db.collection('staff').where('role', '==', 'admin').where('status', '==', 'active').get();
+                        await Promise.all(adminsSnap.docs.filter(d => d.data().fcmToken).map(d => db.collection('pushQueue').add({
+                            toStaffId: d.id,
+                            title: '💬 ' + technicianName,
+                            body: message.length > 140 ? message.slice(0, 137) + '...' : message,
+                            locationUrl: ADMIN_PAGE_URL(),
+                            createdAt: Date.now(),
+                            sent: false
+                        })));
+                    } catch (pushErr) { console.warn('Admin push for tech message failed (non-fatal)', pushErr); }
                     await tgMuted(`
                     💬 *ከቴክኒሻን አስተያየት* 📝
                     👨‍🔧 *ቴክኒሻን:* ${technicianName}
@@ -9782,6 +10013,53 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         }
 
         // ============================================================
+        // 📅 የሪፖርት ቀን በራስ-ሰር = ዛሬ ባለው ቀን (በስልኩ የአካባቢ ሰዓት)
+        // ቀደም ሲል toISOString() (UTC) ይጠቀም ስለነበር ከሌሊት 6:00 (ከ 12:00 ማታ እስከ 3:00 ሌሊት አካባቢ) ቀኑ
+        // ወደ ትላንት ሊያዛባ ይችል ነበር። አሁን የአካባቢ ቀን ይጠቀማል፤ ቴክኒሻኑ እንዳይቀይረው ተቆልፏል።
+        // ============================================================
+        function techFillReportDate() {
+            try {
+                const now = new Date();
+                const key = getDateKey(now); // YYYY-MM-DD (local)
+                const dateEl = document.getElementById('reportDate');
+                if (dateEl) dateEl.value = key;
+
+                const cont = document.getElementById('reportDateEthContainer');
+                if (cont && !document.getElementById('reportDateEth_day')) {
+                    cont.innerHTML = techBuildEthiopianPickerHTML('reportDateEth', 'reportDate', key);
+                }
+                const eth = gregorianToEthiopian(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12));
+                const setSel = (id, v) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    if (!Array.from(el.options).some(o => o.value === String(v))) el.add(new Option(String(v), String(v)));
+                    el.value = String(v);
+                    el.disabled = true; // ተቆልፏል - ሁልጊዜ የዛሬ ቀን
+                    el.style.opacity = '0.85';
+                };
+                setSel('reportDateEth_day', eth.day);
+                setSel('reportDateEth_month', eth.month);
+                setSel('reportDateEth_year', eth.year);
+                const g = document.getElementById('reportDateEth_gregorian');
+                if (g) g.value = key;
+
+                if (cont && !document.getElementById('reportDateAutoNote')) {
+                    const note = document.createElement('small');
+                    note.id = 'reportDateAutoNote';
+                    note.style.cssText = 'color:var(--text-muted); font-size:0.72rem; display:block; margin-top:2px;';
+                    note.textContent = '🔒 ዛሬ ባለው ቀን ራሱ ተሞልቷል';
+                    cont.parentElement.appendChild(note);
+                }
+
+                const dayEl = document.getElementById('reportDay');
+                if (dayEl) {
+                    dayEl.value = ['እሁድ', 'ሰኞ', 'ማክሰኞ', 'ረቡዕ', 'ሐሙስ', 'አርብ', 'ቅዳሜ'][now.getDay()];
+                    dayEl.readOnly = true;
+                }
+            } catch (e) { console.warn('techFillReportDate failed', e); }
+        }
+
+        // ============================================================
         // SUBMIT DAILY REPORT
         // ============================================================
         async function techSubmitDailyReport(e) {
@@ -9805,6 +10083,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         }
 
         async function techSubmitDailyReportInner(e) {
+            techFillReportDate(); // ሪፖርቱ ሲላክ ቀኑ ሁልጊዜ የዛሬ መሆኑን ያረጋግጣል
 
             // Collect job statuses
             const jobRows = document.querySelectorAll('.job-status-row');
@@ -11305,6 +11584,90 @@ document.addEventListener('DOMContentLoaded', function () {
         cur = tab;
     });
 })();
+</script>
+
+<script>
+// ================================================================
+// 💬 የውይይት ሳጥን አጋዥ ፈንክሽኖች (አድሚንም ቴክኒሻንም ይጠቀማሉ)
+// ================================================================
+function chatEsc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function chatTime(c) {
+    const d = c.createdAt && c.createdAt.toDate ? c.createdAt.toDate() : new Date(c.createdAt || 0);
+    return isNaN(d.getTime()) ? new Date(0) : d;
+}
+function chatSort(list) { return list.slice().sort((a, b) => chatTime(a) - chatTime(b)); }
+
+function chatBubblesHTML(items, mineFrom) {
+    if (!items.length) return '<div class="chat-empty">💬 ገና ምንም መልእክት የለም።<br>ከታች ጽፈው ውይይት ይጀምሩ።</div>';
+    let html = '', lastDay = '';
+    items.forEach(c => {
+        const d = chatTime(c);
+        const day = typeof formatEthDate === 'function' ? formatEthDate(d) : d.toDateString();
+        if (day !== lastDay) { html += `<div class="chat-day">${chatEsc(day)}</div>`; lastDay = day; }
+        const mine = c.from === mineFrom;
+        const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const tag = c.orderId ? `<div class="tag">📋 ትዕዛዝ #${chatEsc(String(c.orderId).substring(0, 8))}</div>` : '';
+        html += `<div class="chat-msg ${mine ? 'mine' : 'theirs'}">${tag}${chatEsc(c.message)}<div class="meta">${chatEsc(time)}</div></div>`;
+    });
+    return html;
+}
+
+// box = የሳጥኑ element። ተጠቃሚው ወደ ላይ ስክሮል አድርጎ የድሮ መልእክት እያነበበ ከሆነ ቦታው አይለወጥም፤
+// "⬇️ አዲስ መልእክት" ቁልፍ ብቻ ይታያል። ከታች ከሆነ (ወይም እሱ ራሱ ከላከ) ወደ አዲሱ በራስ-ሰር ይወርዳል።
+function chatRender(box, items, mineFrom) {
+    if (!box) return;
+    const wrap = box.parentElement;
+    const jump = wrap ? wrap.querySelector('.chat-jump') : null;
+    const first = !box.dataset.rendered;
+    const prevCount = parseInt(box.dataset.count || '0', 10);
+    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+    const prevTop = box.scrollTop;
+    const lastMine = items.length > 0 && items[items.length - 1].from === mineFrom;
+    const hasNew = !first && items.length > prevCount;
+
+    box.innerHTML = chatBubblesHTML(items, mineFrom);
+    box.dataset.rendered = '1';
+    box.dataset.count = String(items.length);
+
+    if (first || nearBottom || (hasNew && lastMine)) {
+        box.scrollTop = box.scrollHeight;
+        if (jump) jump.style.display = 'none';
+    } else {
+        box.scrollTop = prevTop;
+        if (hasNew && jump) jump.style.display = 'block';
+    }
+    if (!box._chatScrollBound) {
+        box._chatScrollBound = true;
+        box.addEventListener('scroll', function () {
+            if (box.scrollHeight - box.scrollTop - box.clientHeight < 80 && jump) jump.style.display = 'none';
+        }, { passive: true });
+    }
+}
+function chatJump(btn) {
+    const box = btn.parentElement.querySelector('.chat-box');
+    if (box) box.scrollTop = box.scrollHeight;
+    btn.style.display = 'none';
+}
+// Enter = ላክ (በኮምፒውተር ላይ ብቻ፤ በስልክ Enter አዲስ መስመር ነው)
+function chatBindEnter(textarea, sendFn) {
+    if (!textarea || textarea._enterBound) return;
+    textarea._enterBound = true;
+    textarea.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey && window.matchMedia && window.matchMedia('(pointer: fine)').matches) {
+            e.preventDefault(); sendFn();
+        }
+    });
+}
+
+function chatGetRead(key) { try { return parseInt(localStorage.getItem(key) || '0', 10) || 0; } catch (e) { return 0; } }
+function chatSetRead(key, ts) { try { localStorage.setItem(key, String(ts)); } catch (e) {} }
+document.addEventListener('visibilitychange', function () {
+    if (document.hidden) return;
+    try {
+        if (typeof techMsgTabActive === 'function' && techMsgTabActive()) techMarkChatRead();
+        if (typeof msgTabActive === 'function' && msgTabActive() && typeof renderAdminChat === 'function') renderAdminChat();
+    } catch (e) {}
+});
 </script>
 
 </body>
