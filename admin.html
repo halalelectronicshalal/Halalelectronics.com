@@ -3021,6 +3021,30 @@
             } catch (e) { console.warn('⚠️ Admin staff upsert failed:', e); return null; }
         }
 
+        // ስልክ ቁጥር በማንኛውም ፎርማት (0911.., 911.., +251911.., 251911.., ከክፍተት ጋር) ቢጻፍ staff ውስጥ ያገኛል
+        async function findStaffByPhone(rawPhone) {
+            const raw = String(rawPhone || '').trim();
+            const n = normalizePhone(raw);
+            const tail = n.replace(/^0/, '');
+            const variants = [...new Set([raw, n, tail, '+251' + tail, '251' + tail, '0' + tail].filter(Boolean))];
+            const docs = new Map();
+            for (const v of variants) {
+                try {
+                    const snap = await db.collection('staff').where('phone', '==', v).get();
+                    snap.forEach(d => docs.set(d.id, d));
+                } catch (e) { console.warn('phone lookup failed', v, e); }
+            }
+            // ዳታ ውስጥ በክፍተት/ሰረዝ የተቀመጡ ቁጥሮችን ለመያዝ (ከላይ ምንም ካልተገኘ)
+            if (docs.size === 0) {
+                try {
+                    const all = await db.collection('staff').get();
+                    all.forEach(d => { if (normalizePhone((d.data() || {}).phone) === n) docs.set(d.id, d); });
+                } catch (e) {}
+            }
+            const list = [...docs.values()];
+            return { empty: list.length === 0, docs: list, forEach: (f) => list.forEach(f) };
+        }
+
         document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const phone = document.getElementById('loginPhone').value.trim();
@@ -3042,7 +3066,7 @@
             await passwordSyncReady; // ✅ password ከ Firestore ሙሉ በሙሉ እስኪመጣ ይጠብቃል
 
             try {
-                const snap = await db.collection('staff').where('phone', '==', phone).get();
+                const snap = await findStaffByPhone(phone);
                 let matchedDoc = null;
                 snap.forEach(doc => {
                     const d = doc.data();
@@ -3298,7 +3322,7 @@
 
             try {
                 await authReady;
-                const snap = await db.collection('staff').where('phone', '==', phone).get();
+                const snap = await findStaffByPhone(phone);
 
                 if (snap.empty) {
                     errorEl.textContent = '❌ ይህ ስልክ ቁጥር (' + phone + ') በሲስተሙ ውስጥ አልተመዘገበም';
