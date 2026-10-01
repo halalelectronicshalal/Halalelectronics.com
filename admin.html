@@ -419,11 +419,11 @@
            ተደራርቦ ነበር - አሁን bottom-nav ካለ ከላዩ ላይ እንዲቀመጥ ተስተካክሏል */
         .theme-toggle-btn {
             position: fixed;
-            bottom: calc(var(--bottom-nav-height, 0px) + 16px);
-            right: 16px;
+            bottom: calc(var(--bottom-nav-height, 0px) + 6px);
+            right: 10px;
             z-index: 9999;
-            width: 48px;
-            height: 48px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             background: var(--card);
             color: var(--text);
@@ -432,7 +432,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.25rem;
+            font-size: 1.05rem;
             cursor: pointer;
             transition: transform 0.2s ease;
         }
@@ -441,18 +441,18 @@
 
 
         /* ✅ NEW: floating chat (ቴክስት) button + contacts panel - ከ ቀን/ማታ ቁልፍ አጠገብ */
-        .pwa-install-btn { right: 128px !important; }
+        .pwa-install-btn { right: 102px !important; }
         .chat-fab-btn {
-            position: fixed; bottom: calc(var(--bottom-nav-height, 0px) + 16px); right: 72px; z-index: 9999;
-            width: 48px; height: 48px; border-radius: 50%; background: var(--primary); color: #fff; border: none;
+            position: fixed; bottom: calc(var(--bottom-nav-height, 0px) + 6px); right: 56px; z-index: 9999;
+            width: 40px; height: 40px; border-radius: 50%; background: var(--primary); color: #fff; border: none;
             box-shadow: var(--shadow-lg); display: none; align-items: center; justify-content: center;
-            font-size: 1.2rem; cursor: pointer; transition: transform .2s ease;
+            font-size: 1.05rem; cursor: pointer; transition: transform .2s ease;
         }
         .chat-fab-btn.show { display: flex; }
         .chat-fab-btn:hover { transform: scale(1.08); }
         .chat-fab-btn .fab-badge { position: absolute; top: -4px; right: -4px; background: var(--emergency); color: #fff; border-radius: 50px; font-size: .62rem; font-weight: 700; padding: 1px 5px; min-width: 16px; text-align: center; display: none; border: 2px solid var(--card); }
         .chat-panel {
-            position: fixed; bottom: calc(var(--bottom-nav-height, 0px) + 74px); right: 16px; z-index: 9998;
+            position: fixed; bottom: calc(var(--bottom-nav-height, 0px) + 54px); right: 10px; z-index: 9998;
             width: 340px; max-width: calc(100vw - 24px); max-height: 70vh; display: none; flex-direction: column;
             background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-xl); overflow: hidden;
         }
@@ -471,11 +471,11 @@
         /* ✅ NEW: Install App icon button - ከ ቀን/ማታ ቁልፍ አጠገብ፣ ላለመደራረብ ተስተካክሎ */
         .pwa-install-btn {
             position: fixed;
-            bottom: calc(var(--bottom-nav-height, 0px) + 16px);
-            right: 72px;
+            bottom: calc(var(--bottom-nav-height, 0px) + 6px);
+            right: 56px;
             z-index: 9999;
-            width: 48px;
-            height: 48px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             background: var(--secondary-gradient, linear-gradient(135deg, #2DAAE1, #1A8BC7));
             color: #fff;
@@ -484,7 +484,7 @@
             display: none;
             align-items: center;
             justify-content: center;
-            font-size: 1.2rem;
+            font-size: 1.05rem;
             cursor: pointer;
             transition: transform 0.2s ease;
         }
@@ -1300,8 +1300,6 @@
     </div>
     <!-- ✅ NEW: መተግበሪያ መጫኛ (Install App) አይከን - ገፁ በሙሉ ላይ ይታያል -->
     <button type="button" id="pwaInstallBtn" class="pwa-install-btn" title="መተግበሪያውን ጫን" aria-label="Install App"><i class="fas fa-download"></i></button>
-    <!-- ✅ NEW: Amharic/English language toggle - shows on all screens -->
-    <button type="button" id="langToggleBtn" class="lang-toggle-btn" title="Switch to English" aria-label="Switch language">EN</button>
 
     <div id="loginContainer">
         <div class="login-box">
@@ -1906,6 +1904,11 @@
             TAB: SETTINGS
             ============================================================ -->
             <div id="tab-settings" class="tab-content">
+                <div class="card">
+                    <div class="card-header"><h3><i class="fas fa-language"></i> 🌐 ቋንቋ</h3></div>
+                    <p class="text-muted" style="margin-bottom:12px; font-size:0.88rem;">የመተግበሪያውን ቋንቋ ይምረጡ።</p>
+                    <button type="button" id="langToggleBtn" class="btn btn-primary" aria-label="Switch language">English</button>
+                </div>
                 <div class="card">
                     <div class="card-header"><h3><i class="fas fa-lock"></i> 🔒 የይለፍ ቃል መቀየር</h3></div>
                     <div class="form-row">
@@ -10649,6 +10652,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
     "ቀይር": "Change",
     "ቁጥር": "Number",
     "ቅንብሮች": "Settings",
+    "🌐 ቋንቋ": "🌐 Language",
+    "የመተግበሪያውን ቋንቋ ይምረጡ።": "Choose the app language.",
     "ቅድመ-እይታ": "Preview",
     "በመጠባበቅ ላይ": "Pending",
     "በቴክኒሻን ገቢ ማጠቃለያ": "Income Summary by Technician",
@@ -11205,7 +11210,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         function updateToggleUI(lang){
             var btn = document.getElementById('langToggleBtn');
             if (btn) {
-                btn.textContent = lang === 'am' ? 'EN' : 'አማ';
+                btn.textContent = lang === 'am' ? 'English' : 'አማርኛ';
                 btn.title = lang === 'am' ? 'Switch to English' : 'ወደ አማርኛ ቀይር';
             }
         }
