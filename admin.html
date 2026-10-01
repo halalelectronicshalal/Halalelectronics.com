@@ -439,6 +439,35 @@
         .theme-toggle-btn:hover { transform: scale(1.08); }
         .theme-toggle-btn:active { transform: scale(0.95); }
 
+
+        /* ✅ NEW: floating chat (ቴክስት) button + contacts panel - ከ ቀን/ማታ ቁልፍ አጠገብ */
+        .pwa-install-btn { right: 128px !important; }
+        .chat-fab-btn {
+            position: fixed; bottom: calc(var(--bottom-nav-height, 0px) + 16px); right: 72px; z-index: 9999;
+            width: 48px; height: 48px; border-radius: 50%; background: var(--primary); color: #fff; border: none;
+            box-shadow: var(--shadow-lg); display: none; align-items: center; justify-content: center;
+            font-size: 1.2rem; cursor: pointer; transition: transform .2s ease;
+        }
+        .chat-fab-btn.show { display: flex; }
+        .chat-fab-btn:hover { transform: scale(1.08); }
+        .chat-fab-btn .fab-badge { position: absolute; top: -4px; right: -4px; background: var(--emergency); color: #fff; border-radius: 50px; font-size: .62rem; font-weight: 700; padding: 1px 5px; min-width: 16px; text-align: center; display: none; border: 2px solid var(--card); }
+        .chat-panel {
+            position: fixed; bottom: calc(var(--bottom-nav-height, 0px) + 74px); right: 16px; z-index: 9998;
+            width: 340px; max-width: calc(100vw - 24px); max-height: 70vh; display: none; flex-direction: column;
+            background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-xl); overflow: hidden;
+        }
+        .chat-panel.show { display: flex; }
+        .chat-panel .cp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; font-weight: 700; border-bottom: 1px solid var(--border-light); }
+        .chat-panel .cp-head button { background: none; border: none; color: var(--text); cursor: pointer; font-size: 1rem; }
+        .chat-panel .cp-list { overflow-y: auto; flex: 1; }
+        .chat-panel .cp-all { display: flex; align-items: center; gap: 10px; padding: 11px 14px; cursor: pointer; border-bottom: 1px solid var(--border-light); font-weight: 700; background: var(--bg); }
+        .chat-panel .cp-all:hover { filter: brightness(.97); }
+        .chat-panel .cp-compose { display: none; padding: 12px 14px; border-top: 1px solid var(--border-light); }
+        .chat-panel.composing .cp-compose { display: block; }
+        .chat-panel.composing .cp-list { display: none; }
+        .chat-panel .cp-compose textarea { width: 100%; resize: vertical; min-height: 90px; }
+        .chat-panel .cp-compose label { display: flex; align-items: center; gap: 6px; font-size: .78rem; color: var(--text-muted); margin: 6px 0 10px; }
+
         /* ✅ NEW: Install App icon button - ከ ቀን/ማታ ቁልፍ አጠገብ፣ ላለመደራረብ ተስተካክሎ */
         .pwa-install-btn {
             position: fixed;
@@ -1258,6 +1287,18 @@
 <body>
     <!-- ✅ NEW: Dark/Light mode toggle - ገፁ በሙሉ ላይ ይታያል -->
     <button type="button" id="themeToggleBtn" class="theme-toggle-btn" title="ገጽታ ቀይር" aria-label="Toggle dark/light mode">🌙</button>
+    <!-- ✅ NEW: ቴክስት (መልእክት) አይከን - ከ ቀን/ማታ ቁልፍ አጠገብ -->
+    <button type="button" id="chatFabBtn" class="chat-fab-btn" title="መልእክት ላክ" aria-label="Messages" onclick="toggleChatPanel(event)">💬<span class="fab-badge" id="chatFabBadge">0</span></button>
+    <div id="chatPanel" class="chat-panel" onclick="event.stopPropagation()">
+        <div class="cp-head"><span id="cpTitle">💬 መልእክት ላክ</span><span><button type="button" id="cpBack" style="display:none;" onclick="chatPanelBack()" title="ተመለስ"><i class="fas fa-arrow-left"></i></button> <button type="button" onclick="closeChatPanel()" title="ዝጋ"><i class="fas fa-times"></i></button></span></div>
+        <div class="cp-list" id="cpList"></div>
+        <div class="cp-compose">
+            <input type="hidden" id="cpTarget" value="" />
+            <textarea id="cpText" placeholder="መልእክት ይጻፉ..."></textarea>
+            <label><input type="checkbox" id="cpSms" style="width:auto;" /> 📱 በ SMS ጽሁፍም ላክ</label>
+            <button type="button" class="btn btn-primary btn-block" id="cpSendBtn" onclick="chatPanelSend()"><i class="fas fa-paper-plane"></i> ላክ</button>
+        </div>
+    </div>
     <!-- ✅ NEW: መተግበሪያ መጫኛ (Install App) አይከን - ገፁ በሙሉ ላይ ይታያል -->
     <button type="button" id="pwaInstallBtn" class="pwa-install-btn" title="መተግበሪያውን ጫን" aria-label="Install App"><i class="fas fa-download"></i></button>
     <!-- ✅ NEW: Amharic/English language toggle - shows on all screens -->
@@ -1398,7 +1439,7 @@
                     <div class="notif-bell" id="notifBell" onclick="toggleNotifDropdown(event)">
                         <i class="fas fa-bell"></i>
                         <span class="notif-count" id="notifBellCount">0</span>
-                        <div class="notif-dropdown" id="notifDropdown">
+                        <div class="notif-dropdown" id="notifDropdown" onclick="event.stopPropagation()">
                             <div class="notif-header">🔔 ማሳወቂያዎች</div>
                             <div id="notifDropdownBody"><div class="notif-empty">ምንም አዲስ ማሳወቂያ የለም</div></div>
                         </div>
@@ -3642,6 +3683,7 @@
         });
 
         function switchTab(tab) {
+            try { closeNotifDropdown(); } catch (e) {}
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             const target = document.getElementById('tab-' + tab);
             if (target) {
@@ -3699,6 +3741,7 @@
         // MODAL
         // ============================================================
         function openModal(title, bodyHTML, footerHTML = '') {
+            try { closeNotifDropdown(); } catch (e) {}
             document.getElementById('modalTitle').textContent = title;
             document.getElementById('modalBody').innerHTML = bodyHTML;
             document.getElementById('modalFooter').innerHTML = footerHTML || '<button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>';
@@ -4410,10 +4453,96 @@
             const dd = document.getElementById('notifDropdown');
             if (dd) dd.classList.remove('show');
         }
+        document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeNotifDropdown(); });
         document.addEventListener('click', function(e) {
             const bell = document.getElementById('notifBell');
             if (bell && !bell.contains(e.target)) closeNotifDropdown();
         });
+
+
+        // ============================================================
+        // 💬 ቴክስት አይከን - የሁሉም ኮንታክት ዝርዝር + ለሁሉም ላክ + ተጽፎላቸው ከላይ (እንደ ቴሌግራም)
+        // ============================================================
+        function cpContacts() {
+            return allTechnicians.filter(t => !t.status || t.status === 'active');
+        }
+        function cpLastTime(name) {
+            return allComments.filter(c => c.technician === name).reduce((m, c) => Math.max(m, chatTime(c).getTime()), 0);
+        }
+        function renderChatPanelList() {
+            const box = document.getElementById('cpList');
+            if (!box) return;
+            const rows = cpContacts().map(t => ({ t, last: cpLastTime(t.name), unread: adminUnreadFor(t.name) }))
+                .sort((a, b) => (b.last - a.last) || String(a.t.name).localeCompare(String(b.t.name)));
+            const all = `<div class="cp-all" onclick="chatPanelOpen('all')"><div class="avatar" style="width:36px;height:36px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;">📢</div><span>ለሁሉም ላክ (${rows.length})</span></div>`;
+            box.innerHTML = all + (rows.length ? rows.map(r => `
+                <div class="msg-item" onclick="chatPanelOpen('${r.t.id}')">
+                    <div class="avatar">${chatEsc((r.t.name || '?').charAt(0))}</div>
+                    <div class="info">
+                        <div class="name"><span>${chatEsc(r.t.name)}</span>${r.unread ? `<span class="unread">${r.unread}</span>` : ''}</div>
+                        <div class="prev">${chatEsc(r.t.phone || '')}</div>
+                    </div>
+                </div>`).join('') : '<p class="text-muted text-center" style="padding:16px;">ምንም ኮንታክት የለም</p>');
+            const b = document.getElementById('chatFabBadge');
+            if (b) { const n = adminUnreadTotal(); b.textContent = n > 99 ? '99+' : n; b.style.display = n > 0 ? 'block' : 'none'; }
+        }
+        function toggleChatPanel(e) {
+            if (e) e.stopPropagation();
+            const p = document.getElementById('chatPanel');
+            if (p.classList.contains('show')) { closeChatPanel(); return; }
+            chatPanelBack();
+            p.classList.add('show');
+        }
+        function closeChatPanel() {
+            const p = document.getElementById('chatPanel');
+            if (p) p.classList.remove('show', 'composing');
+        }
+        function chatPanelBack() {
+            const p = document.getElementById('chatPanel');
+            p.classList.remove('composing');
+            document.getElementById('cpBack').style.display = 'none';
+            document.getElementById('cpTitle').textContent = '💬 መልእክት ላክ';
+            renderChatPanelList();
+        }
+        function chatPanelOpen(target) {
+            const p = document.getElementById('chatPanel');
+            const tech = target === 'all' ? null : allTechnicians.find(t => t.id === target);
+            document.getElementById('cpTarget').value = target;
+            document.getElementById('cpTitle').textContent = target === 'all' ? `📢 ለሁሉም (${cpContacts().length})` : '✉️ ለ ' + (tech ? tech.name : '');
+            document.getElementById('cpBack').style.display = '';
+            p.classList.add('composing');
+            setTimeout(() => { const t = document.getElementById('cpText'); if (t) t.focus(); }, 80);
+        }
+        async function chatPanelSend() {
+            const target = document.getElementById('cpTarget').value;
+            const ta = document.getElementById('cpText');
+            const message = ta.value.trim();
+            const sms = document.getElementById('cpSms').checked;
+            const btn = document.getElementById('cpSendBtn');
+            if (!message) { showToast('⚠️ እባክዎ መልእክት ይጻፉ', 'error'); return; }
+            const targets = target === 'all' ? cpContacts() : allTechnicians.filter(t => t.id === target);
+            if (!targets.length) { showToast('⚠️ ተቀባይ አልተገኘም', 'error'); return; }
+            btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> በመላክ ላይ...';
+            let ok = 0;
+            for (const t of targets) {
+                try { await deliverAdminMessage(t, message, sms); ok++; } catch (e) { console.warn('send failed', t.name, e); }
+            }
+            btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> ላክ';
+            if (!ok) { showToast('❌ መልእክቱ አልተላከም', 'error'); return; }
+            ta.value = '';
+            showToast(`✅ ለ ${ok} ተልኳል`, 'success');
+            chatPanelBack(); // ✅ ከተላከ በኋላ መላኪያው ይሰበሰባል - ተጽፎላቸው ከላይ ይሆናሉ
+        }
+        document.addEventListener('click', function() { closeChatPanel(); });
+        // አይከኑ አድሚን ገጽ (topbar የሚታይበት) ላይ ብቻ ይታያል
+        setInterval(function() {
+            const tb = document.querySelector('.topbar'), fab = document.getElementById('chatFabBtn');
+            if (!fab) return;
+            const visible = !!(tb && tb.offsetParent !== null);
+            fab.classList.toggle('show', visible);
+            if (!visible) closeChatPanel();
+            else { const p = document.getElementById('chatPanel'); if (p && p.classList.contains('show') && !p.classList.contains('composing')) renderChatPanelList(); else { const b = document.getElementById('chatFabBadge'); if (b) { const n = adminUnreadTotal(); b.textContent = n > 99 ? '99+' : n; b.style.display = n > 0 ? 'block' : 'none'; } } }
+        }, 1500);
 
         // ============================================================
         // RENDER RECENT ORDERS
