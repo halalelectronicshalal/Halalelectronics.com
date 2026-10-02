@@ -1754,6 +1754,19 @@
                         <div id="txList"><p class="text-muted text-center">ምንም ግቤት የለም</p></div>
                     </div>
 
+                    <!-- ✅ NEW: ጠቅላላ የዕለቱ እንቅስቃሴ ማውረጃ -->
+                    <div class="card" id="dailyActivityCard">
+                        <div class="card-header"><h3><i class="fas fa-calendar-day"></i> 📅 የዕለቱ ጠቅላላ እንቅስቃሴ</h3></div>
+                        <p class="text-muted" style="margin-bottom:10px; font-size:0.85rem;">ቀን ይምረጡ - የዚያ ቀን ገቢ/ወጪ፣ የተሰጠና የተቀበልነው ብድር፣ የተከፈሉ ብድሮች፣ የቴክኒሻን ሪፖርቶችና ትዕዛዞች በአንድ ፋይል ይወርዳሉ።</p>
+                        <div class="form-row" style="align-items:flex-end;">
+                            <div id="dailyActDateEthContainer" style="display:grid; grid-template-columns:1fr 1.5fr 1fr; gap:4px;"></div>
+                            <input type="date" id="dailyActDate" style="display:none;" />
+                            <button class="btn btn-secondary" onclick="renderDailyActivityPreview()"><i class="fas fa-eye"></i> እይ</button>
+                            <button class="btn btn-primary" onclick="exportDailyActivityCSV()"><i class="fas fa-file-download"></i> የዕለቱን አውርድ (Excel)</button>
+                        </div>
+                        <div id="dailyActPreview" style="margin-top:12px;"></div>
+                    </div>
+
                     <!-- ✅ NEW: DEBT / CREDIT TRACKER (ብድር/እዳ መከታተያ) -->
                     <div class="stats-grid" id="debtStats">
                         <div class="stat-card">
@@ -1789,6 +1802,7 @@
                         <div class="card-header">
                             <h3><i class="fas fa-list"></i> 📋 የብድር/እዳ ዝርዝር</h3>
                             <div class="filters">
+                                <button class="btn btn-secondary btn-sm" onclick="showFinanceExportModal()"><i class="fas fa-file-download"></i> አውርድ</button>
                                 <select id="debtFilter">
                                     <option value="unpaid">ያልተከፈለ</option>
                                     <option value="all">ሁሉም</option>
@@ -2530,6 +2544,10 @@
     (AUTO_LOCK_MINUTES ን ከታች ባለው AppLock ስክሪፕት ውስጥ መቀየር ይቻላል)
     ============================================================ -->
     <style>
+        /* ✅ በመቆለፊያ ገጽ ላይ ጽሑፍ መምረጥ (ሰማያዊ ሃይላይት) እንዳይታይ */
+        #appLockOverlay, #appLockOverlay * { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+        #appLockOverlay ::selection, #appLockOverlay::selection { background:transparent; color:inherit; }
+        #appLockOverlay input { -webkit-user-select:text; user-select:text; }
         #appLockOverlay { display:none; position:fixed; inset:0; z-index:100000; background:#0B1220; align-items:center; justify-content:center; padding:20px; overflow-y:auto; }
         #appLockOverlay.show { display:flex; }
         #appLockOverlay .lock-box { width:100%; max-width:380px; background:#131C2E; border:1px solid #23304A; border-radius:18px; padding:28px 22px; text-align:center; color:#E2E8F0; box-shadow:0 20px 60px rgba(0,0,0,.5); }
@@ -3810,6 +3828,8 @@
             document.getElementById('orderDateFilter').value = todayISO;
             document.getElementById('txDateEthContainer').innerHTML = buildEthiopianPickerHTML('txDateEth', 'txDate', new Date().toISOString().slice(0,10));
             document.getElementById('txDate').value = new Date().toISOString().slice(0,10);
+            document.getElementById('dailyActDateEthContainer').innerHTML = buildEthiopianPickerHTML('dailyActDateEth', 'dailyActDate', getDateKey(new Date()));
+            document.getElementById('dailyActDate').value = getDateKey(new Date());
 
             document.getElementById('orderFilter').addEventListener('change', renderOrders);
             document.getElementById('orderDateFilter').addEventListener('change', renderOrders);
@@ -7194,10 +7214,14 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             }
         }
 
-        // ✅ NEW: Excel ከማውረድ በፊት የፈለጉትን ቀን መጠን (date range) መምረጫ
+        // ============================================================
+        // ✅ የሂሳብ ማውረጃ - ሁሉንም የፋይናንስ ስራዎች ያካትታል:
+        //    ገቢ/ወጪ ግቤቶች፣ ብድር (የተሰጠ + የተቀበልነው)፣ የተከፈሉ ብድሮች፣ የቴክኒሻን ዕለታዊ ሪፖርት ገቢ
+        // ============================================================
         function showFinanceExportModal() {
             const html = `
-                <p class="text-muted" style="margin-bottom:12px;">ለተወሰነ ጊዜ ብቻ ማውረድ ከፈለጉ ቀን ይምረጡ፣ ካልመረጡ ሁሉም ይወርዳል።</p>
+                <p class="text-muted" style="margin-bottom:12px;">ለተወሰነ ጊዜ ብቻ ማውረድ ከፈለጉ ቀን ይምረጡ፣ ካልመረጡ ሁሉም ይወርዳል።<br>
+                ፋይሉ ውስጥ: ገቢ/ወጪ፣ ብድር/እዳ (የተከፈለውም ያልተከፈለውም)፣ የቴክኒሻን ዕለታዊ ሪፖርት እና ጠቅላላ ማጠቃለያ ይገኛሉ።</p>
                 <div class="form-row">
                     <div class="form-group">
                         <label>ከቀን</label>
@@ -7213,82 +7237,207 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             openModal('📅 የሂሳብ ማውረጃ - ቀን ይምረጡ', html);
         }
 
-        // ✅ የሂሳብ ማውረጃ (Financial CSV Export) - ከፈለጉት ቀን ክልል ጋር
-        // ሁሉንም transactions ከ ማጠቃለያ (ጠቅላላ ገቢ/ወጪ/ትርፍ) ጋር ወደ CSV ፋይል ቀይሮ ያወርዳል
+        // ---- ትናንሽ አጋዥ ተግባራት ----
+        function finToKey(v) {
+            if (!v) return '';
+            if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+            const d = v.toDate ? v.toDate() : (v instanceof Date ? v : new Date(v));
+            return isNaN(d.getTime()) ? '' : getDateKey(d);
+        }
+        function finTxKey(tx) { return finToKey(tx.date) || finToKey(tx.createdAt); }
+        function finInRange(key, start, end) {
+            if (!key) return !start && !end;
+            if (start && key < start) return false;
+            if (end && key > end) return false;
+            return true;
+        }
+        function finDebtTypeLabel(d) {
+            return d.type === 'payable' ? 'የተቀበልነው ብድር (እኛ የምንከፍለው)' : 'የሰጠነው ብድር (የሚከፍለን)';
+        }
+        function finCsvLine(arr) {
+            return arr.map(c => {
+                const v = String(c ?? '');
+                return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+            }).join(',') + '\r\n';
+        }
+        function finDownloadCSV(csv, fileName) {
+            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+        const finNum = (v) => parseFloat(v || 0) || 0;
+
+        // ✅ የሂሳብ ማውረጃ (CSV) - በቀን ክልል
         function exportFinanceCSV() {
             if (!isFinanceUnlocked) {
                 showToast('❌ እባክዎ መጀመሪያ ፋይናንስ ይክፈቱ', 'error');
                 return;
             }
-            if (!allTransactions || allTransactions.length === 0) {
-                showToast('❌ የሚወርድ ግቤት የለም', 'error');
+            const startDate = (document.getElementById('finExportStart') || {}).value || '';
+            const endDate = (document.getElementById('finExportEnd') || {}).value || '';
+            const hasRange = !!(startDate || endDate);
+
+            // 1) ገቢ/ወጪ
+            const txs = allTransactions.filter(tx => finInRange(finTxKey(tx), startDate, endDate))
+                .sort((a, b) => finTxKey(a).localeCompare(finTxKey(b)));
+
+            // 2) ብድር/እዳ: በተመዘገበበት ቀን ወይም በተከፈለበት ቀን በክልሉ ውስጥ ከሆነ ይገባል
+            const debts = allDebts.filter(d => {
+                const ck = finToKey(d.createdAt), pk = finToKey(d.paidAt);
+                return finInRange(ck, startDate, endDate) || (pk && finInRange(pk, startDate, endDate));
+            }).sort((a, b) => finToKey(a.createdAt).localeCompare(finToKey(b.createdAt)));
+
+            // 3) የቴክኒሻን ዕለታዊ ሪፖርት
+            const reports = allDailyReports.filter(r => r.dateKey && finInRange(r.dateKey, startDate, endDate))
+                .sort((a, b) => a.dateKey.localeCompare(b.dateKey) || String(a.technicianName).localeCompare(String(b.technicianName)));
+
+            if (!txs.length && !debts.length && !reports.length) {
+                showToast('❌ በተመረጠው ቀን ውስጥ ምንም የፋይናንስ ግቤት የለም', 'error');
                 return;
             }
 
-            const startInput = document.getElementById('finExportStart');
-            const endInput = document.getElementById('finExportEnd');
-            const startDate = startInput ? startInput.value : '';
-            const endDate = endInput ? endInput.value : '';
-
-            // Excel ላይ የአማርኛ ፊደላት በትክክል እንዲነበቡ (UTF-8 BOM)
-            const BOM = '\uFEFF';
-            const rows = [];
-            rows.push(['ቀን', 'መግለጫ', 'ዓይነት', 'ገንዘብ (ብር)']);
-
-            // ከቅርብ ጊዜ ወደ ኋላ የተደረደሩትን ወደ ጊዜ ቅደም ተከተል (አሮጌ→አዲስ) መልሶ ያደራጃል
-            let sorted = [...allTransactions].sort((a, b) => {
-                const da = a.date ? new Date(a.date) : (a.createdAt?.toDate?.() || new Date(0));
-                const db = b.date ? new Date(b.date) : (b.createdAt?.toDate?.() || new Date(0));
-                return da - db;
-            });
-
-            if (startDate) sorted = sorted.filter(tx => tx.date && tx.date >= startDate);
-            if (endDate) sorted = sorted.filter(tx => tx.date && tx.date <= endDate);
-
-            if (sorted.length === 0) {
-                showToast('❌ በተመረጠው ቀን ውስጥ ምንም ግቤት የለም', 'error');
-                return;
-            }
-
+            let csv = '';
             let totalIncome = 0, totalExpense = 0;
-            sorted.forEach(tx => {
-                const date = tx.date ? formatEthDate(new Date(tx.date)) : '—';
-                const type = tx.type === 'income' ? 'ገቢ' : 'ወጪ';
-                const amount = parseFloat(tx.amount || 0);
-                if (tx.type === 'income') totalIncome += amount; else totalExpense += amount;
-                rows.push([date, tx.description || '—', type, amount.toFixed(2)]);
+
+            csv += finCsvLine(['1. ገቢ እና ወጪ ግቤቶች']);
+            csv += finCsvLine(['ቀን', 'መግለጫ', 'ዓይነት', 'ገንዘብ (ብር)']);
+            txs.forEach(tx => {
+                const amt = finNum(tx.amount);
+                if (tx.type === 'income') totalIncome += amt; else totalExpense += amt;
+                csv += finCsvLine([finTxKey(tx) ? formatEthDate(new Date(finTxKey(tx))) : '—', tx.description || '—', tx.type === 'income' ? 'ገቢ' : 'ወጪ', amt.toFixed(2)]);
             });
+            csv += finCsvLine(['', 'ጠቅላላ ገቢ', '', totalIncome.toFixed(2)]);
+            csv += finCsvLine(['', 'ጠቅላላ ወጪ', '', totalExpense.toFixed(2)]);
+            csv += finCsvLine(['', 'የተጣራ ትርፍ', '', (totalIncome - totalExpense).toFixed(2)]);
 
-            rows.push([]);
-            rows.push(['', '', 'ጠቅላላ ገቢ', totalIncome.toFixed(2)]);
-            rows.push(['', '', 'ጠቅላላ ወጪ', totalExpense.toFixed(2)]);
-            rows.push(['', '', 'የተጣራ ትርፍ', (totalIncome - totalExpense).toFixed(2)]);
+            // ብድር/እዳ
+            const sum = { recGiven: 0, recPaid: 0, payTaken: 0, payPaid: 0 };
+            csv += '\r\n' + finCsvLine(['2. ብድር/እዳ (የሰጠነው + የተቀበልነው፣ የተከፈለም ያልተከፈለም)']);
+            csv += finCsvLine(['የተመዘገበበት ቀን', 'ስም', 'ስልክ', 'ዓይነት', 'ገንዘብ (ብር)', 'ማብራሪያ', 'ሁኔታ', 'የተከፈለበት ቀን']);
+            debts.forEach(d => {
+                const amt = finNum(d.amount), paid = d.status === 'paid';
+                if (d.type === 'payable') { sum.payTaken += amt; if (paid) sum.payPaid += amt; }
+                else { sum.recGiven += amt; if (paid) sum.recPaid += amt; }
+                const ck = finToKey(d.createdAt), pk = finToKey(d.paidAt);
+                csv += finCsvLine([ck ? formatEthDate(new Date(ck)) : '—', d.person || '—', d.phone || '', finDebtTypeLabel(d), amt.toFixed(2), d.note || '', paid ? 'ተከፍሏል' : 'ያልተከፈለ', pk ? formatEthDate(new Date(pk)) : '']);
+            });
+            csv += finCsvLine(['', 'የሰጠነው ብድር (የሚከፍለን) ጠቅላላ', '', '', sum.recGiven.toFixed(2)]);
+            csv += finCsvLine(['', '   ከዚህ ውስጥ የተከፈለን', '', '', sum.recPaid.toFixed(2)]);
+            csv += finCsvLine(['', '   ገና ያልተከፈለን', '', '', (sum.recGiven - sum.recPaid).toFixed(2)]);
+            csv += finCsvLine(['', 'የተቀበልነው ብድር (እኛ የምንከፍለው) ጠቅላላ', '', '', sum.payTaken.toFixed(2)]);
+            csv += finCsvLine(['', '   ከዚህ ውስጥ የከፈልነው', '', '', sum.payPaid.toFixed(2)]);
+            csv += finCsvLine(['', '   ገና ያልከፈልነው', '', '', (sum.payTaken - sum.payPaid).toFixed(2)]);
 
-            const csvContent = BOM + rows.map(row =>
-                row.map(cell => {
-                    const val = String(cell ?? '');
-                    // ሴል ላይ ኮማ/ጥቅስ/አዲስ መስመር ካለ በ"" ውስጥ ያስገባል (ትክክለኛ CSV escaping)
-                    if (/[",\n]/.test(val)) {
-                        return '"' + val.replace(/"/g, '""') + '"';
-                    }
-                    return val;
-                }).join(',')
-            ).join('\r\n');
+            // የቴክኒሻን ሪፖርት
+            let rInc = 0, rExp = 0, rCo = 0, rTech = 0;
+            csv += '\r\n' + finCsvLine(['3. የቴክኒሻን ዕለታዊ ሪፖርት ገቢ']);
+            csv += finCsvLine(['ቀን', 'ቴክኒሻን', 'ስራዎች', 'ገቢ (ብር)', 'ወጪ (ብር)', 'ለድርጅት (ብር)', 'ለሰራተኛ (ብር)', 'ሁኔታ']);
+            reports.forEach(r => {
+                const inc = finNum(r.totalIncome ?? r.income), exp = finNum(r.totalExpense);
+                rInc += inc; rExp += exp; rCo += finNum(r.companyAmount); rTech += finNum(r.techShareAmount);
+                csv += finCsvLine([techSummaryDateLabel(r.dateKey), r.technicianName || '', r.jobs ?? r.completedCount ?? 0, inc.toFixed(2), exp.toFixed(2), finNum(r.companyAmount).toFixed(2), finNum(r.techShareAmount).toFixed(2), r.approved ? 'ጸድቋል' : 'አልጸደቀም']);
+            });
+            csv += finCsvLine(['', 'ጠቅላላ', '', rInc.toFixed(2), rExp.toFixed(2), rCo.toFixed(2), rTech.toFixed(2), '']);
 
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            const todayForFile = new Date().toISOString().split('T')[0];
-            const rangeSuffix = (startDate || endDate) ? `_${startDate || 'start'}_${endDate || 'end'}` : '';
-            a.href = url;
-            a.download = `የሂሳብ_ሪፖርት${rangeSuffix}_${todayForFile}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-
+            const fileSuffix = hasRange ? `_${startDate || 'start'}_${endDate || 'end'}` : '';
+            finDownloadCSV(csv, `የሂሳብ_ሪፖርት${fileSuffix}_${getDateKey(new Date())}.csv`);
             showToast('✅ የሂሳብ ሪፖርት ወርዷል', 'success');
             closeModal();
+        }
+
+        // ============================================================
+        // ✅ ጠቅላላ የዕለቱ እንቅስቃሴ (Daily Activity) - ቅድመ-እይታ + ማውረጃ
+        // ============================================================
+        function collectDailyActivity(dk) {
+            const orderCreated = allOrders.filter(o => finToKey(o.createdAt) === dk);
+            const orderDone = allOrders.filter(o => finToKey(o.completedAt) === dk);
+            return {
+                txs: allTransactions.filter(tx => finTxKey(tx) === dk),
+                debtsNew: allDebts.filter(d => finToKey(d.createdAt) === dk),
+                debtsPaid: allDebts.filter(d => d.status === 'paid' && finToKey(d.paidAt) === dk),
+                reports: allDailyReports.filter(r => r.dateKey === dk),
+                orderCreated, orderDone
+            };
+        }
+        function dailyActTotals(x) {
+            const income = x.txs.filter(t => t.type === 'income').reduce((s, t) => s + finNum(t.amount), 0);
+            const expense = x.txs.filter(t => t.type === 'expense').reduce((s, t) => s + finNum(t.amount), 0);
+            const given = x.debtsNew.filter(d => d.type !== 'payable').reduce((s, d) => s + finNum(d.amount), 0);
+            const taken = x.debtsNew.filter(d => d.type === 'payable').reduce((s, d) => s + finNum(d.amount), 0);
+            const recvPaid = x.debtsPaid.filter(d => d.type !== 'payable').reduce((s, d) => s + finNum(d.amount), 0);
+            const payPaid = x.debtsPaid.filter(d => d.type === 'payable').reduce((s, d) => s + finNum(d.amount), 0);
+            const repIncome = x.reports.reduce((s, r) => s + finNum(r.totalIncome ?? r.income), 0);
+            const repExpense = x.reports.reduce((s, r) => s + finNum(r.totalExpense), 0);
+            return { income, expense, given, taken, recvPaid, payPaid, repIncome, repExpense };
+        }
+        function renderDailyActivityPreview() {
+            const dk = (document.getElementById('dailyActDate') || {}).value || getDateKey(new Date());
+            const x = collectDailyActivity(dk), t = dailyActTotals(x);
+            const cell = (label, val, color) => `<div class="stat-card" style="padding:10px;"><div class="number" style="font-size:1.15rem; color:${color};">${val}</div><div class="label">${label}</div></div>`;
+            const f = (n) => n.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' ብር';
+            document.getElementById('dailyActPreview').innerHTML = `
+                <p style="font-weight:700; margin-bottom:8px;">${techSummaryDateLabel(dk)}</p>
+                <div class="stats-grid">
+                    ${cell('ገቢ', f(t.income), 'var(--success)')}
+                    ${cell('ወጪ', f(t.expense), 'var(--emergency)')}
+                    ${cell('አዲስ የሰጠነው ብድር', f(t.given), 'var(--warning)')}
+                    ${cell('አዲስ የተቀበልነው ብድር', f(t.taken), 'var(--emergency)')}
+                    ${cell('የተከፈለን ብድር', f(t.recvPaid), 'var(--success)')}
+                    ${cell('የከፈልነው ብድር', f(t.payPaid), 'var(--emergency)')}
+                    ${cell('የቴክኒሻን ሪፖርት ገቢ', f(t.repIncome), 'var(--primary)')}
+                    ${cell('የተጠናቀቁ ትዕዛዞች', x.orderDone.length, 'var(--primary)')}
+                </div>`;
+        }
+        function exportDailyActivityCSV() {
+            if (!isFinanceUnlocked) { showToast('❌ እባክዎ መጀመሪያ ፋይናንስ ይክፈቱ', 'error'); return; }
+            const dk = (document.getElementById('dailyActDate') || {}).value || getDateKey(new Date());
+            const x = collectDailyActivity(dk), t = dailyActTotals(x);
+            const total = x.txs.length + x.debtsNew.length + x.debtsPaid.length + x.reports.length + x.orderCreated.length + x.orderDone.length;
+            if (!total) { showToast('❌ በዚህ ቀን ምንም እንቅስቃሴ የለም', 'error'); return; }
+            const L = finCsvLine;
+            const fx = (n) => n.toFixed(2);
+            const time = (v) => { const d = v && v.toDate ? v.toDate() : (v ? new Date(v) : null); return d && !isNaN(d) ? d.toTimeString().slice(0, 5) : ''; };
+
+            let csv = L(['ጠቅላላ የዕለቱ እንቅስቃሴ', techSummaryDateLabel(dk), dk]);
+            csv += '\r\n' + L(['ማጠቃለያ']);
+            csv += L(['ገቢ (ግቤት)', fx(t.income)]);
+            csv += L(['ወጪ (ግቤት)', fx(t.expense)]);
+            csv += L(['የተጣራ (ገቢ - ወጪ)', fx(t.income - t.expense)]);
+            csv += L(['አዲስ የሰጠነው ብድር (የሚከፍለን)', fx(t.given)]);
+            csv += L(['አዲስ የተቀበልነው ብድር (የምንከፍለው)', fx(t.taken)]);
+            csv += L(['የተከፈለን ብድር (ተመላሽ)', fx(t.recvPaid)]);
+            csv += L(['የከፈልነው ብድር', fx(t.payPaid)]);
+            csv += L(['የቴክኒሻን ሪፖርት ገቢ', fx(t.repIncome)]);
+            csv += L(['የቴክኒሻን ሪፖርት ወጪ', fx(t.repExpense)]);
+            csv += L(['አዲስ ትዕዛዞች', x.orderCreated.length]);
+            csv += L(['የተጠናቀቁ ትዕዛዞች', x.orderDone.length]);
+
+            csv += '\r\n' + L(['1. ገቢ እና ወጪ ግቤቶች']) + L(['ሰዓት', 'መግለጫ', 'ዓይነት', 'ገንዘብ (ብር)']);
+            x.txs.forEach(tx => { csv += L([time(tx.createdAt), tx.description || '—', tx.type === 'income' ? 'ገቢ' : 'ወጪ', fx(finNum(tx.amount))]); });
+
+            csv += '\r\n' + L(['2. በዚህ ቀን የተመዘገበ ብድር/እዳ']) + L(['ስም', 'ስልክ', 'ዓይነት', 'ገንዘብ (ብር)', 'ማብራሪያ', 'ሁኔታ']);
+            x.debtsNew.forEach(d => { csv += L([d.person || '—', d.phone || '', finDebtTypeLabel(d), fx(finNum(d.amount)), d.note || '', d.status === 'paid' ? 'ተከፍሏል' : 'ያልተከፈለ']); });
+
+            csv += '\r\n' + L(['3. በዚህ ቀን የተከፈሉ ብድሮች']) + L(['ስም', 'ስልክ', 'ዓይነት', 'ገንዘብ (ብር)', 'ማብራሪያ', 'የተመዘገበበት ቀን']);
+            x.debtsPaid.forEach(d => { const ck = finToKey(d.createdAt); csv += L([d.person || '—', d.phone || '', finDebtTypeLabel(d), fx(finNum(d.amount)), d.note || '', ck ? formatEthDate(new Date(ck)) : '']); });
+
+            csv += '\r\n' + L(['4. የቴክኒሻን ዕለታዊ ሪፖርቶች']) + L(['ቴክኒሻን', 'ስራዎች', 'ገቢ (ብር)', 'ወጪ (ብር)', 'ለድርጅት (ብር)', 'ለሰራተኛ (ብር)', 'ማብራሪያ', 'ሁኔታ']);
+            x.reports.forEach(r => { csv += L([r.technicianName || '', r.jobs ?? r.completedCount ?? 0, fx(finNum(r.totalIncome ?? r.income)), fx(finNum(r.totalExpense)), fx(finNum(r.companyAmount)), fx(finNum(r.techShareAmount)), r.remarks || r.notes || '', r.approved ? 'ጸድቋል' : 'አልጸደቀም']); });
+
+            csv += '\r\n' + L(['5. በዚህ ቀን የገቡ ትዕዛዞች']) + L(['ሰዓት', 'ደንበኛ', 'እቃ', 'ሁኔታ']);
+            x.orderCreated.forEach(o => { csv += L([time(o.createdAt), o.fullName || '—', o.appliance || '—', o.status || 'Pending']); });
+
+            csv += '\r\n' + L(['6. በዚህ ቀን የተጠናቀቁ ትዕዛዞች']) + L(['ሰዓት', 'ደንበኛ', 'እቃ', 'ቴክኒሻን']);
+            x.orderDone.forEach(o => { csv += L([time(o.completedAt), o.fullName || '—', o.appliance || '—', o.technicianName || o.assignedTechName || '']); });
+
+            finDownloadCSV(csv, `የዕለቱ_እንቅስቃሴ_${dk}.csv`);
+            showToast('✅ የዕለቱ እንቅስቃሴ ወርዷል', 'success');
         }
 
         async function addTransaction() {
@@ -11326,6 +11475,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             locked = true;
             try { localStorage.setItem(LOCKED_KEY, '1'); } catch (e) {}
             overlay.classList.add('show');
+            try { var sel = window.getSelection && window.getSelection(); if (sel && sel.removeAllRanges) sel.removeAllRanges(); } catch (e) {}
             passEl.value = '';
             setErr('');
             updateFpButton();
