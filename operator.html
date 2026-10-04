@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<meta name="theme-color" content="#0F4C81" />
+<title>ሀላል - የኦፕሬተር ገፅ</title>
+<link rel="manifest" href="operator-manifest.json" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Ethiopic:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<style>
+:root{--primary:#0F4C81;--secondary:#2DAAE1;--bg:#F1F5F9;--card:#fff;--text:#1F2937;--muted:#64748B;--border:#E2E8F0;--ok:#16A34A;--warn:#F59E0B;--bad:#DC2626;--phone:#7c3aed;--shop:#0891b2}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:'Noto Sans Ethiopic',system-ui,sans-serif;font-size:15px}
+.hidden{display:none!important}
+input,select,textarea,button{font-family:inherit;font-size:1rem}
+input,select,textarea{width:100%;padding:12px;border:1.5px solid var(--border);border-radius:10px;background:#fff;color:var(--text)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--secondary)}
+label{display:block;font-weight:600;font-size:.85rem;margin:0 0 5px;color:var(--muted)}
+.field{margin-bottom:12px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn{border:0;border-radius:10px;padding:13px;font-weight:700;cursor:pointer;width:100%}
+.btn:disabled{opacity:.6}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-ghost{background:transparent;color:var(--primary);border:1.5px solid var(--primary)}
+.card{background:var(--card);border-radius:14px;padding:16px;margin:12px;box-shadow:0 2px 12px rgba(15,76,129,.08)}
+h3{margin:0 0 12px;font-size:1.05rem}
+/* login */
+#loginWrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(160deg,#0A3A63,#0F4C81)}
+.login-box{width:100%;max-width:380px;background:#fff;border-radius:18px;padding:26px 22px}
+.login-box img{height:64px;border-radius:12px;display:block;margin:0 auto 8px}
+.login-box h1{text-align:center;font-size:1.25rem;margin:0 0 4px}
+.login-box p.sub{text-align:center;color:var(--muted);margin:0 0 18px;font-size:.85rem}
+.err{color:var(--bad);font-size:.85rem;min-height:20px;margin:6px 0}
+/* header */
+header{background:var(--primary);color:#fff;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;position:sticky;top:0;z-index:50}
+header .who{font-weight:700}
+header small{display:block;opacity:.8;font-weight:400}
+header button{background:rgba(255,255,255,.15);color:#fff;border:0;border-radius:8px;padding:8px 10px;cursor:pointer;font-size:.8rem}
+/* channel switch */
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.seg button{padding:14px 6px;border-radius:12px;border:2px solid var(--border);background:#fff;font-weight:800;cursor:pointer;color:var(--muted)}
+.seg button.on.phone{background:var(--phone);border-color:var(--phone);color:#fff}
+.seg button.on.shop{background:var(--shop);border-color:var(--shop);color:#fff}
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--bg);border-radius:10px;padding:10px 4px;text-align:center}
+.stat b{display:block;font-size:1.35rem}
+.stat span{font-size:.72rem;color:var(--muted)}
+/* list */
+.item{border-bottom:1px solid var(--border);padding:10px 0}
+.item:last-child{border-bottom:0}
+.item .top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.tag{display:inline-block;border-radius:6px;padding:2px 7px;font-size:.7rem;font-weight:700;color:#fff}
+.tag.phone{background:var(--phone)}.tag.shop{background:var(--shop)}
+.st{font-size:.72rem;font-weight:700;border-radius:6px;padding:2px 7px;white-space:nowrap}
+.st.ok{background:#DCFCE7;color:#166534}.st.wait{background:#FEF3C7;color:#92400E}.st.as{background:#DBEAFE;color:#1E40AF}.st.no{background:#FEE2E2;color:#991B1B}
+.muted{color:var(--muted);font-size:.8rem}
+/* toast */
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#111827;color:#fff;padding:11px 16px;border-radius:10px;z-index:200000;display:none;max-width:90%;text-align:center}
+/* lock */
+#lockOv{display:none;position:fixed;inset:0;z-index:100000;background:#0B1220;align-items:center;justify-content:center;padding:20px}
+#lockOv.show{display:flex}
+#lockOv .box{width:100%;max-width:360px;background:#131C2E;border:1px solid #23304A;border-radius:18px;padding:26px 22px;text-align:center;color:#E2E8F0}
+#lockOv h2{margin:0 0 8px}
+#lockOv p{color:#94A3B8;font-size:.85rem;margin:0 0 14px}
+#lockOv input{background:#0B1220;border-color:#2A3A5A;color:#F1F5F9;margin-bottom:10px}
+#lockOv .btn{margin-bottom:10px}
+#lockOv .fp{background:transparent;color:#F5A623;border:1.5px solid #F5A623;display:none;align-items:center;justify-content:center;gap:8px}
+#lockOv .go{background:#F5A623;color:#111}
+#lockOv a{color:#94A3B8;font-size:.8rem;text-decoration:underline;cursor:pointer}
+#lockOv .lerr{color:#F87171;font-size:.85rem;min-height:20px;margin-bottom:6px}
+
+/* forms side by side */
+.forms{display:grid;grid-template-columns:1fr 1fr;gap:0;align-items:start;padding:0 6px}
+.forms .card{margin:12px 6px}
+@media (max-width:640px){.forms{grid-template-columns:1fr;padding:0}.forms .card{margin:12px}}
+h3.phone{color:var(--phone)}h3.shop{color:var(--shop)}
+.btn.phone{background:var(--phone);color:#fff}.btn.shop{background:var(--shop);color:#fff}
+.forms .card.phone{border-top:4px solid var(--phone)}.forms .card.shop{border-top:4px solid var(--shop)}
+.eth{display:grid;grid-template-columns:.8fr 1.4fr 1fr;gap:6px}
+.eth select{padding:11px 6px}
+.counts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cnt{border-radius:14px;padding:16px 6px;text-align:center;color:#fff}
+.cnt.phone{background:var(--phone)}.cnt.shop{background:var(--shop)}
+.cnt b{display:block;font-size:2.4rem;line-height:1.1}
+.cnt span{font-size:.9rem;opacity:.95}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="loginWrap">
+  <div class="login-box">
+    <img src="icon-192.png" alt="Halal" />
+    <h1>የኦፕሬተር ገፅ</h1>
+    <p class="sub">ስልክ እና ሾፕ ስራ መቀበያ</p>
+    <form id="loginForm">
+      <div class="field"><label>📱 ስልክ ቁጥር</label><input type="tel" id="loginPhone" placeholder="09XXXXXXXX" required /></div>
+      <div class="field"><label>🔒 የይለፍ ቃል</label><input type="password" id="loginPass" required /></div>
+      <div class="err" id="loginErr"></div>
+      <button class="btn btn-primary" id="loginBtn" type="submit"><i class="fas fa-sign-in-alt"></i> ግባ</button>
+    </form>
+    <p class="muted" style="text-align:center;margin-top:14px">አካውንት የለዎትም? በ technician.html ላይ ይመዝገቡ፤ አድሚኑ ኦፕሬተር ያደርግዎታል።</p>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app" class="hidden">
+  <header>
+    <div class="who"><span id="opName">—</span><small>📞 ኦፕሬተር</small></div>
+    <div style="display:flex;gap:6px">
+      <button id="fpEnableBtn" class="hidden"><i class="fas fa-fingerprint"></i> አሻራ አንቃ</button>
+      <button id="lockNowBtn"><i class="fas fa-lock"></i> ቆልፍ</button>
+      <button id="logoutBtn"><i class="fas fa-sign-out-alt"></i> ውጣ</button>
+    </div>
+  </header>
+
+  <div class="forms">
+    <div class="card form phone">
+      <h3 class="phone"><i class="fas fa-phone"></i> 📞 በስልክ</h3>
+      <div class="field"><label>ስም</label><input id="phName" placeholder="ሙሉ ስም" /></div>
+      <div class="field"><label>አድራሻ</label><input id="phAddress" placeholder="አድራሻ" /></div>
+      <div class="field"><label>ስልክ</label><input id="phPhone" type="tel" inputmode="tel" placeholder="09XXXXXXXX" /></div>
+      <div class="field"><label>መሳሪያ</label>
+        <select id="phAppliance">
+          <option value="">መሳሪያ ይምረጡ</option>
+          <option value="Washing Machine">የልብስ ማጠቢያ ማሽን</option>
+          <option value="Refrigerator">ማቀዝቀዣ</option>
+          <option value="Television">ቴሌቪዥን</option>
+          <option value="Oven">ኦቭን</option>
+          <option value="Boiler">ቦይለር</option>
+          <option value="Other">ሌላ</option>
+        </select></div>
+      <div class="field"><label>ችግር</label><textarea id="phProblem" rows="2" placeholder="ችግሩን ይግለጹ..."></textarea></div>
+      <div class="field"><label>የቀጠሮ ቀን</label>
+        <div class="eth" id="phDateBox"></div></div>
+      <button class="btn phone" id="phBtn" onclick="submitOrder('ph')"><i class="fas fa-paper-plane"></i> ላክ</button>
+    </div>
+    <div class="card form shop">
+      <h3 class="shop"><i class="fas fa-store"></i> 🏪 ከሾፕ</h3>
+      <div class="field"><label>ስም</label><input id="shName" placeholder="ሙሉ ስም" /></div>
+      <div class="field"><label>አድራሻ</label><input id="shAddress" placeholder="አድራሻ" /></div>
+      <div class="field"><label>ስልክ</label><input id="shPhone" type="tel" inputmode="tel" placeholder="09XXXXXXXX" /></div>
+      <div class="field"><label>መሳሪያ</label>
+        <select id="shAppliance">
+          <option value="">መሳሪያ ይምረጡ</option>
+          <option value="Washing Machine">የልብስ ማጠቢያ ማሽን</option>
+          <option value="Refrigerator">ማቀዝቀዣ</option>
+          <option value="Television">ቴሌቪዥን</option>
+          <option value="Oven">ኦቭን</option>
+          <option value="Boiler">ቦይለር</option>
+          <option value="Other">ሌላ</option>
+        </select></div>
+      <div class="field"><label>ችግር</label><textarea id="shProblem" rows="2" placeholder="ችግሩን ይግለጹ..."></textarea></div>
+      <div class="field"><label>የቀጠሮ ቀን</label>
+        <div class="eth" id="shDateBox"></div></div>
+      <button class="btn shop" id="shBtn" onclick="submitOrder('sh')"><i class="fas fa-paper-plane"></i> ላክ</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3><i class="fas fa-chart-pie"></i> የዛሬ ብዛት</h3>
+    <div class="counts">
+      <div class="cnt phone"><b id="cPhone">0</b><span>📞 ስልክ</span></div>
+      <div class="cnt shop"><b id="cShop">0</b><span>🏪 ሾፕ</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ LOCK ============ -->
+<div id="lockOv" role="dialog" aria-modal="true">
+  <div class="box">
+    <h2>🔒 ገፁ ተቆልፏል</h2>
+    <p>ለመቀጠል የይለፍ ቃልዎን ያስገቡ ወይም በአሻራ ይክፈቱ</p>
+    <button type="button" class="btn fp" id="lockFpBtn"><i class="fas fa-fingerprint"></i> በአሻራ ክፈት</button>
+    <input type="password" id="lockPass" placeholder="የይለፍ ቃል" autocomplete="current-password" />
+    <div class="lerr" id="lockErr"></div>
+    <button type="button" class="btn go" id="lockGo"><i class="fas fa-unlock"></i> ክፈት</button>
+    <a id="lockOut">ውጣ (ከአካውንት)</a>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+// ================= Firebase =================
+firebase.initializeApp({
+  apiKey: "AIzaSyAZ7MU2B58bWcu-8jH9Pvv5Ob9XGQyx4NU",
+  authDomain: "halal-report-2.firebaseapp.com",
+  projectId: "halal-report-2",
+  storageBucket: "halal-report-2.firebasestorage.app",
+  messagingSenderId: "242965792260",
+  appId: "1:242965792260:web:8dd83989172924f8c5d751"
+});
+const db = firebase.firestore();
+db.settings({ experimentalAutoDetectLongPolling: true, merge: true });
+// ============================================================
+        // 🔒 HE AUTH — መግቢያ በ Worker (/login) በኩል፤ password በ browser አይቀመጥም
+        // session ቶከን + Firebase custom token (role claim) → Firestore ሩልስ ይጠቀማል
+        // ============================================================
+        const WORKER_BASE_URL = "https://halalelectronics.ashenafi6275.workers.dev";
+        const HE_ROLE = (typeof window !== 'undefined' && window.APP_ROLE) || 'operator';
+        const HE_SESSION_KEY = 'he_session_' + HE_ROLE;
+        function heGetSession() {
+            try {
+                const s = JSON.parse(localStorage.getItem(HE_SESSION_KEY) || 'null');
+                if (!s || !s.token || !s.staff || !s.exp || s.exp * 1000 < Date.now()) return null;
+                return s;
+            } catch (e) { return null; }
+        }
+        function heSetSession(res) {
+            let exp = 0;
+            try { exp = JSON.parse(atob(res.token.split('.')[0].replace(/-/g, '+').replace(/_/g, '/'))).exp; } catch (e) {}
+            localStorage.setItem(HE_SESSION_KEY, JSON.stringify({ token: res.token, staff: res.staff, exp }));
+        }
+        function heIsAdminSession() { const s = heGetSession(); return !!(s && s.staff && s.staff.role === 'admin'); }
+        async function heLogout() {
+            try { localStorage.removeItem(HE_SESSION_KEY); } catch (e) {}
+            try { await firebase.auth().signOut(); await firebase.auth().signInAnonymously(); } catch (e) {}
+        }
+        async function callWorker(name, payload) {
+            const headers = { 'Content-Type': 'application/json' };
+            const s = heGetSession();
+            if (s) headers['Authorization'] = 'Bearer ' + s.token;
+            const res = await fetch(`${WORKER_BASE_URL}/${name}`, { method: 'POST', headers, body: JSON.stringify(payload || {}) });
+            return res.json();
+        }
+        async function heSignInWithResult(res) {
+            heSetSession(res);
+            if (res.firebaseToken) await firebase.auth().signInWithCustomToken(res.firebaseToken);
+        }
+        function heLoginErrorText(code, role) {
+            const m = {
+                'invalid-credentials': '❌ ስልክ ቁጥር ወይም የይለፍ ቃል ትክክል አይደለም',
+                'pending': '⏳ አካውንትዎ ገና በአስተዳዳሪ አልፀደቀም',
+                'rejected': '⛔ ምዝገባዎ ውድቅ ተደርጓል',
+                'inactive': '⛔ አካውንትዎ ተዘግቷል',
+                'locked': '⛔ ብዙ ጊዜ ተሳስተዋል፤ ከ15 ደቂቃ በኋላ ይሞክሩ',
+                'too-many-attempts': '⛔ ብዙ ሙከራ ተደርጓል፤ ጥቂት ቆይተው ይሞክሩ',
+                'wrong-portal': role === 'admin'
+                    ? '⛔ ይህ የአድሚን ገፅ ነው። ቴክኒሻን ከሆኑ የቴክኒሻን ሊንክ (technician.html) ይጠቀሙ'
+                    : role === 'operator'
+                        ? '⛔ ይህ አካውንት ኦፕሬተር አይደለም። አድሚኑን ያነጋግሩ'
+                        : '⛔ ይህ የቴክኒሻን ገፅ ነው። አድሚን ከሆኑ admin.html፣ ኦፕሬተር ከሆኑ operator.html ይጠቀሙ'
+            };
+            return m[code] || '❌ መግባት አልተቻለም፣ እንደገና ይሞክሩ';
+        }
+        // ገጽ ሲከፈት፦ የተቀመጠ session ካለ Firebase በ role claim ይግባ፤ ከሌለ anonymous (ለደንበኛ ጥሪዎች)
+        let authReady = (async () => {
+            try {
+                const s = heGetSession();
+                if (s) {
+                    await new Promise(r => { const u = firebase.auth().onAuthStateChanged(() => { u(); r(); }); });
+                    const cu = firebase.auth().currentUser;
+                    let hasRole = false;
+                    if (cu && cu.uid === s.staff.id) { const tr = await cu.getIdTokenResult(); hasRole = !!tr.claims.role; }
+                    if (!hasRole) {
+                        const r = await callWorker('session', {});
+                        if (r && r.ok && r.firebaseToken) { heSetSession(r); await firebase.auth().signInWithCustomToken(r.firebaseToken); return; }
+                        await heLogout();
+                        return;
+                    }
+                    return;
+                }
+                await new Promise(r => { const u = firebase.auth().onAuthStateChanged(() => { u(); r(); }); });
+                if (!firebase.auth().currentUser) await firebase.auth().signInAnonymously();
+            } catch (err) { console.error('⚠️ Auth init failed:', err); }
+        })();
+
+// ================= Helpers =================
+const $ = id => document.getElementById(id);
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(toast._t); toast._t = setTimeout(() => t.style.display = 'none', 2800); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function dateKey(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function toDate(v) { if (!v) return null; const d = v.toDate ? v.toDate() : new Date(v); return isNaN(d) ? null : d; }
+function fmtTime(d) { try { return d.toLocaleTimeString('am-ET', { hour: '2-digit', minute: '2-digit' }); } catch (e) { return d.toTimeString().slice(0, 5); } }
+
+let me = null;           // { id, name }
+let channel = 'phone_admin';
+let unsub = null;
+let myOrders = [];
+
+// ================= Login / session =================
+function showApp() {
+  $('loginWrap').classList.add('hidden');
+  $('app').classList.remove('hidden');
+  $('opName').textContent = me.name;
+  startListening();
+  fpRefreshButtons();
+}
+function showLogin() {
+  $('app').classList.add('hidden');
+  $('loginWrap').classList.remove('hidden');
+}
+$('loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const phone = $('loginPhone').value.trim();
+  const pw = $('loginPass').value;
+  const err = $('loginErr'); err.textContent = '';
+  if (!phone || !pw) { err.textContent = '❌ ስልክ ቁጥር እና የይለፍ ቃል ያስፈልጋል'; return; }
+  const btn = $('loginBtn'); btn.disabled = true;
+  try {
+    const res = await callWorker('login', { phone, password: pw, role: 'operator' });
+    if (!res || !res.ok) err.textContent = heLoginErrorText(res && res.error, 'operator');
+    else {
+      await heSignInWithResult(res);
+      me = { id: res.staff.id, name: res.staff.name || 'ኦፕሬተር' };
+      localStorage.setItem('opId', me.id);
+      localStorage.setItem('opName', me.name);
+      $('loginPass').value = '';
+      Lock.start();
+      showApp();
+      toast('✅ እንኳን ደህና መጡ ' + me.name);
+      fpOfferSetup();
+    }
+  } catch (ex) { err.textContent = '❌ ' + ex.message; }
+  btn.disabled = false;
+});
+async function logout() {
+  if (unsub) { unsub(); unsub = null; }
+  ['opId', 'opName', 'he_op_last_active', 'he_op_locked'].forEach(k => localStorage.removeItem(k));
+  await heLogout();
+  location.reload();
+}
+$('logoutBtn').onclick = () => { if (confirm('መውጣት እርግጠኛ ነዎት?')) logout(); };
+
+// ================= Ethiopian calendar helpers =================
+const ETH_MONTHS = ['መስከረም','ጥቅምት','ኅዳር','ታኅሳስ','ጥር','የካቲት','መጋቢት','ሚያዝያ','ግንቦት','ሰኔ','ሐምሌ','ነሐሴ','ጳጉሜ'];
+const ETH_WEEKDAYS = ['እሁድ','ሰኞ','ማክሰኞ','ረቡዕ','ሐሙስ','ዓርብ','ቅዳሜ'];
+function gLeap(y) { return (y % 4 === 0 && y % 100 !== 0) || (y % 400 === 0); }
+function ethNY(gYear) { return gLeap(gYear + 1) ? 12 : 11; }
+function toEth(d) {
+  const gY = d.getFullYear();
+  const inp = Date.UTC(gY, d.getMonth(), d.getDate());
+  const nyThis = Date.UTC(gY, 8, ethNY(gY));
+  let ey, ref;
+  if (inp >= nyThis) { ey = gY - 7; ref = nyThis; } else { ey = gY - 8; ref = Date.UTC(gY - 1, 8, ethNY(gY - 1)); }
+  const diff = Math.round((inp - ref) / 86400000);
+  return { year: ey, month: Math.floor(diff / 30) + 1, day: (diff % 30) + 1 };
+}
+function fromEth(y, m, d) {
+  const g = y + 7;
+  const t = new Date(Date.UTC(g, 8, ethNY(g)) + ((m - 1) * 30 + (d - 1)) * 86400000);
+  return new Date(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate());
+}
+function ethText(d) { const e = toEth(d); return `${ETH_WEEKDAYS[d.getDay()]}፣ ${e.day} ${ETH_MONTHS[e.month - 1]} ${e.year}`; }
+function buildPicker(pfx) {
+  const e = toEth(new Date());
+  let dd = '', mm = '', yy = '';
+  for (let i = 1; i <= 30; i++) dd += `<option value="${i}" ${i === e.day ? 'selected' : ''}>${i}</option>`;
+  ETH_MONTHS.forEach((n, i) => { mm += `<option value="${i + 1}" ${i + 1 === e.month ? 'selected' : ''}>${n}</option>`; });
+  for (let y = e.year; y <= e.year + 1; y++) yy += `<option value="${y}" ${y === e.year ? 'selected' : ''}>${y}</option>`;
+  $(pfx + 'DateBox').innerHTML = `<select id="${pfx}D">${dd}</select><select id="${pfx}M">${mm}</select><select id="${pfx}Y">${yy}</select>`;
+}
+function resetPicker(pfx) { const e = toEth(new Date()); $(pfx + 'D').value = e.day; $(pfx + 'M').value = e.month; $(pfx + 'Y').value = e.year; }
+['ph', 'sh'].forEach(buildPicker);
+
+// ================= Order entry =================
+// ph = በስልክ (source: phone_admin) ፣ sh = ከሾፕ (source: shop_admin)
+async function submitOrder(pfx) {
+  const isPhone = pfx === 'ph';
+  const fullName = $(pfx + 'Name').value.trim();
+  const address = $(pfx + 'Address').value.trim();
+  const phone = $(pfx + 'Phone').value.trim();
+  const appliance = $(pfx + 'Appliance').value;
+  const problem = $(pfx + 'Problem').value.trim();
+  if (!fullName || !address || !phone || !appliance) { toast('ስም፣ አድራሻ፣ ስልክ እና መሳሪያ ይሙሉ'); return; }
+  const appt = fromEth(parseInt($(pfx + 'Y').value, 10), parseInt($(pfx + 'M').value, 10), parseInt($(pfx + 'D').value, 10));
+  const btn = $(pfx + 'Btn'); btn.disabled = true;
+  try {
+    await authReady;
+    const order = {
+      fullName, phone, address,
+      appliance,
+      preferredDay: ethText(appt),          // አድሚን ገጽ ላይ "መች ይመቻቻል" ስር ይታያል
+      appointmentDate: dateKey(appt),
+      problem: problem || (isPhone ? 'በስልክ የተደወለ ስራ' : 'ከሾፕ የመጣ ስራ'),
+      status: 'Pending',
+      source: isPhone ? 'phone_admin' : 'shop_admin',
+      createdBy: 'operator',
+      createdById: me.id,
+      createdByName: me.name,
+      createdAt: new Date()
+    };
+    const ref = await db.collection('orders').add(order);
+    try {
+      await db.collection('activity').add({
+        user: me.name, action: isPhone ? 'add_phone_order' : 'add_shop_order',
+        details: `${isPhone ? '📞 በስልክ' : '🏪 ከሾፕ'} ትዕዛዝ ተመዘገበ (${me.name}): ${fullName}`,
+        timestamp: new Date()
+      });
+    } catch (e) { console.warn('activity log failed', e); }
+    try {
+      await callWorker('sendTelegramMessage', {
+        bot: 'admin',
+        text: `🆕 *አዲስ ትዕዛዝ* ${isPhone ? '📞 (በስልክ)' : '🏪 (ከሾፕ)'}\n🎧 ኦፕሬተር: ${me.name}\n🆔 #${ref.id.substring(0, 8)}\n👤 ${fullName}\n📞 ${phone}\n📍 ${address}\n🔌 ${appliance}\n🛠️ ${order.problem}\n📅 ቀጠሮ: ${order.preferredDay}`
+      });
+    } catch (e) { console.warn('telegram failed', e); }
+    [pfx + 'Name', pfx + 'Address', pfx + 'Phone', pfx + 'Problem', pfx + 'Appliance'].forEach(id => $(id).value = '');
+    resetPicker(pfx);
+    toast('✅ ወደ አድሚን ተልኳል');
+  } catch (ex) { toast('❌ ' + ex.message); }
+  btn.disabled = false;
+}
+
+// ================= የዛሬ ብዛት =================
+function startListening() {
+  if (unsub) unsub();
+  // አንድ where ብቻ → composite index አያስፈልግም፤ የዛሬን ማጣራት በ JS ነው
+  unsub = db.collection('orders').where('createdById', '==', me.id).onSnapshot(snap => {
+    myOrders = [];
+    snap.forEach(d => myOrders.push(d.data()));
+    render();
+  }, err => { console.warn(err); toast('❌ ቆጠራውን መጫን አልተቻለም'); });
+}
+function render() {
+  const key = dateKey(new Date());
+  const today = myOrders.filter(o => { const d = toDate(o.createdAt); return d && dateKey(d) === key; });
+  $('cPhone').textContent = today.filter(o => o.source === 'phone_admin').length;
+  $('cShop').textContent = today.filter(o => o.source === 'shop_admin').length;
+}
+setInterval(() => { if (me) render(); }, 60000); // እኩለ ሌሊት ሲያልፍ ቆጠራው ወደ 0 እንዲመለስ
+
+// ================= Fingerprint (unlock only) =================
+const FP_KEY = 'he_fp_operator_v1';
+function fpSaved() { try { return JSON.parse(localStorage.getItem(FP_KEY) || 'null'); } catch (e) { return null; } }
+function fpCapable() { return !!(window.PublicKeyCredential && navigator.credentials && navigator.credentials.create); }
+const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+function fpRefreshButtons() {
+  const saved = fpSaved();
+  const mine = saved && saved.staffId === (me && me.id);
+  $('fpEnableBtn').classList.toggle('hidden', !(fpCapable() && !mine));
+}
+async function fpOfferSetup() { try { if (fpCapable() && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()) fpRefreshButtons(); } catch (e) {} }
+$('fpEnableBtn').onclick = async () => {
+  try {
+    const cred = await navigator.credentials.create({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rp: { name: 'Halal Electronics' },
+      user: { id: crypto.getRandomValues(new Uint8Array(16)), name: me.name, displayName: me.name },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' },
+      timeout: 60000 } });
+    localStorage.setItem(FP_KEY, JSON.stringify({ staffId: me.id, credentialId: b64(cred.rawId) }));
+    fpRefreshButtons();
+    toast('✅ አሻራ ነቅቷል');
+  } catch (e) { toast('⚠️ አሻራ ማንቃት አልተቻለም'); }
+};
+
+// ================= Auto-lock (idle) =================
+// ከመጨረሻ ንክኪ በኋላ AUTO_LOCK_MINUTES ካለፈ (ወይም ገጹ ተዘግቶ ከቆየ) የይለፍ ቃል ወይም አሻራ ይጠይቃል
+const Lock = (function () {
+  const AUTO_LOCK_MINUTES = 5;
+  const MS = AUTO_LOCK_MINUTES * 60 * 1000;
+  const ACTIVE = 'he_op_last_active', LOCKED = 'he_op_locked', MAX_TRIES = 5;
+  let locked = false, tries = 0, touchedAt = 0, busy = false;
+
+  const last = () => parseInt(localStorage.getItem(ACTIVE) || '0', 10) || 0;
+  function touch(force) {
+    if (locked) return;
+    const n = Date.now();
+    if (!force && n - touchedAt < 3000) return;
+    touchedAt = n;
+    try { localStorage.setItem(ACTIVE, String(n)); } catch (e) {}
+  }
+  function updateFp() {
+    const s = fpSaved();
+    $('lockFpBtn').style.display = (s && s.credentialId && s.staffId === (me && me.id) && fpCapable()) ? 'flex' : 'none';
+  }
+  function show() {
+    if (!me) return;
+    locked = true;
+    localStorage.setItem(LOCKED, '1');
+    $('lockOv').classList.add('show');
+    $('lockPass').value = ''; $('lockErr').textContent = '';
+    updateFp();
+    setTimeout(() => { try { $('lockPass').focus(); } catch (e) {} }, 150);
+    if (document.visibilityState === 'visible') setTimeout(() => { if (locked) fp(true); }, 500);
+  }
+  function unlock() {
+    locked = false; tries = 0;
+    localStorage.removeItem(LOCKED);
+    $('lockOv').classList.remove('show');
+    $('lockPass').value = ''; $('lockErr').textContent = '';
+    touch(true);
+  }
+  function tick() { if (!locked && me && Date.now() - (last() || 0) >= MS) show(); }
+  async function pass() {
+    if (busy) return;
+    const pw = $('lockPass').value;
+    if (!pw) { $('lockErr').textContent = '❌ የይለፍ ቃል ያስገቡ'; return; }
+    busy = true; $('lockGo').disabled = true;
+    let ok = false;
+    try { const r = await callWorker('verifyPassword', { password: pw }); ok = !!(r && r.ok); } catch (e) { console.warn(e); }
+    if (ok) unlock();
+    else {
+      tries++; $('lockPass').value = '';
+      if (tries >= MAX_TRIES) { $('lockErr').textContent = '⛔ ብዙ ጊዜ ተሳስተዋል - በመውጣት ላይ...'; setTimeout(logout, 800); }
+      else $('lockErr').textContent = `❌ የተሳሳተ የይለፍ ቃል (${tries}/${MAX_TRIES})`;
+    }
+    busy = false; $('lockGo').disabled = false;
+  }
+  async function fp(silent) {
+    const s = fpSaved();
+    if (!s || !s.credentialId) { if (!silent) $('lockErr').textContent = 'አሻራ አልነቃም - የይለፍ ቃል ይጠቀሙ'; return; }
+    try {
+      await navigator.credentials.get({ publicKey: { challenge: crypto.getRandomValues(new Uint8Array(32)), allowCredentials: [{ id: unb64(s.credentialId), type: 'public-key' }], userVerification: 'required', timeout: 60000 } });
+      unlock();
+    } catch (e) { if (!silent) $('lockErr').textContent = '⚠️ የአሻራ ማረጋገጫ አልተሳካም'; }
+  }
+  function start() { locked = false; tries = 0; localStorage.removeItem(LOCKED); $('lockOv').classList.remove('show'); touch(true); }
+  function init() {
+    $('lockGo').onclick = pass;
+    $('lockPass').addEventListener('keydown', e => { if (e.key === 'Enter') pass(); });
+    $('lockFpBtn').onclick = () => fp(false);
+    $('lockOut').onclick = () => { if (confirm('ከአካውንቱ መውጣት እርግጠኛ ነዎት?')) logout(); };
+    $('lockNowBtn').onclick = show;
+    ['pointerdown', 'touchstart', 'keydown', 'click', 'scroll'].forEach(ev =>
+      document.addEventListener(ev, e => { if (!locked && !$('lockOv').contains(e.target)) touch(false); }, { passive: true, capture: true }));
+    setInterval(tick, 5000);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') tick(); });
+    window.addEventListener('focus', tick);
+    window.addEventListener('pageshow', tick);
+  }
+  return { init, show, start, touch, isLocked: () => locked, restoreCheck() {
+    if (localStorage.getItem(LOCKED) === '1' || !last() || Date.now() - last() >= MS) show(); else touch(true);
+  } };
+})();
+Lock.init();
+
+// ================= Restore session on load =================
+(function () {
+  const id = localStorage.getItem('opId'), name = localStorage.getItem('opName');
+  const hs = heGetSession();
+  if (!id || !name || !hs || hs.staff.id !== id) return;
+  me = { id, name };
+  showApp();
+  Lock.restoreCheck();
+  // አካውንቱ አሁንም ኦፕሬተር መሆኑን በጀርባ ያረጋግጣል
+  authReady.then(() => db.collection('staff').doc(id).get()).then(d => {
+    if (!d.exists || d.data().isPhoneOperator !== true || ['inactive', 'rejected', 'pending'].includes(d.data().status)) { toast('⛔ አካውንቱ ኦፕሬተር አይደለም'); setTimeout(logout, 1200); }
+  }).catch(() => {});
+})();
+</script>
+</body>
+</html>
