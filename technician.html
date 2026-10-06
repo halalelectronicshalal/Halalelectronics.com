@@ -2137,6 +2137,7 @@
                     </div>
                     <div style="margin-bottom:8px;">
                         <label style="font-weight:600; display:block; margin-bottom:4px; font-size:0.85rem;">🆔 የስራ መለያ</label>
+                        <select id="completeJobPicker" onchange="techPickCompleteJob(this.value)" style="width:100%; margin-bottom:6px;"><option value="">— ስራ ይምረጡ —</option></select>
                         <input type="text" id="completeOrderId" placeholder="ለም: 2d1VyvOpD7SSkAwW4tWr" dir="ltr" lang="en" inputmode="latin" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
                     </div>
                     <div class="completion-options" id="completionOptions">
@@ -8454,7 +8455,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
                     if (tab === 'home') document.getElementById('tab-home').classList.add('active');
                     else if (tab === 'jobs') document.getElementById('tab-jobs').classList.add('active');
-                    else if (tab === 'complete') document.getElementById('tab-complete').classList.add('active');
+                    else if (tab === 'complete') { document.getElementById('tab-complete').classList.add('active'); try { techFillCompletePicker(); } catch (e) {} }
                     else if (tab === 'history') document.getElementById('tab-history').classList.add('active');
                     else if (tab === 'profile') document.getElementById('tab-profile').classList.add('active');
                     else if (tab === 'messages') { document.getElementById('tab-techmessages').classList.add('active'); techOpenMessagesTab(); }
@@ -8491,7 +8492,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     // ቴክኒሻን የተመደበለት ስራ (Assigned) ገና ሳያጠናቅቅ "ነፃ ነኝ" ማለት በጭራሽ አይችልም።
                     // ይህ በ UI ብቻ ሳይሆን በራሱ በ button click logic ውስጥ ስለሚፈተሽ ማንም ሊያልፈው አይችልም።
                     if (status === 'free') {
-                        const hasUnfinishedJob = myOrders.some(o => o.status === 'Assigned');
+                        const hasUnfinishedJob = myOrders.some(o => o.status === 'Assigned' && !isFutureAppointment(o));
                         if (hasUnfinishedJob) {
                             showToast('🔒 የተመደበልዎት ስራ አለ! መጀመሪያ ስራውን ያጠናቅቁ (ወይም ውጤቱን ያስመዝግቡ) ከዚያ "ነፃ" ማለት ይችላሉ', 'error');
                             return;
@@ -8787,7 +8788,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         function techApplyOpenStatusOnce() {
             if (openStatusApplied || !technicianId) return;
             openStatusApplied = true;
-            const status = myOrders.some(o => o.status === 'Assigned') ? 'working' : 'free';
+            const status = myOrders.some(o => o.status === 'Assigned' && !isFutureAppointment(o)) ? 'working' : 'free';
             currentStatus = status;
             techApplyStatusUI(status);
             saveStatus(status); // Firestore ብቻ - ምንም ቴሌግራም የለም
@@ -8986,16 +8987,45 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // ============================================================
         // RENDER MY JOBS (Home Tab)
         // ============================================================
+        // ✅ FIX: ቀጠሮ የተሰጠው (ለሌላ ቀን የተላለፈ) ስራ ቀኑ እስኪደርስ ድረስ "ያልተጠናቀቀ ስራ" አይቆጠርም
+        function techLocalTodayKey() {
+            const d = new Date();
+            return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        }
+        function isFutureAppointment(o) {
+            return !!(o && o.rescheduledFrom && o.rescheduledDate && String(o.rescheduledDate) > techLocalTodayKey());
+        }
+        const TECH_CLOSED_STATUSES = ['Completed', 'PriceNotAgreed', 'Rescheduled', 'NotToday', 'Other'];
+        function techOpenJobs() {
+            return myOrders.filter(o => !TECH_CLOSED_STATUSES.includes(o.status) && !isFutureAppointment(o));
+        }
+        function techFillCompletePicker() {
+            const sel = document.getElementById('completeJobPicker');
+            if (!sel) return;
+            const jobs = techOpenJobs();
+            const cur = (document.getElementById('completeOrderId').value || '').trim();
+            sel.innerHTML = '<option value="">— ስራ ይምረጡ —</option>' + jobs.map(o =>
+                `<option value="${o.id}" ${o.id === cur ? 'selected' : ''}>${(o.fullName || '—')} • ${(o.appliance || '—')} • #${o.id.substring(0, 6)}</option>`).join('');
+            if (!cur && jobs.length === 1) {
+                sel.value = jobs[0].id;
+                document.getElementById('completeOrderId').value = jobs[0].id;
+            }
+        }
+        window.techPickCompleteJob = function (v) { document.getElementById('completeOrderId').value = v || ''; };
+
         function renderMyJobs() {
             const container = document.getElementById('myJobsContainer');
-            const pendingJobs = myOrders.filter(o => o.status !== 'Completed' && o.status !== 'PriceNotAgreed' &&
-                o.status !== 'Rescheduled' && o.status !== 'NotToday' && o.status !== 'Other');
+            const pendingJobs = techOpenJobs();
+            try { techFillCompletePicker(); } catch (e) {}
 
             const count = pendingJobs.length;
             document.getElementById('jobCount').textContent = count + ' ስራዎች';
 
+            const apptJobs = myOrders.filter(o => isFutureAppointment(o) && !TECH_CLOSED_STATUSES.includes(o.status));
+            const apptHtml = apptJobs.length ? `<div style="margin-top:10px; padding:8px 10px; background:#eff6ff; border-radius:8px; font-size:0.8rem; color:#1e40af;">📅 <strong>ቀጠሮዎች (${apptJobs.length})</strong> — ቀኑ ሲደርስ ወደ ስራዎች ይገባሉ፦<br>` +
+                apptJobs.map(o => `• ${o.fullName || '—'} (${o.appliance || '—'}) — ${o.rescheduledDate}`).join('<br>') + `</div>` : '';
             if (pendingJobs.length === 0) {
-                container.innerHTML = '<p class="text-center text-muted">ምንም የተመደበ ስራ የለም 🎉</p>';
+                container.innerHTML = '<p class="text-center text-muted">ምንም የተመደበ ስራ የለም 🎉</p>' + apptHtml;
                 return;
             }
 
@@ -9042,7 +9072,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     </div>
                 `;
             });
-            container.innerHTML = html;
+            container.innerHTML = html + apptHtml;
         }
 
         // ============================================================
@@ -9090,6 +9120,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             }
 
             document.getElementById('completeOrderId').value = orderId;
+            try { techFillCompletePicker(); } catch (e) {}
             document.getElementById('selectedOptionDisplay').textContent = '';
             document.querySelectorAll('.sub-content').forEach(el => el.style.display = 'none');
             document.getElementById('subQuestions').classList.remove('active');
@@ -9167,6 +9198,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 showToast('❌ የስራ መለያው ትክክል አይደለም (የአማርኛ ፊደል አለው)። ኪቦርድዎን ወደ English ቀይረው ይተይቡ፣ ወይም ከ«ስራዎች» ዝርዝር ላይ «አጠናቅ» ይጫኑ', 'error');
                 return null;
             }
+            if (myOrders.some(o => o.id === orderId)) return orderId; // ✅ FIX: በራሱ ዝርዝር ያለ ስራ ተጨማሪ ንባብ አያስፈልገውም
             try {
                 const snap = await db.collection('orders').doc(orderId).get();
                 if (!snap.exists) {
@@ -9321,40 +9353,51 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             } catch (error) { showToast('❌ ' + error.message, 'error'); }
         }
 
+        let anotherDayBusy = false;
         async function submitAnotherDay() {
+            if (anotherDayBusy) return;
             const newDate = document.getElementById('anotherDayDate').value;
             if (!newDate) { showToast('እባክዎ ሁሉንም መስኮች ይሙሉ', 'error'); return; }
             const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
             if (!orderId) return;
+            anotherDayBusy = true;
+            const btn = document.getElementById('submitAnotherDay');
+            if (btn) btn.disabled = true;
             try {
                 const orderRef = db.collection('orders').doc(orderId);
                 const orderSnap = await orderRef.get();
-                const orderData = orderSnap.data();
-                await db.collection('orders').add({
-                    fullName: orderData.fullName,
-                    phone: orderData.phone,
-                    address: orderData.address,
-                    appliance: orderData.appliance,
-                    problem: orderData.problem,
+                const orderData = orderSnap.data() || {};
+                // ✅ FIX: አዲሱ ቀጠሮ + የድሮው ስራ መዝጊያ በአንድ ላይ (batch) - አንዱ ብቻ ተሳክቶ "pending" ሆኖ እንዳይቀር
+                const newRef = db.collection('orders').doc();
+                const batch = db.batch();
+                batch.set(newRef, {
+                    fullName: orderData.fullName || '',
+                    phone: orderData.phone || '',
+                    address: orderData.address || '',
+                    appliance: orderData.appliance || '',
+                    problem: orderData.problem || '',
+                    customerLat: orderData.customerLat || null,
+                    customerLng: orderData.customerLng || null,
                     status: 'Pending',
                     source: orderData.source || 'web',
                     createdById: orderData.createdById || '',
                     createdByName: orderData.createdByName || '',
                     technician: technicianName,
+                    isAppointment: true,
                     rescheduledFrom: orderId,
                     rescheduledDate: newDate,
                     createdAt: new Date()
                 });
-                await orderRef.update({
+                batch.update(orderRef, {
                     status: 'Rescheduled',
                     completionOption: 'another-day',
                     rescheduledDate: newDate,
                     completedAt: new Date(),
                     technician: technicianName
                 });
-                // ✅ NEW: ስራው "አልተሰራም" የሚለውን ግልጽ ሁኔታ + ሁሉንም የደንበኛ/ትዕዛዝ መረጃ
-                // ወደ አድሚን መላክ (ከዚህ ቀደም ኦርደር መለያ እና አዲስ ቀን ብቻ ነበር የሚላከው)
-                await tgMuted(`
+                await batch.commit();
+                try {
+                    await tgMuted(`
                 📅 *ለሌላ ቀን ተዘጋጅቷል!*
                 🔴 *የስራ ሁኔታ:* አልተሰራም - ለሌላ ቀን ተላልፏል
 
@@ -9370,9 +9413,12 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 🔄 *እንደ አዲስ ትዕዛዝ ተፈጥሯል*
                 📅 ${formatEthDateTime(new Date())}
                 `);
-                showToast('✅ ለሌላ ቀን ተዘጋጅቷል', 'success');
+                } catch (tgErr) { console.warn('telegram notify failed', tgErr); }
+                showToast('✅ ለሌላ ቀን ተዘጋጅቷል — ቀኑ ሲደርስ ወደ ስራዎች ይገባል፤ አሁን «ነፃ» ማለት ይችላሉ', 'success');
                 resetCompletionForm();
+                try { renderMyJobs(); } catch (e) {}
             } catch (error) { showToast('❌ ' + error.message, 'error'); }
+            finally { anotherDayBusy = false; if (btn) btn.disabled = false; }
         }
 
         async function submitNotToday() {
@@ -9427,6 +9473,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
         function resetCompletionForm() {
             document.getElementById('completeOrderId').value = '';
+            const _pk = document.getElementById('completeJobPicker'); if (_pk) _pk.value = '';
             document.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
             document.getElementById('selectedOptionDisplay').textContent = '';
             document.querySelectorAll('.sub-content').forEach(el => el.style.display = 'none');
@@ -9815,7 +9862,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     return d.toISOString().split('T')[0] === today;
                 })
                 .reduce((sum, o) => sum + parseFloat(o.price || 0), 0);
-            const currentJob = myOrders.find(o => o.status === 'Assigned' || o.status === 'Pending');
+            const currentJob = myOrders.find(o => (o.status === 'Assigned' || o.status === 'Pending') && !isFutureAppointment(o));
 
             document.getElementById('statTodayJobs').textContent = todayJobs.length;
             document.getElementById('statCompleted').textContent = completed;
