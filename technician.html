@@ -2150,38 +2150,29 @@
                     <div id="selectedOptionDisplay" style="text-align:center; font-weight:600; color:var(--primary); margin:8px 0;"></div>
 
                     <div id="subQuestions" class="sub-questions">
-                        <!-- A: Done -->
+                        <!-- A: Done (ዋጋ + ወጪ → ገቢ በራሱ ይሰላል) -->
                         <div id="subDone" class="sub-content" style="display:none;">
                             <div class="sub-row">
-                                <label>💰 ዋጋ *</label>
-                                <input type="number" id="donePrice" placeholder="ዋጋ ያስገቡ" />
+                                <label>💰 ዋጋ (ከደንበኛው የተቀበሉት) *</label>
+                                <input type="number" id="donePrice" placeholder="ዋጋ ያስገቡ" inputmode="decimal" min="0" />
                             </div>
                             <div class="sub-row">
-                                <label>📸 የዋራንቲ ፎቶ</label>
-                                <input type="file" id="doneWarrantyPhoto" accept="image/*" />
+                                <label>🧾 ወጪ (ለዚህ ስራ የወጣ)</label>
+                                <input type="number" id="doneExpense" placeholder="0" inputmode="decimal" min="0" />
                             </div>
                             <div class="sub-row">
-                                <label>🏦 ባንክ ደረሰኝ</label>
-                                <input type="file" id="doneBankReceipt" accept="image/*" />
+                                <label>📍 ወጪው የት / ለምን (አማራጭ)</label>
+                                <input type="text" id="doneExpenseNote" placeholder="ለም: መለዋወጫ፣ ትራንስፖርት" />
                             </div>
-                            <div class="sub-row">
-                                <label>📝 የዋራንቲ ቁጥር</label>
-                                <input type="text" id="doneWarrantyNumber" placeholder="ለም: HALAL-2026-001" />
-                            </div>
-                            <div class="sub-row">
-                                <label>📅 የዋራንቲ ጊዜ</label>
-                                <select id="doneWarrantyPeriod">
-                                    <option value="3">3 ወር</option>
-                                    <option value="6" selected>6 ወር</option>
-                                    <option value="12">1 ዓመት</option>
-                                    <option value="24">2 ዓመት</option>
-                                </select>
+                            <div class="sub-row" id="doneAutoIncomeBox" style="background:var(--bg); border-radius:8px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center;">
+                                <span style="font-weight:600;">💵 ገቢ (ዋጋ − ወጪ) — በራሱ ይሰላል</span>
+                                <strong id="doneAutoIncome" style="font-size:1.1rem; color:var(--success);">0 ብር</strong>
                             </div>
                             <div class="sub-row">
                                 <label>📝 ማብራሪያ</label>
                                 <textarea id="doneNotes" placeholder="ስለ ስራው ማብራሪያ (አማራጭ)"></textarea>
                             </div>
-                            <button id="submitDone" class="btn btn-success btn-block"><i class="fas fa-check"></i> አስገባ</button>
+                            <button id="submitDone" class="btn btn-success btn-block"><i class="fas fa-check-circle"></i> አጠናቅ</button>
                         </div>
 
                         <!-- B: Price Not Agreed -->
@@ -9255,6 +9246,11 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             });
 
             document.getElementById('submitDone').addEventListener('click', submitDone);
+            ['donePrice', 'doneExpense'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) { el.addEventListener('input', updateDoneAutoIncome); el.addEventListener('change', updateDoneAutoIncome); }
+            });
+            updateDoneAutoIncome();
             document.getElementById('submitPriceNotAgreed').addEventListener('click', submitPriceNotAgreed);
             document.getElementById('submitAnotherDay').addEventListener('click', submitAnotherDay);
             document.getElementById('submitNotToday').addEventListener('click', submitNotToday);
@@ -9298,103 +9294,81 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (window._doneBusy) return;
             const orderId = document.getElementById('completeOrderId').value.trim();
             const price = document.getElementById('donePrice').value;
-            const warrantyPhoto = document.getElementById('doneWarrantyPhoto').files[0];
-            const bankReceipt = document.getElementById('doneBankReceipt').files[0];
-            const warrantyNumber = document.getElementById('doneWarrantyNumber').value.trim();
-            const warrantyPeriod = document.getElementById('doneWarrantyPeriod').value;
+            const expenseRaw = document.getElementById('doneExpense').value;
+            const expenseNote = document.getElementById('doneExpenseNote').value.trim();
             const notes = document.getElementById('doneNotes').value.trim();
 
             if (!orderId) { showToast('እባክዎ የስራ መለያ ያስገቡ', 'error'); return; }
             if (!price || parseFloat(price) <= 0) { showToast('እባክዎ ትክክለኛ ዋጋ ያስገቡ', 'error'); return; }
 
-            // ✅ ፍጥነት፦ ወዲያውኑ ምልክት ያሳያል፣ ድርብ ጠቅታን ይከለክላል
+            const priceNum = parseFloat(price);
+            const expenseNum = parseFloat(expenseRaw) || 0;
+            if (expenseNum < 0) { showToast('ወጪ ከ0 በታች መሆን አይችልም', 'error'); return; }
+            if (expenseNum > priceNum && !confirm('ወጪው ከዋጋው ይበልጣል (ገቢው አሉታዊ ይሆናል)። መቀጠል ይፈልጋሉ?')) return;
+            const netIncome = priceNum - expenseNum; // ገቢ = ዋጋ - ወጪ (በራስ-ሰር)
+
             const btn = document.getElementById('submitDone');
             const origHtml = btn.innerHTML;
             const busy = (t) => { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + t; };
             window._doneBusy = true;
-            busy('በመላክ ላይ...');
+            busy('በማጠናቀቅ ላይ...');
             const withTimeout = (p, ms, label) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(label)), ms))]);
 
-            // ፎቶ/ደረሰኝ ተጨምቆ በትይዩ (በአንድ ጊዜ) ይጫናል — ከዚህ በፊት አንድ በአንድ ነበር
-            const upload = async (file, prefix) => {
-                if (!file) return null;
-                const c = await compressImageFile(file);
-                const ref = storage.ref(`warranty_photos/${orderId}/${prefix}${file.name}`);
-                await withTimeout(ref.put(c), 45000, 'ፎቶው አልተጫነም (ኔትወርክ ደካማ ነው)፤ እንደገና ይሞክሩ');
-                return ref.getDownloadURL();
-            };
-
             try {
-                if (warrantyPhoto || bankReceipt) busy('ፎቶ በመጫን ላይ...');
-                const [photoURL, bankURL] = await Promise.all([upload(warrantyPhoto, ''), upload(bankReceipt, 'bank_')]);
-
-                busy('በማስቀመጥ ላይ...');
-                const startDate = new Date();
-                const endDate = new Date();
-                endDate.setMonth(endDate.getMonth() + parseInt(warrantyPeriod));
-                const priceNum = parseFloat(price);
-
+                const today = new Date().toISOString().split('T')[0];
                 const orderUpdate = db.collection('orders').doc(orderId).update({
                     status: 'Completed',
                     price: priceNum,
+                    expense: expenseNum,
+                    expenseNote: expenseNote,
+                    netIncome: netIncome,
                     completedAt: new Date(),
                     completionOption: 'done',
-                    warrantyPhotoURLs: photoURL ? [photoURL] : [],
-                    bankReceiptURLs: bankURL ? [bankURL] : [],
-                    warrantyPhotoName: warrantyPhoto ? warrantyPhoto.name : null,
-                    warrantyPhotoUploadedAt: new Date(),
-                    bankReceiptName: bankReceipt ? bankReceipt.name : null,
-                    bankReceiptUploadedAt: bankURL ? new Date() : null,
-                    warrantyNumber: warrantyNumber || `HALAL-${Date.now().toString().slice(-6)}`,
-                    warrantyPeriod: parseInt(warrantyPeriod),
-                    warrantyStart: startDate.toISOString().split('T')[0],
-                    warrantyEnd: endDate.toISOString().split('T')[0],
-                    warrantyStatus: 'active',
                     technicianNotes: notes || ''
                 });
-                const txAdd = db.collection('transactions').add({
+                const txIncome = db.collection('transactions').add({
                     description: `ክፍያ: ስራ #${orderId.substring(0,8)}`,
                     amount: priceNum,
                     type: 'income',
                     staff: technicianName,
                     orderId: orderId,
-                    date: new Date().toISOString().split('T')[0],
+                    date: today,
                     createdAt: new Date()
                 });
+                const txExpense = expenseNum > 0 ? db.collection('transactions').add({
+                    description: `ወጪ: ስራ #${orderId.substring(0,8)}${expenseNote ? ' — ' + expenseNote : ''}`,
+                    amount: expenseNum,
+                    type: 'expense',
+                    staff: technicianName,
+                    orderId: orderId,
+                    date: today,
+                    createdAt: new Date()
+                }) : Promise.resolve();
 
-                // ሁለቱ በትይዩ፤ ኔትወርክ ከሌለ ገጹ እንዳይቆም ከ15 ሰከንድ በኋላ ወደ ቀጣዩ ይሄዳል
+                // ኔትወርክ ከሌለ ገጹ እንዳይቆም ከ15 ሰከንድ በኋላ ወደ ቀጣዩ ይሄዳል
                 let queued = false;
-                try { await withTimeout(Promise.all([orderUpdate, txAdd]), 15000, 'SAVE_TIMEOUT'); }
+                try { await withTimeout(Promise.all([orderUpdate, txIncome, txExpense]), 15000, 'SAVE_TIMEOUT'); }
                 catch (e) { if (e.message === 'SAVE_TIMEOUT') queued = true; else throw e; }
 
                 // የቀሩት (ማስታወሻ + ቴሌግራም) ተጠቃሚውን አያስጠብቁም — ከበስተጀርባ ይላካሉ
                 db.collection('activity').add({
                     user: technicianName,
                     action: 'complete_job',
-                    details: `ስራ #${orderId.substring(0,8)} ተጠናቋል, ${price} ብር`,
+                    details: `ስራ #${orderId.substring(0,8)} ተጠናቋል, ዋጋ ${priceNum} - ወጪ ${expenseNum} = ገቢ ${netIncome} ብር`,
                     timestamp: new Date()
                 }).catch(() => {});
-                Promise.resolve(tgMuted(`
-                ✅ *ስራ ተጠናቋል!* 🎉
-                🆔 *ትዕዛዝ:* #${orderId.substring(0,8)}
-                💰 *ዋጋ:* ${price} ብር
-                👨‍🔧 *ቴክኒሻን:* ${technicianName}
-                📸 ዋራንቲ: ${warrantyPhoto ? '✅ ተጨምሯል' : '—'}
-                🏦 ባንክ ደረሰኝ: ${bankReceipt ? '✅ ተጨምሯል' : '—'}
-                🏷️ ዋራንቲ ቁጥር: ${warrantyNumber || '—'}
-                📅 ዋራንቲ ጊዜ: ${warrantyPeriod} ወር
-                📅 ${formatEthDateTime(new Date())}
-                `)).catch(() => {});
+                // ✅ ስራ ሲጠናቀቅ ወደ ቴሌግራም አይላክም (ሪፖርት ብቻ ይላካል)
 
                 if (queued) showToast('⏳ ኔትወርክ ደካማ ነው — ተመዝግቧል፣ ሲገናኝ በራሱ ይላካል', 'error');
-                else showToast(`✅ ስራ ተጠናቋል! ${price} ብር ገቢ ተጨምሯል`, 'success');
+                else showToast(`✅ ስራ ተጠናቋል! ገቢ ${netIncome} ብር ተመዝግቧል`, 'success');
 
                 document.getElementById('donePrice').value = '';
-                document.getElementById('doneWarrantyPhoto').value = '';
-                document.getElementById('doneBankReceipt').value = '';
-                document.getElementById('doneWarrantyNumber').value = '';
+                document.getElementById('doneExpense').value = '';
+                document.getElementById('doneExpenseNote').value = '';
                 document.getElementById('doneNotes').value = '';
+                updateDoneAutoIncome();
                 document.getElementById('completeOrderId').value = '';
+                const picker = document.getElementById('completeJobPicker'); if (picker) picker.value = '';
                 document.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
                 document.getElementById('selectedOptionDisplay').textContent = '';
                 document.querySelectorAll('.sub-content').forEach(el => el.style.display = 'none');
@@ -10013,14 +9987,18 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             // ✅ FIX: ቀድሞ የተጣራው በ 'createdAt' ብቻ ስለነበር፣ ከትናንት/ካለፈ ቀን ተመድቦ ዛሬ የተጠናቀቀ
             // ስራ (ለምሳሌ የ"ለሌላ ቀን ተዘጋጅቷል" ስራዎች) ከሪፖርቱ ውጪ ይቀር ነበር፣ ይህም አውቶ-ካልኩሌት
             // (ገቢ ድምር) ትክክል እንዳይሆን ያደርግ ነበር። አሁን ዛሬ የተፈጠሩ ወይም ዛሬ የተጠናቀቁ ስራዎችን ያካትታል።
-            const todayJobs = myOrders.filter(o => {
+            const reportedSet = techGetReportedSet(); // ✅ ቀደም ሲል በሪፖርት የተላኩ ስራዎች እንደገና አይታዩም
+            const todayJobsAll = myOrders.filter(o => {
                 const createdStr = (o.createdAt?.toDate?.() || null)?.toISOString().split('T')[0];
                 const completedStr = (o.completedAt?.toDate?.() || null)?.toISOString().split('T')[0];
                 return createdStr === today || completedStr === today;
             });
 
+            const todayJobs = todayJobsAll.filter(o => !reportedSet.has(techJobKey(o)));
+
             if (todayJobs.length === 0) {
                 container.innerHTML = '<p class="text-muted text-center">ዛሬ ምንም ስራ የለም</p>';
+                if (todayJobsAll.length > 0) techClearReportAutoFields(); // ሁሉም ተልኳል → ፎርሙ ባዶ ሆኖ ለአዲስ ሪፖርት ዝግጁ
                 return;
             }
 
@@ -10055,6 +10033,9 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 incomeField.parentElement.appendChild(autoNote);
             }
             autoNote.textContent = completed > 0 ? `✅ ከ ${completed} የተጠናቀቁ ስራዎች በራስ-ሰር ተደምሯል (ካስፈለገ ማስተካከል ይችላሉ)` : '';
+
+            // ✅ NEW: በ"አጠናቅ" ትር የገባ ወጪ በራስ-ሰር ወደ ወጪ ዝርዝር ይጨመራል
+            techSyncAutoExpenses(completedJobs);
 
             // ✅ FIX: ገቢው በእጅ ያልተቀየረ ቢሆንም ባይሆንም፣ ወጪ/ትርፍ/ድርሻ ስሌት ሁልጊዜ ወቅታዊ እንዲሆን
             calcProfit();
@@ -10144,6 +10125,107 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         }
 
         // ============================================================
+        // ✅ NEW: "አጠናቅ" ትር — ገቢ (ዋጋ − ወጪ) በራስ-ሰር ስሌት
+        // ============================================================
+        function updateDoneAutoIncome() {
+            const price = parseFloat(document.getElementById('donePrice').value) || 0;
+            const exp = parseFloat(document.getElementById('doneExpense').value) || 0;
+            const net = price - exp;
+            const el = document.getElementById('doneAutoIncome');
+            if (!el) return;
+            el.textContent = net.toLocaleString() + ' ብር';
+            el.style.color = net < 0 ? 'var(--emergency)' : 'var(--success)';
+        }
+
+        // ============================================================
+        // ✅ NEW: ሪፖርት ከተላከ በኋላ ፎርሙን ማጽዳት + የተላኩ ስራዎችን መመዝገብ
+        // ============================================================
+        function techJobKey(o) { return o.id + '|' + (o.status === 'Completed' ? 'C' : 'N'); }
+        function techReportedStoreKey() { return 'techReported_' + (technicianId || 'x') + '_' + getDateKey(new Date()); }
+        function techGetReportedSet() {
+            try { return new Set(JSON.parse(localStorage.getItem(techReportedStoreKey()) || '[]')); }
+            catch (e) { return new Set(); }
+        }
+        function techMarkJobsReported(jobStatuses) {
+            try {
+                const set = techGetReportedSet();
+                (jobStatuses || []).forEach(j => {
+                    const o = myOrders.find(x => x.id === j.orderId);
+                    if (o) set.add(techJobKey(o));
+                });
+                localStorage.setItem(techReportedStoreKey(), JSON.stringify(Array.from(set)));
+                const suffix = '_' + getDateKey(new Date());
+                Object.keys(localStorage)
+                    .filter(k => k.indexOf('techReported_') === 0 && !k.endsWith(suffix))
+                    .forEach(k => localStorage.removeItem(k)); // የድሮ ቀናት ማጽዳት
+            } catch (e) { console.warn('techMarkJobsReported failed', e); }
+        }
+
+        // በ"አጠናቅ" ትር የገባ ወጪ → የሪፖርት ወጪ ዝርዝር (ራስ-ሰር መስመሮች፣ ተጠቃሚው ሊያስተካክላቸው ይችላል)
+        function techSyncAutoExpenses(completedJobs) {
+            const container = document.getElementById('reportExpenseItemsContainer');
+            if (!container) return;
+            const items = (completedJobs || []).filter(o => (parseFloat(o.expense) || 0) > 0);
+            const sig = items.map(o => o.id + ':' + o.expense).join(',');
+            if ((container.dataset.autoExpSig || '') === sig) return; // ለውጥ ከሌለ በእጅ ማስተካከያን አይነካም
+            container.querySelectorAll('.expense-item-row[data-auto="1"]').forEach(r => r.remove());
+            items.forEach(o => {
+                addExpenseItemRow(`ስራ #${o.id.substring(0, 8)}${o.expenseNote ? ' — ' + o.expenseNote : ''}`, o.expense);
+                const rows = container.querySelectorAll('.expense-item-row');
+                rows[rows.length - 1].dataset.auto = '1';
+            });
+            container.dataset.autoExpSig = sig;
+            if (!container.querySelectorAll('.expense-item-row').length && !document.getElementById('noExpenseItemsMsg')) {
+                const p = document.createElement('p');
+                p.className = 'text-muted text-center';
+                p.id = 'noExpenseItemsMsg';
+                p.textContent = 'ምንም ወጪ አልተመዘገበም';
+                container.appendChild(p);
+            }
+            calcProfit();
+        }
+
+        // ሁሉም የዛሬ ስራ ሪፖርት ተደርጓል → በራስ-ሰር የሚሞሉ መስኮችን ባዶ ማድረግ
+        function techClearReportAutoFields() {
+            const $ = id => document.getElementById(id);
+            ['reportTotalSent', 'reportCompletedCount', 'reportNotCompletedCount'].forEach(id => { if ($(id)) $(id).value = ''; });
+            renderWorkTypeInputs(0);
+            renderNotCompletedReasonInputs(0);
+            const inc = $('reportTotalIncome');
+            if (inc && !inc.dataset.userEdited) inc.value = '';
+            const note = $('autoIncomeNote'); if (note) note.textContent = '';
+            techSyncAutoExpenses([]);
+            calcProfit();
+        }
+
+        // ሪፖርት ከተላከ በኋላ መላውን ፎርም ማጽዳት
+        function techResetReportForm(jobStatuses) {
+            techMarkJobsReported(jobStatuses);
+            const $ = id => document.getElementById(id);
+            ['reportTotalSent', 'reportCompletedCount', 'reportNotCompletedCount', 'reportTotalIncome', 'reportTotalExpense',
+             'reportProfit', 'reportTechSharePercent', 'reportTechShareAmount', 'reportCompanyAmount', 'reportDeposited',
+             'reportExpenseDetails', 'reportRemarks'].forEach(id => { if ($(id)) $(id).value = ''; });
+            if ($('reportTotalIncome')) delete $('reportTotalIncome').dataset.userEdited;
+            renderWorkTypeInputs(0);
+            renderNotCompletedReasonInputs(0);
+            document.querySelectorAll('input[name="readyTomorrow"]').forEach(r => { r.checked = false; });
+            if ($('reportWarrantyPhotos')) $('reportWarrantyPhotos').value = '';
+            if ($('reportBankReceipts')) $('reportBankReceipts').value = '';
+            clearReportPhotoSel();
+            const exp = $('reportExpenseItemsContainer');
+            if (exp) {
+                exp.innerHTML = '<p class="text-muted text-center" id="noExpenseItemsMsg">ምንም ወጪ አልተመዘገበም</p>';
+                delete exp.dataset.autoExpSig;
+            }
+            const note = $('autoIncomeNote'); if (note) note.textContent = '';
+            if ($('reportJobList')) $('reportJobList').innerHTML = '<p class="text-muted text-center">ምንም የዛሬ ስራ የለም</p>';
+            techFillReportDate();
+            calcProfit();
+            try { loadReportJobs(); } catch (e) { console.warn(e); }
+            showToast('🧹 ፎርሙ ጸድቷል — አዲስ ሪፖርት ለማስገባት ዝግጁ ነው', 'success');
+        }
+
+        // ============================================================
         // SUBMIT DAILY REPORT
         // ============================================================
         async function techSubmitDailyReport(e) {
@@ -10222,19 +10304,14 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             btn0.disabled = true;
             btn0.innerHTML = '<i class="fas fa-spinner fa-spin"></i> በመፈተሽ ላይ...';
 
-            // ✅ NEW: የዛሬ ሪፖርት አስቀድሞ ተልኮ ከሆነ ድጋሚ አይላክም
-            try {
-                const dupSnap = await db.collection('dailyReports')
-                    .where('technicianId', '==', technicianId)
-                    .where('dateKey', '==', getDateKey(new Date()))
-                    .limit(1).get();
-                if (!dupSnap.empty) {
-                    showToast('⚠️ የዛሬ ሪፖርት አስቀድሞ ተልኳል፣ ድጋሚ መላክ አይቻልም። ለማስተካከል አድሚኑን ያነጋግሩ።', 'error');
-                    btn0.disabled = false;
-                    btn0.innerHTML = '<i class="fas fa-paper-plane"></i> ሪፖርት አስገባ';
-                    return;
-                }
-            } catch (dupErr) { console.warn('Duplicate report check failed (non-fatal):', dupErr); }
+            // ✅ CHANGED: ሪፖርት ከተላከ በኋላ ፎርሙ ንጹህ ስለሚሆን በዚያው ቀን አዲስ ሪፖርት መላክ ይፈቀዳል።
+            // ባዶ ሪፖርት (ምንም ስራ/ገቢ/ወጪ/አስተያየት የሌለው) ብቻ ይከለከላል።
+            if (!jobStatuses.length && !totalIncome && !totalExpense && !remarks && !expenseDetails) {
+                showToast('⚠️ የሚላክ ምንም መረጃ የለም። አዲስ ስራ ሲኖር ሪፖርት ያስገቡ።', 'error');
+                btn0.disabled = false;
+                btn0.innerHTML = '<i class="fas fa-paper-plane"></i> ሪፖርት አስገባ';
+                return;
+            }
             btn0.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ፎቶ በመጫን ላይ...';
 
             // ✅ FIX (ዝግታ): ፎቶዎች ቀድሞ ሪፖርቱን ከመላክ በፊት አንድ በአንድ Firebase Storage ላይ ይጫኑ ነበር፤
@@ -10393,18 +10470,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-paper-plane"></i> ሪፖርት አስገባ';
 
-                // Reset file inputs
-                document.getElementById('reportWarrantyPhotos').value = '';
-                document.getElementById('reportBankReceipts').value = '';
-                clearReportPhotoSel();
-
-                // ✅ NEW: userEdited ምልክት ማጽዳት - ለቀጣዩ ቀን auto-aggregation ዳግም እንዲሰራ
-                delete document.getElementById('reportTotalIncome').dataset.userEdited;
-
-                // ✅ NEW: ለቀጣዩ ቀን ንፁህ ሆኖ እንዲጀምር የወጪ ዝርዝር ማስገቢያዎችን ማጽዳት
-                document.getElementById('reportExpenseItemsContainer').innerHTML =
-                    '<p class="text-muted text-center" id="noExpenseItemsMsg">ምንም ወጪ አልተመዘገበም</p>';
-                calcProfit();
+                // ✅ NEW: ሪፖርት ከተላከ በኋላ በፎርሙ ላይ የነበረው ዳታ ሁሉ ይጠፋል፤ ለአዲስ ሪፖርት ዝግጁ ይሆናል
+                techResetReportForm(jobStatuses);
 
             } catch (error) {
                 showToast('❌ ሪፖርት መላክ አልተቻለም: ' + error.message, 'error');
