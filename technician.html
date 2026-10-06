@@ -2161,8 +2161,8 @@
                                 <input type="file" id="doneWarrantyPhoto" accept="image/*" />
                             </div>
                             <div class="sub-row">
-                                <label>🎙️ ድምጽ መልእክት</label>
-                                <input type="file" id="doneVoiceNote" accept="audio/*" />
+                                <label>🏦 ባንክ ደረሰኝ</label>
+                                <input type="file" id="doneBankReceipt" accept="image/*" />
                             </div>
                             <div class="sub-row">
                                 <label>📝 የዋራንቲ ቁጥር</label>
@@ -2895,6 +2895,68 @@
         let allOrders = [];
         let allCustomers = [];
         let allTechnicians = [];
+
+        /* ============================================================
+           ⚠️ ዋርኒግ + 🔴/🟢 ሁኔታ ምልክቶች (ቴክኒሻኖች ዝርዝር እና ስራ መድብ ዝርዝር)
+           ============================================================ */
+        const UNREPORTED_HOURS = 24; // ከዚህ ሰዓት በላይ የተመደበ ስራ ሪፖርት ካልተደረገበት ራስ-ሰር ዋርኒግ
+        function startOfTodayMs() { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); }
+        function toMs(v) {
+            try {
+                if (!v) return 0;
+                if (v.toDate) return v.toDate().getTime();
+                if (typeof v.seconds === 'number') return v.seconds * 1000;
+                const t = new Date(v).getTime();
+                return isNaN(t) ? 0 : t;
+            } catch (e) { return 0; }
+        }
+        function techUnreportedCount(tech) {
+            const lim = Date.now() - UNREPORTED_HOURS * 3600 * 1000;
+            return allOrders.filter(o => o.technician === tech.name && o.status === 'Assigned' && toMs(o.assignedAt) > 0 && toMs(o.assignedAt) < lim).length;
+        }
+        /** { reasons:[...], manual:bool, auto:bool } ወይም null */
+        function techWarning(tech) {
+            const reasons = [];
+            const manual = !!(tech.warning && tech.warning.active);
+            if (manual) reasons.push(tech.warning.reason || 'በአድሚን ዋርኒግ ተሰጥቷል');
+            const n = techUnreportedCount(tech);
+            if (n > 0) reasons.push(`${n} ስራ ሪፖርት አልተደረገም (ከ${UNREPORTED_HOURS} ሰዓት በላይ)`);
+            return reasons.length ? { reasons, manual, auto: n > 0 } : null;
+        }
+        function techNotTodayToday(tech) {
+            const lim = startOfTodayMs();
+            return allOrders.some(o => o.technician === tech.name && o.status === 'NotToday' && toMs(o.completedAt) >= lim);
+        }
+        function techIsOffline(t) { return t.isOnline !== true || t.status === 'off-duty'; }
+        function techOptionsHtml() {
+            return fieldTechs().map(t => {
+                const off = techIsOffline(t);
+                const nt = techNotTodayToday(t);
+                const w = techWarning(t);
+                const tags = (nt ? ' ⚠️ዛሬ አይመቸኝም' : '') + (w ? ' 🚩ዋርኒግ' : '') + (off ? ' (ኦፍላይን)' : '');
+                const addr = t.address && t.address !== '—' ? ' - ' + t.address : '';
+                return `<option value="${t.name}">${off ? '🔴' : '🟢'} ${t.name}${tags}${addr}</option>`;
+            }).join('');
+        }
+        async function toggleTechWarning(id) {
+            const t = allTechnicians.find(x => x.id === id);
+            if (!t) return;
+            try {
+                if (t.warning && t.warning.active) {
+                    if (!confirm(`${t.name} ላይ ያለውን ዋርኒግ ማንሳት ይፈልጋሉ?`)) return;
+                    await db.collection('staff').doc(id).update({ warning: { active: false, clearedAt: new Date() } });
+                    showToast('✅ ዋርኒግ ተነስቷል', 'success');
+                } else {
+                    const reason = prompt(`⚠️ ${t.name} ላይ ዋርኒግ ምልክት ለማድረግ ምክንያቱን ይጻፉ:`);
+                    if (reason === null) return;
+                    if (!reason.trim()) { showToast('ምክንያት መጻፍ ያስፈልጋል', 'error'); return; }
+                    await db.collection('staff').doc(id).update({ warning: { active: true, reason: reason.trim().slice(0, 140), at: new Date(), by: 'አስተዳዳሪ' } });
+                    showToast('🚩 ዋርኒግ ተመዝግቧል', 'success');
+                }
+                db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'staff_warning', details: `${t.name}: ዋርኒግ ተቀይሯል`, timestamp: new Date() }).catch(() => {});
+            } catch (e) { showToast('❌ ' + e.message, 'error'); }
+        }
+
         function fieldTechs() { return allTechnicians.filter(t => !t.isPhoneOperator); } // 📞 ኦፕሬተሮች ለስራ አይመደቡም
         let allPendingRegistrations = []; // ✅ NEW: ራሳቸውን የመዘገቡ ግን ገና ያልፀደቁ ተጠቃሚዎች
         let allStaff = [];
@@ -3814,6 +3876,7 @@
                 renderRecentOrders();
                 renderOrders();
                 renderDashNewOrders();
+                renderTechnicians();
                 updateChart();
                 generateReport('daily');
                 tryOpenPendingAssignOrder(); // ✅ NEW: ከቴሌግራም "መድብ" ቁልፍ ከመጣ ትዕዛዙን በራስ-ሰር ክፈት
@@ -4389,7 +4452,7 @@
                 return;
             }
 
-            const techOptions = fieldTechs().map(t => `<option value="${t.name}">${t.name}${t.address && t.address !== '—' ? ' - ' + t.address : ''}</option>`).join('');
+            const techOptions = techOptionsHtml();
 
             list.innerHTML = pendingOrders.map(order => {
                 const date = order.createdAt?.toDate?.() || new Date();
@@ -4442,9 +4505,7 @@
             filtered.forEach(order => {
                 const statusClass = getStatusClass(order.status);
                 const date = order.createdAt?.toDate?.() || new Date();
-                const techOptions = fieldTechs().map(t =>
-                    `<option value="${t.name}">${t.name}${t.address && t.address !== '—' ? ' - ' + t.address : ''}</option>`
-                ).join('');
+                const techOptions = techOptionsHtml();
 
                 let actions = '';
                 if (order.status === 'Pending') {
@@ -4602,6 +4663,17 @@
                 return;
             }
 
+            // ⚠️ ኦፍላይን / "ዛሬ አይመቸኝም" ያለ / ዋርኒግ ያለበት ከሆነ ከመመደብ በፊት ያስጠነቅቃል
+            const _selTech = allTechnicians.find(t => t.name === techName);
+            if (_selTech) {
+                const _warns = [];
+                if (techIsOffline(_selTech)) _warns.push('🔴 ኦፍላይን ነው');
+                if (techNotTodayToday(_selTech)) _warns.push('⚠️ ዛሬ "አይመቸኝም" ብሎ ልኳል');
+                const _w = techWarning(_selTech);
+                if (_w) _warns.push('🚩 ዋርኒግ: ' + _w.reasons.join('፣ '));
+                if (_warns.length && !confirm(`${techName}\n${_warns.join('\n')}\n\nቢሆንም ይመድቡት?`)) return;
+            }
+
             try {
                 await db.collection('orders').doc(orderId).update({
                     status: 'Assigned',
@@ -4701,6 +4773,10 @@ ${locationLine}
 
             const photoURLs = getPhotoURLs(order);
             const voiceURLs = getVoiceURLs(order);
+            const bankURLs = Array.isArray(order.bankReceiptURLs) ? order.bankReceiptURLs : [];
+            const bankHTML = bankURLs.length
+                ? '<div class="photo-gallery">' + bankURLs.map(u => `<img src="${u}" alt="ባንክ ደረሰኝ" onclick="window.open('${u}','_blank')" />`).join('') + '</div>'
+                : '<p class="text-muted">ምንም ደረሰኝ የለም</p>';
 
             // ✅ NEW: ደንበኛ ትዕዛዙን ሲልክ ያያያዘው ፎቶ (የችግሩ ፎቶ) - ከዚህ ቀደም ወደ
             // Telegram ብቻ ይላክ ስለነበር እዚህ (dashboard) ፈጽሞ አይታይም ነበር
@@ -4847,8 +4923,9 @@ ${locationLine}
 
                 <hr style="border:none; border-top:2px solid var(--border); margin:16px 0;" />
 
-                <h4>🎙️ የድምጽ መልእክቶች</h4>
-                ${voiceHTML}
+                <h4>🏦 ባንክ ደረሰኝ</h4>
+                ${bankHTML}
+                ${voiceURLs.length ? `<hr style="border:none; border-top:2px solid var(--border); margin:16px 0;" /><h4>🎙️ የድምጽ መልእክቶች (ቀድሞ የተላኩ)</h4>${voiceHTML}` : ''}
 
                 <hr style="border:none; border-top:2px solid var(--border); margin:16px 0;" />
 
@@ -5077,9 +5154,10 @@ ${locationLine}
                 const statusText = tech.status === 'active' || tech.isOnline ? '✅ ንቁ' : '⚪ ከመስመር ውጭ';
                 const onlineStatus = tech.isOnline ? '🟢 ኦንላይን' : '🔴 ኦፍላይን';
                 const jobs = allOrders.filter(o => o.technician === tech.name).length;
+                const warn = techWarning(tech);
 
                 html += `<tr>
-                    <td><strong>${tech.name || '—'}</strong>${tech.isPhoneOperator ? ' <span class="status-badge status-pending">📞 ኦፕሬተር</span>' : ''}</td>
+                    <td><strong style="${warn ? 'color:#DC2626;' : ''}">${warn ? '🚩 ' : ''}${tech.name || '—'}</strong>${tech.isPhoneOperator ? ' <span class="status-badge status-pending">📞 ኦፕሬተር</span>' : ''}${warn ? `<div style="font-size:0.68rem; color:#DC2626; font-weight:600; margin-top:2px;">${warn.reasons.join(' • ')}</div>` : ''}</td>
                     <td><span style="background:var(--secondary); color:#fff; padding:2px 8px; border-radius:4px; font-family:monospace;">${tech.code || '—'}</span></td>
                     <td>${tech.phone || '—'}</td>
                     <td>${tech.specialty || '—'}</td>
@@ -5088,6 +5166,7 @@ ${locationLine}
                     <td>${jobs}</td>
                     <td>
                         <button class="btn btn-xs btn-primary" onclick="viewTech('${tech.id}')"><i class="fas fa-eye"></i></button>
+                        <button class="btn btn-xs ${warn && warn.manual ? 'btn-danger' : 'btn-secondary'}" title="ዋርኒግ ምልክት አድርግ/አንሳ" onclick="toggleTechWarning('${tech.id}')"><i class="fas fa-flag"></i></button>
                         <button class="btn btn-xs btn-secondary" title="መልእክት ላክ" onclick="showSendMessageModal('${tech.id}')"><i class="fas fa-comment-dots"></i></button>
                         ${(tech.isPhoneOperator || allTechnicians.filter(x => x.isPhoneOperator).length < 2) ? `<button class="btn btn-xs btn-secondary" title="ኦፕሬተር (ስልክ/ሾፕ) አድርግ" onclick="togglePhoneOperator('${tech.id}')"><i class="fas fa-headset"></i></button>` : ''}
                         <button class="btn btn-xs btn-danger" onclick="deleteTech('${tech.id}')"><i class="fas fa-trash"></i></button>
@@ -6334,7 +6413,7 @@ ${locationLine}
         // ጽፎ መላክ እና ወዲያውኑ ለቴክኒሻን መመደብ ይችላል።
         // ============================================================
         function showAddPhoneOrderModal() {
-            const techOptions = fieldTechs().map(t => `<option value="${t.name}">${t.name}${t.address && t.address !== '—' ? ' - ' + t.address : ''}</option>`).join('');
+            const techOptions = techOptionsHtml();
             const bodyHTML = `
                 <div class="form-row">
                     <div class="form-group">
@@ -9216,53 +9295,56 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // SUBMIT: DONE - FIXED with arrays
         // ============================================================
         async function submitDone() {
-            const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
-            if (!orderId) return;
+            if (window._doneBusy) return;
+            const orderId = document.getElementById('completeOrderId').value.trim();
             const price = document.getElementById('donePrice').value;
             const warrantyPhoto = document.getElementById('doneWarrantyPhoto').files[0];
-            const voiceNote = document.getElementById('doneVoiceNote').files[0];
+            const bankReceipt = document.getElementById('doneBankReceipt').files[0];
             const warrantyNumber = document.getElementById('doneWarrantyNumber').value.trim();
             const warrantyPeriod = document.getElementById('doneWarrantyPeriod').value;
             const notes = document.getElementById('doneNotes').value.trim();
 
-            if (!price || parseFloat(price) <= 0) {
-                showToast('እባክዎ ትክክለኛ ዋጋ ያስገቡ', 'error');
-                return;
-            }
+            if (!orderId) { showToast('እባክዎ የስራ መለያ ያስገቡ', 'error'); return; }
+            if (!price || parseFloat(price) <= 0) { showToast('እባክዎ ትክክለኛ ዋጋ ያስገቡ', 'error'); return; }
+
+            // ✅ ፍጥነት፦ ወዲያውኑ ምልክት ያሳያል፣ ድርብ ጠቅታን ይከለክላል
+            const btn = document.getElementById('submitDone');
+            const origHtml = btn.innerHTML;
+            const busy = (t) => { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + t; };
+            window._doneBusy = true;
+            busy('በመላክ ላይ...');
+            const withTimeout = (p, ms, label) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(label)), ms))]);
+
+            // ፎቶ/ደረሰኝ ተጨምቆ በትይዩ (በአንድ ጊዜ) ይጫናል — ከዚህ በፊት አንድ በአንድ ነበር
+            const upload = async (file, prefix) => {
+                if (!file) return null;
+                const c = await compressImageFile(file);
+                const ref = storage.ref(`warranty_photos/${orderId}/${prefix}${file.name}`);
+                await withTimeout(ref.put(c), 45000, 'ፎቶው አልተጫነም (ኔትወርክ ደካማ ነው)፤ እንደገና ይሞክሩ');
+                return ref.getDownloadURL();
+            };
 
             try {
-                let photoURL = null;
-                // ✅ NEW: ፎቶው ከመጫኑ በፊት ይጨመቃል (ፈጣን + ዳታ ቆጣቢ)፤ ያው የተጨመቀው ፋይል ወደ ቴሌግራምም ይላካል
-                const warrantyPhotoC = warrantyPhoto ? await compressImageFile(warrantyPhoto) : null;
-                if (warrantyPhotoC) {
-                    const storageRef = storage.ref(`warranty_photos/${orderId}/${warrantyPhoto.name}`);
-                    await storageRef.put(warrantyPhotoC);
-                    photoURL = await storageRef.getDownloadURL();
-                }
+                if (warrantyPhoto || bankReceipt) busy('ፎቶ በመጫን ላይ...');
+                const [photoURL, bankURL] = await Promise.all([upload(warrantyPhoto, ''), upload(bankReceipt, 'bank_')]);
 
-                let voiceURL = null;
-                if (voiceNote) {
-                    const storageRef = storage.ref(`voice_notes/${orderId}/${voiceNote.name}`);
-                    await storageRef.put(voiceNote);
-                    voiceURL = await storageRef.getDownloadURL();
-                }
-
+                busy('በማስቀመጥ ላይ...');
                 const startDate = new Date();
                 const endDate = new Date();
                 endDate.setMonth(endDate.getMonth() + parseInt(warrantyPeriod));
+                const priceNum = parseFloat(price);
 
-                await db.collection('orders').doc(orderId).update({
+                const orderUpdate = db.collection('orders').doc(orderId).update({
                     status: 'Completed',
-                    price: parseFloat(price),
+                    price: priceNum,
                     completedAt: new Date(),
                     completionOption: 'done',
-                    // FIX: store as arrays
                     warrantyPhotoURLs: photoURL ? [photoURL] : [],
-                    voiceNoteURLs: voiceURL ? [voiceURL] : [],
+                    bankReceiptURLs: bankURL ? [bankURL] : [],
                     warrantyPhotoName: warrantyPhoto ? warrantyPhoto.name : null,
                     warrantyPhotoUploadedAt: new Date(),
-                    voiceNoteName: voiceNote ? voiceNote.name : null,
-                    voiceNoteUploadedAt: new Date(),
+                    bankReceiptName: bankReceipt ? bankReceipt.name : null,
+                    bankReceiptUploadedAt: bankURL ? new Date() : null,
                     warrantyNumber: warrantyNumber || `HALAL-${Date.now().toString().slice(-6)}`,
                     warrantyPeriod: parseInt(warrantyPeriod),
                     warrantyStart: startDate.toISOString().split('T')[0],
@@ -9270,10 +9352,9 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     warrantyStatus: 'active',
                     technicianNotes: notes || ''
                 });
-
-                await db.collection('transactions').add({
+                const txAdd = db.collection('transactions').add({
                     description: `ክፍያ: ስራ #${orderId.substring(0,8)}`,
-                    amount: parseFloat(price),
+                    amount: priceNum,
                     type: 'income',
                     staff: technicianName,
                     orderId: orderId,
@@ -9281,37 +9362,36 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     createdAt: new Date()
                 });
 
-                await db.collection('activity').add({
+                // ሁለቱ በትይዩ፤ ኔትወርክ ከሌለ ገጹ እንዳይቆም ከ15 ሰከንድ በኋላ ወደ ቀጣዩ ይሄዳል
+                let queued = false;
+                try { await withTimeout(Promise.all([orderUpdate, txAdd]), 15000, 'SAVE_TIMEOUT'); }
+                catch (e) { if (e.message === 'SAVE_TIMEOUT') queued = true; else throw e; }
+
+                // የቀሩት (ማስታወሻ + ቴሌግራም) ተጠቃሚውን አያስጠብቁም — ከበስተጀርባ ይላካሉ
+                db.collection('activity').add({
                     user: technicianName,
                     action: 'complete_job',
                     details: `ስራ #${orderId.substring(0,8)} ተጠናቋል, ${price} ብር`,
                     timestamp: new Date()
-                });
-
-                await tgMuted(`
+                }).catch(() => {});
+                Promise.resolve(tgMuted(`
                 ✅ *ስራ ተጠናቋል!* 🎉
                 🆔 *ትዕዛዝ:* #${orderId.substring(0,8)}
                 💰 *ዋጋ:* ${price} ብር
                 👨‍🔧 *ቴክኒሻን:* ${technicianName}
                 📸 ዋራንቲ: ${warrantyPhoto ? '✅ ተጨምሯል' : '—'}
-                🎙️ ድምጽ: ${voiceNote ? '✅ ተጨምሯል' : '—'}
+                🏦 ባንክ ደረሰኝ: ${bankReceipt ? '✅ ተጨምሯል' : '—'}
                 🏷️ ዋራንቲ ቁጥር: ${warrantyNumber || '—'}
                 📅 ዋራንቲ ጊዜ: ${warrantyPeriod} ወር
                 📅 ${formatEthDateTime(new Date())}
-                `);
+                `)).catch(() => {});
 
-                // ✅ NEW: የዋራንቲ ፎቶውን ወደ ቴሌግራም መላክ
-                let photoTgOk = true;
-                if (warrantyPhotoC) {
-                    photoTgOk = true; // (የዋራንቲ ፎቶ ወደ አድሚን ቦት አይላክም - በሪፖርት ብቻ)
-                }
-
-                showToast(`✅ ስራ ተጠናቋል! ${price} ብር ገቢ ተጨምሯል`, 'success');
-                if (!photoTgOk) showToast('⚠️ ፎቶው ተመዝግቧል፣ ነገር ግን ወደ ቴሌግራም አልደረሰም።', 'error');
+                if (queued) showToast('⏳ ኔትወርክ ደካማ ነው — ተመዝግቧል፣ ሲገናኝ በራሱ ይላካል', 'error');
+                else showToast(`✅ ስራ ተጠናቋል! ${price} ብር ገቢ ተጨምሯል`, 'success');
 
                 document.getElementById('donePrice').value = '';
                 document.getElementById('doneWarrantyPhoto').value = '';
-                document.getElementById('doneVoiceNote').value = '';
+                document.getElementById('doneBankReceipt').value = '';
                 document.getElementById('doneWarrantyNumber').value = '';
                 document.getElementById('doneNotes').value = '';
                 document.getElementById('completeOrderId').value = '';
@@ -9319,10 +9399,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 document.getElementById('selectedOptionDisplay').textContent = '';
                 document.querySelectorAll('.sub-content').forEach(el => el.style.display = 'none');
                 document.getElementById('subQuestions').classList.remove('active');
-
             } catch (error) {
                 showToast('❌ ስህተት: ' + error.message, 'error');
                 console.error('Error completing job:', error);
+            } finally {
+                window._doneBusy = false;
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
             }
         }
 
