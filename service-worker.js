@@ -21,7 +21,7 @@ fcm.onBackgroundMessage((payload)=>{
   });
 });
 
-const CACHE_NAME = 'halal-report-v1.5.1-secure';
+const CACHE_NAME = 'halal-report-v1.5.2-secure';
 const CORE_ASSETS = [
   './index.html', './admin.html', './technician.html', './customer.html', './manifest.json', './admin-manifest.json', './operator.html', './operator-manifest.json', './customer-manifest.json',
   './icon-192.png', './icon-512.png', './hero-bg.jpg', './offline.html'
