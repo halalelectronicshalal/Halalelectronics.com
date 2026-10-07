@@ -1165,9 +1165,23 @@
         }
         .contact-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
             gap: 50px;
             margin-top: 32px;
+        }
+        .contact-info, .contact-map {
+            min-width: 0;
+            max-width: 100%;
+        }
+        .contact-info p {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+        .contact-map .map-placeholder {
+            width: 100%;
+        }
+        .contact-map .map-placeholder p {
+            overflow-wrap: anywhere;
         }
         .contact-info p a {
             color: var(--text);
@@ -1341,7 +1355,7 @@
                 text-align: center;
             }
             .contact-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: minmax(0, 1fr);
             }
             footer .container {
                 grid-template-columns: 1fr 1fr;
