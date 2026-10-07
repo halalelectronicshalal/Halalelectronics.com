@@ -26,9 +26,11 @@
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
-    <!-- Leaflet for Map -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Leaflet + OpenStreetMap (ከ SRI ጋር) -->
+    <link rel="preconnect" href="https://tile.openstreetmap.org" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="ethiopia-map.js"></script>
     
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js">
@@ -7460,53 +7462,36 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // ============================================================
         // ✅ NEW: reusable loader - ተመሳሳይ ሎጂክ ለ ትንሽ ካርታ እና ለ ሙሉ (fullscreen) ካርታ ያገለግላል
         async function populateTechMap(map, markersArr) {
+            // የቀድሞ ምልክቶችን አጽዳ (ሲታደስ እንዳይደራረቡ)
+            markersArr.forEach(m => { try { m.remove(); } catch (e) {} });
+            markersArr.length = 0;
             try {
                 const snapshot = await db.collection('technician_locations')
                     .orderBy('timestamp', 'desc')
                     .limit(100)
                     .get();
 
+                // ለእያንዳንዱ ቴክኒሻን የመጨረሻውን (አዲሱን) ቦታ ብቻ፤ ልክ ያልሆኑ መጋጠሚያዎች ይታለፋሉ
                 const locations = {};
                 snapshot.forEach(doc => {
                     const data = doc.data();
-                    const key = data.technician;
-                    if (data.latitude && data.longitude) {
-                        // Keep the latest per technician (since we order by timestamp desc)
-                        if (!locations[key]) {
-                            locations[key] = data;
-                        }
+                    if (data.technician && !locations[data.technician] && HEMap.validCoords(data.latitude, data.longitude)) {
+                        locations[data.technician] = data;
                     }
                 });
 
-                // Add markers
-                const techNames = Object.keys(locations);
-                if (techNames.length === 0) {
-                    // Show a message on the map
-                    L.popup()
-                        .setLatLng([9.0322, 38.7422])
-                        .setContent('ምንም ቴክኒሻን ቦታ አልተጋራም')
-                        .openOn(map);
-                } else {
-                    techNames.forEach(name => {
-                        const loc = locations[name];
-                        const popupContent = `
-                            <strong>${loc.technician}</strong><br/>
-                            ሁኔታ: ${loc.status || '—'}<br/>
-                            ${loc.timestamp?.toDate ? formatEthDateTime(loc.timestamp) : '—'}
-                        `;
-                        const marker = L.marker([loc.latitude, loc.longitude])
-                            .addTo(map)
-                            .bindPopup(popupContent);
-                        markersArr.push(marker);
-                    });
+                const names = Object.keys(locations);
+                if (names.length === 0) {
+                    L.popup().setLatLng(HEMap.ADDIS_CENTER).setContent('ምንም ቴክኒሻን ቦታ አልተጋራም').openOn(map);
+                    return;
                 }
-
-                // If we have locations, zoom to fit them
-                if (techNames.length > 0) {
-                    const group = L.featureGroup(markersArr);
-                    map.fitBounds(group.getBounds().pad(0.1));
-                }
-
+                names.forEach(name => {
+                    const loc = locations[name];
+                    const when = loc.timestamp && loc.timestamp.toDate ? formatEthDateTime(loc.timestamp) : '—';
+                    const popupContent = `<strong>${HEMap.esc(loc.technician)}</strong><br/>ሁኔታ: ${HEMap.esc(loc.status || '—')}<br/>${HEMap.esc(when)}`;
+                    markersArr.push(L.marker([Number(loc.latitude), Number(loc.longitude)]).addTo(map).bindPopup(popupContent));
+                });
+                HEMap.fitPoints(map, markersArr.map(m => [m.getLatLng().lat, m.getLatLng().lng]), { maxZoom: 15 });
             } catch (error) {
                 console.error('Map load error:', error);
                 showToast('❌ ካርታ መጫን አልተቻለም', 'error');
@@ -7516,20 +7501,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         async function loadTechMap() {
             const container = document.getElementById('mapContainer');
             if (!container) return;
-
-            // If map already exists, remove it
-            if (mapInstance) {
-                mapInstance.remove();
-                mapInstance = null;
-                mapMarkers = [];
-            }
-
-            // Create map
-            mapInstance = L.map(container).setView([9.0322, 38.7422], 12);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors'
-            }).addTo(mapInstance);
-
+            if (mapInstance) { mapInstance.remove(); mapInstance = null; mapMarkers = []; }
+            mapInstance = HEMap.create(container);   // አዲስ አበባ · zoom 12 · ወሰን: ኢትዮጵያ
             await populateTechMap(mapInstance, mapMarkers);
         }
 
@@ -7562,10 +7535,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     fullMapMarkers = [];
                 }
                 const container = document.getElementById('fullMapContainer');
-                fullMapInstance = L.map(container).setView([9.0322, 38.7422], 12);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; OpenStreetMap contributors'
-                }).addTo(fullMapInstance);
+                fullMapInstance = HEMap.create(container);
                 populateTechMap(fullMapInstance, fullMapMarkers);
             }, 50);
         }
