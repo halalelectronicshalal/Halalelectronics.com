@@ -1301,6 +1301,17 @@
                         <label>🏠 አድራሻ</label>
                         <input type="text" id="regAddress" placeholder="አድራሻዎን ያስገቡ" required />
                     </div>
+                    <div class="form-group" id="regLocationGroup">
+                        <label>📍 አካባቢ (Latitude / Longitude)</label>
+                        <button type="button" class="btn btn-outline" id="regGpsBtn" onclick="captureRegistrationLocation()" style="width:100%; margin-bottom:8px;">
+                            <i class="fas fa-location-crosshairs"></i> <span id="regGpsBtnText">አካባቢዬን በGPS አግኝ</span>
+                        </button>
+                        <div style="display:flex; gap:8px;">
+                            <input type="number" id="regLat" step="any" min="-90" max="90" inputmode="decimal" placeholder="Latitude (ለምሳሌ 9.0054)" oninput="onRegLocationManualInput()" />
+                            <input type="number" id="regLng" step="any" min="-180" max="180" inputmode="decimal" placeholder="Longitude (ለምሳሌ 38.7636)" oninput="onRegLocationManualInput()" />
+                        </div>
+                        <small id="regLocationStatus" style="color:#64748B; font-size:0.75rem; display:block; margin-top:6px;">GPS ቁልፉን ይንኩ፤ አልሰራ ካለ ቁጥሮቹን በእጅ ማስገባት ይችላሉ።</small>
+                    </div>
                     <div class="form-group">
                         <label>🔒 የይለፍ ቃል</label>
                         <input type="password" id="regPassword" placeholder="የይለፍ ቃል ይምረጡ" required />
@@ -3400,6 +3411,85 @@
         // ============================================================
         // ✅ NEW: ራስ-ምዝገባ (Registration) - ቴክኒሻን ወይም (በኮድ) አድሚን
         // ============================================================
+        // ============================================================
+        // 📍 ምዝገባ ላይ የቴክኒሻን አካባቢ (GPS) መያዝ
+        // ============================================================
+        const REG_LOCATION_REQUIRED = true; // false ካደረጉ አካባቢ አማራጭ ይሆናል
+        let regLocationMeta = { source: null, accuracy: null };
+
+        function setRegLocationStatus(msg, color) {
+            const el = document.getElementById('regLocationStatus');
+            if (!el) return;
+            el.textContent = msg;
+            el.style.color = color || '#64748B';
+        }
+        function validLatLng(lat, lng) {
+            return Number.isFinite(lat) && Number.isFinite(lng) &&
+                   lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 &&
+                   !(lat === 0 && lng === 0);
+        }
+        function readRegLocation() {
+            const latRaw = document.getElementById('regLat').value.trim();
+            const lngRaw = document.getElementById('regLng').value.trim();
+            if (!latRaw && !lngRaw) return { empty: true };
+            const lat = parseFloat(latRaw), lng = parseFloat(lngRaw);
+            if (!validLatLng(lat, lng)) return { invalid: true };
+            return {
+                latitude: parseFloat(lat.toFixed(6)),
+                longitude: parseFloat(lng.toFixed(6)),
+                accuracy: regLocationMeta.source === 'gps' ? regLocationMeta.accuracy : null,
+                source: regLocationMeta.source || 'manual'
+            };
+        }
+        function onRegLocationManualInput() {
+            // ተጠቃሚው ቁጥር በእጅ ከቀየረ ምንጩ "manual" ይሆናል
+            regLocationMeta = { source: 'manual', accuracy: null };
+            setRegLocationStatus('✏️ በእጅ የገባ አካባቢ', '#94A3B8');
+        }
+        function resetRegLocation() {
+            regLocationMeta = { source: null, accuracy: null };
+            const btnText = document.getElementById('regGpsBtnText');
+            if (btnText) btnText.textContent = 'አካባቢዬን በGPS አግኝ';
+            setRegLocationStatus('GPS ቁልፉን ይንኩ፤ አልሰራ ካለ ቁጥሮቹን በእጅ ማስገባት ይችላሉ።');
+        }
+        function captureRegistrationLocation() {
+            const btn = document.getElementById('regGpsBtn');
+            const btnText = document.getElementById('regGpsBtnText');
+            if (!window.isSecureContext || !navigator.geolocation) {
+                setRegLocationStatus('⚠️ ይህ አሳሽ GPS አይደግፍም (ወይም HTTPS አይደለም)። ቁጥሮቹን በእጅ ያስገቡ።', '#F59E0B');
+                return;
+            }
+            btn.disabled = true;
+            btnText.textContent = 'አካባቢ በመፈለግ ላይ...';
+            setRegLocationStatus('⏳ GPS በመፈለግ ላይ... (ፍቃድ ከተጠየቀ «Allow» ይምረጡ)', '#94A3B8');
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const lat = pos.coords.latitude, lng = pos.coords.longitude;
+                    document.getElementById('regLat').value = lat.toFixed(6);
+                    document.getElementById('regLng').value = lng.toFixed(6);
+                    regLocationMeta = {
+                        source: 'gps',
+                        accuracy: Number.isFinite(pos.coords.accuracy) ? Math.round(pos.coords.accuracy) : null
+                    };
+                    const acc = regLocationMeta.accuracy;
+                    setRegLocationStatus('✅ አካባቢ ተገኝቷል' + (acc ? ` (ትክክለኛነት ≈ ${acc} ሜትር)` : ''), '#10B981');
+                    btn.disabled = false;
+                    btnText.textContent = 'እንደገና አግኝ';
+                },
+                (err) => {
+                    const msgs = {
+                        1: '⛔ የአካባቢ ፍቃድ ተከልክሏል። በአሳሹ Settings ውስጥ Location ፍቀዱ ወይም ቁጥሮቹን በእጅ ያስገቡ።',
+                        2: '⚠️ አካባቢ አልተገኘም። GPS (Location) መብራቱን ያረጋግጡ ወይም ቁጥሮቹን በእጅ ያስገቡ።',
+                        3: '⌛ ጊዜው አልፏል። እንደገና ይሞክሩ ወይም ቁጥሮቹን በእጅ ያስገቡ።'
+                    };
+                    setRegLocationStatus(msgs[err && err.code] || '⚠️ አካባቢ ማግኘት አልተቻለም። ቁጥሮቹን በእጅ ያስገቡ።', '#F59E0B');
+                    btn.disabled = false;
+                    btnText.textContent = 'አካባቢዬን በGPS አግኝ';
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            );
+        }
+
         document.getElementById('registerForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const name = document.getElementById('regName').value.trim();
@@ -3417,6 +3507,20 @@
                 errorEl.classList.add('show');
                 return;
             }
+
+            // 📍 አካባቢ (ቴክኒሻን ሲመዘገብ)
+            const regLoc = readRegLocation();
+            if (regLoc.invalid) {
+                errorEl.textContent = '❌ Latitude (-90…90) እና Longitude (-180…180) ትክክለኛ ቁጥሮች መሆን አለባቸው';
+                errorEl.classList.add('show');
+                return;
+            }
+            if (regLoc.empty && REG_LOCATION_REQUIRED && !adminCode) {
+                errorEl.textContent = '📍 እባክዎ አካባቢዎን ያስገቡ - «አካባቢዬን በGPS አግኝ» ን ይንኩ';
+                errorEl.classList.add('show');
+                return;
+            }
+            const locationPayload = regLoc.empty ? undefined : regLoc;
 
             // ✅ ቴክኒሻኖች የአድሚን ኮድ ሳያስፈልጋቸው በራሳቸው ይመዘገባሉ (ማጽደቅ በመጠበቅ ላይ)።
             // የአድሚን ኮድ ከገባ ግን ትክክለኛ መሆን አለበት - ትክክል ካልሆነ ምዝገባው ይታገዳል።
@@ -3446,7 +3550,7 @@
             await passwordSyncReady;
 
             try {
-                const reg = await callWorker('register', { name, phone, address, password, adminCode: adminCode || undefined });
+                const reg = await callWorker('register', { name, phone, address, password, adminCode: adminCode || undefined, location: locationPayload });
                 if (!reg || !reg.ok) {
                     const msgs = {
                         'duplicate': '❌ ይህ ስልክ ቁጥር አስቀድሞ ተመዝግቧል፣ ይግቡ',
@@ -3466,6 +3570,7 @@
                 window._hePendingLogin = isAdmin ? null : { phone, password };
 
                 document.getElementById('registerForm').reset();
+                resetRegLocation();
 
                 if (isAdmin) {
                     await tgMuted(`
@@ -3482,7 +3587,7 @@
                 } else {
                     const dashboardUrl = ADMIN_PAGE_URL();
                     await sendTelegramNotificationWithButton(
-                        `🆕 *አዲስ ተመዝጋቢ (ቴክኒሻን) - ማጽደቅ ይጠብቃል!*\n\n👤 *ስም:* ${name}\n📱 *ስልክ:* ${phone}\n🏠 *አድራሻ:* ${address}\n\n⏰ ${formatEthDateTime(new Date())}`,
+                        `🆕 *አዲስ ተመዝጋቢ (ቴክኒሻን) - ማጽደቅ ይጠብቃል!*\n\n👤 *ስም:* ${name}\n📱 *ስልክ:* ${phone}\n🏠 *አድራሻ:* ${address}${locationPayload ? `\n📍 *አካባቢ:* https://www.google.com/maps?q=${locationPayload.latitude},${locationPayload.longitude}` : ''}\n\n⏰ ${formatEthDateTime(new Date())}`,
                         '✅ ዳሽቦርድ ከፍቶ ማጽደቅ',
                         dashboardUrl
                     );
@@ -3913,7 +4018,7 @@
                 html += `<tr>
                     <td><strong>${p.name || '—'}</strong></td>
                     <td>${p.phone || '—'}</td>
-                    <td>${p.address || '—'}</td>
+                    <td>${p.address || '—'}${(p.registeredLat != null && validLatLng(Number(p.registeredLat), Number(p.registeredLng))) ? `<br><a href="https://www.google.com/maps?q=${Number(p.registeredLat)},${Number(p.registeredLng)}" target="_blank" rel="noopener noreferrer" style="font-size:0.8rem;">📍 ካርታ ላይ እይ</a>` : ''}</td>
                     <td>${formatEthDateTime(p.createdAt) || '—'}</td>
                     <td>
                         <button class="btn btn-xs btn-success" onclick="approveRegistration('${p.id}')"><i class="fas fa-check"></i> አጽድቅ</button>
