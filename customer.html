@@ -28,9 +28,11 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 
-    <!-- Leaflet (free, no API key) - used to show the customer's pinned repair location on a map -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Leaflet + OpenStreetMap (ከ SRI ጋር) -->
+    <link rel="preconnect" href="https://tile.openstreetmap.org" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="ethiopia-map.js"></script>
 
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js">
@@ -1214,6 +1216,13 @@
             border-radius: var(--radius);
             border: none;
         }
+        .contact-map #shopMap {
+            width: 100%;
+            height: 250px;
+            border-radius: var(--radius);
+            overflow: hidden;
+            z-index: 0;
+        }
         .contact-map .map-placeholder {
             display: flex;
             flex-direction: column;
@@ -1415,7 +1424,7 @@
                 grid-template-columns: 1fr 1fr;
                 gap: 12px;
             }
-            .contact-map iframe {
+            .contact-map iframe, .contact-map #shopMap {
                 height: 200px;
             }
         }
@@ -1451,7 +1460,7 @@
             .stat-card h3 {
                 font-size: 1.5rem;
             }
-            .contact-map iframe {
+            .contact-map iframe, .contact-map #shopMap {
                 height: 180px;
             }
             .toast {
@@ -2014,7 +2023,7 @@
                         <i class="fas fa-map-pin"></i>
                         <p style="font-weight:600; color:#FFFFFF;">አዲስ አበባ፣ ቤተል አልሞን ህንፃ</p>
                         <p style="font-size:0.85rem; color:#94A3B8;">ቦሌ፣ ኪርኮስ፣ ልደታ፣ የካ፣ ንፋስ ስልክ</p>
-                        <iframe src="https://maps.google.com/maps?q=HalAl+Electronic+%26+Maintenance%2C+Kolfe%2C+Addis+Ababa&t=&z=16&ie=UTF8&iwloc=&output=embed" width="100%" height="250" style="border:0; border-radius:12px;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+                        <div id="shopMap" role="region" aria-label="የሱቁ ቦታ በካርታ"></div>
                     </div>
                 </div>
             </div>
@@ -2406,21 +2415,39 @@ function updateAddressMatch(){
         // ============================================================
         // GPS LOCATION
         // ============================================================
+        // ============================================================
+        // 🗺️ የሱቅ ካርታ (Leaflet + OpenStreetMap) — ሲታይ ብቻ ይጫናል
+        // ============================================================
+        (function initShopMap() {
+            const el = document.getElementById('shopMap');
+            if (!el || typeof HEMap === 'undefined') return;
+            let done = false;
+            function build() {
+                if (done) return; done = true;
+                const s = HEMap.SHOP;
+                const map = HEMap.create(el, { center: [s.lat, s.lng], zoom: 16 });
+                const dir = 'https://www.google.com/maps/dir/?api=1&destination=' + s.lat + ',' + s.lng;
+                L.marker([s.lat, s.lng]).addTo(map)
+                    .bindPopup('<strong>' + HEMap.esc(s.name) + '</strong><br/><a href="' + dir + '" target="_blank" rel="noopener">አቅጣጫ አሳየኝ</a>')
+                    .openPopup();
+            }
+            if ('IntersectionObserver' in window) {
+                const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { io.disconnect(); build(); } }, { rootMargin: '200px' });
+                io.observe(el);
+            } else build();
+        })();
+
         let customerLocationMap = null;
         let customerLocationMarker = null;
 
         // ✅ NEW: Leaflet (OpenStreetMap) ካርታ ላይ የደንበኛውን ፒን ማሳያ
         function showCustomerLocationOnMap(lat, lng) {
             const mapEl = document.getElementById('locationMap');
-            if (!mapEl || typeof L === 'undefined') return;
+            if (!mapEl || typeof L === 'undefined' || typeof HEMap === 'undefined') return;
             mapEl.style.display = 'block';
 
             if (!customerLocationMap) {
-                customerLocationMap = L.map(mapEl).setView([lat, lng], 16);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    maxZoom: 19,
-                    attribution: '&copy; OpenStreetMap contributors'
-                }).addTo(customerLocationMap);
+                customerLocationMap = HEMap.create(mapEl, { center: [lat, lng], zoom: 16, restrict: HEMap.inEthiopia(lat, lng) });
                 customerLocationMarker = L.marker([lat, lng]).addTo(customerLocationMap);
             } else {
                 customerLocationMap.setView([lat, lng], 16);
