@@ -7995,7 +7995,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 if (firstSnapshot) {
                     firstSnapshot = false;
                     if (markers.size) {
-                        HEMap.fitPoints(map, Array.from(markers.values()).map(m => [m.getLatLng().lat, m.getLatLng().lng]), { maxZoom: 15 });
+                        HEMap.fitPoints(map, Array.from(markers.values()).map(m => [m.getLatLng().lat, m.getLatLng().lng]), { maxZoom: 16, singleZoom: 16 });
                     }
                 }
             }, (error) => {
@@ -8036,7 +8036,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const container = document.getElementById('mapContainer');
             if (!container) return;
             if (mapInstance) { mapInstance.remove(); mapInstance = null; mapMarkers = []; }
-            mapInstance = HEMap.create(container);   // አዲስ አበባ · zoom 12 · ወሰን: ኢትዮጵያ
+            mapInstance = HEMap.create(container, { zoom: 14 });   // አዲስ አበባ · የመንገድ ስሞች የሚነበቡበት ቅርበት (የደንበኛ ገጽ ካርታ ዓይነት) · ወሰን: ኢትዮጵያ
             await populateTechMap(mapInstance, mapMarkers);
         }
 
@@ -8069,7 +8069,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     fullMapMarkers = [];
                 }
                 const container = document.getElementById('fullMapContainer');
-                fullMapInstance = HEMap.create(container);
+                fullMapInstance = HEMap.create(container, { zoom: 14 });
                 populateTechMap(fullMapInstance, fullMapMarkers);
             }, 50);
         }
