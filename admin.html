@@ -7944,6 +7944,15 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (!map) return null;
             if (map._liveTechPins) return map._liveTechPins;
 
+            // በፒኑ ላይ የሚታየው የቴክኒሻን ስም ዘይቤ (አንድ ጊዜ ብቻ ይጨመራል)
+            if (!document.getElementById('techPinLabelStyle')) {
+                const st = document.createElement('style');
+                st.id = 'techPinLabelStyle';
+                st.textContent = '.leaflet-tooltip.tech-pin-label{background:#0F4C81;color:#fff;border:2px solid #fff;border-radius:8px;padding:3px 9px;font-size:13px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.35);white-space:nowrap}' +
+                    '.leaflet-tooltip-top.tech-pin-label::before{border-top-color:#fff}';
+                document.head.appendChild(st);
+            }
+
             const markers = new Map();   // technicianId → L.Marker
             const known = new Map();     // technicianId → የመጨረሻው staff data (ለ stale ፍተሻ)
             let firstSnapshot = true;
@@ -7977,8 +7986,11 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 if (existing) {                        // አሁንም ነጻ → ቦታውን/መረጃውን ብቻ ያዘምናል (ፒኑ አይደገምም)
                     existing.setLatLng([lat, lng]);
                     existing.setPopupContent(techPinPopupHtml(t));
+                    existing.setTooltipContent(HEMap.esc(t.name || '—'));
                 } else {
-                    const m = L.marker([lat, lng], { title: t.name || '' }).addTo(map).bindPopup(techPinPopupHtml(t));
+                    const m = L.marker([lat, lng], { title: t.name || '' }).addTo(map)
+                        .bindPopup(techPinPopupHtml(t))
+                        .bindTooltip(HEMap.esc(t.name || '—'), { permanent: true, direction: 'top', offset: [-3, -30], className: 'tech-pin-label' });
                     markers.set(id, m);
                 }
             }
@@ -8036,7 +8048,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const container = document.getElementById('mapContainer');
             if (!container) return;
             if (mapInstance) { mapInstance.remove(); mapInstance = null; mapMarkers = []; }
-            mapInstance = HEMap.create(container, { zoom: 14 });   // አዲስ አበባ · የመንገድ ስሞች የሚነበቡበት ቅርበት (የደንበኛ ገጽ ካርታ ዓይነት) · ወሰን: ኢትዮጵያ
+            mapInstance = HEMap.create(container, { zoom: 14, retina: true });   // አዲስ አበባ · የመንገድ ስሞች የሚነበቡበት ቅርበት (የደንበኛ ገጽ ካርታ ዓይነት) · ወሰን: ኢትዮጵያ
             await populateTechMap(mapInstance, mapMarkers);
         }
 
@@ -8069,7 +8081,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     fullMapMarkers = [];
                 }
                 const container = document.getElementById('fullMapContainer');
-                fullMapInstance = HEMap.create(container, { zoom: 14 });
+                fullMapInstance = HEMap.create(container, { zoom: 14, retina: true });
                 populateTechMap(fullMapInstance, fullMapMarkers);
             }, 50);
         }
