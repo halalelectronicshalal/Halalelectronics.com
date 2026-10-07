@@ -57,12 +57,20 @@
       tap: true
     });
 
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    var tileOpts = {
       maxZoom: 19,
       keepBuffer: 4,                       // ሲጎትቱ ባዶ ሰሌዳ እንዳይታይ
       updateWhenIdle: L.Browser.mobile,    // ሞባይል ላይ ዳታ ይቆጥባል
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors'
-    }).addTo(map);
+    };
+    /* opts.retina: ባለ ከፍተኛ ጥራት ስልክ ስክሪን ላይ ካርታው እንዳይደበዝዝ 2x ሰሌዳዎች ይጫናሉ
+       (Leaflet ለ retina የሰሌዳውን maxZoom በ1 ስለሚቀንስ እዚህ 20 + maxNativeZoom 18 ተደርጓል) */
+    if (opts.retina && L.Browser.retina) {
+      tileOpts.detectRetina = true;
+      tileOpts.maxZoom = 20;
+      tileOpts.maxNativeZoom = 18;
+    }
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", tileOpts).addTo(map);
 
     if (opts.scale !== false) L.control.scale({ metric: true, imperial: false, position: "bottomleft" }).addTo(map);
 
