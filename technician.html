@@ -7562,42 +7562,129 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // ============================================================
         // MAP - NOW WORKING
         // ============================================================
-        // ✅ NEW: reusable loader - ተመሳሳይ ሎጂክ ለ ትንሽ ካርታ እና ለ ሙሉ (fullscreen) ካርታ ያገለግላል
-        async function populateTechMap(map, markersArr) {
-            // የቀድሞ ምልክቶችን አጽዳ (ሲታደስ እንዳይደራረቡ)
-            markersArr.forEach(m => { try { m.remove(); } catch (e) {} });
-            markersArr.length = 0;
-            try {
-                const snapshot = await db.collection('technician_locations')
-                    .orderBy('timestamp', 'desc')
-                    .limit(100)
-                    .get();
+        // ============================================================
+        // 🟢 LIVE TECHNICIAN PINS — "ነጻ" (Available) ቴክኒሻኖች ብቻ በቀጥታ ካርታ ላይ
+        // ------------------------------------------------------------
+        // • ምንጭ፦ Firestore `staff` (role == technician) — በ onSnapshot ቀጥታ ይከታተላል
+        // • Available = staff.status === 'free' ("🟢 ነጻ") እና isOnline === true
+        // • ሌላ ማንኛውም ሁኔታ (working / off-duty / inactive / ወጥቷል) ወይም የተሰረዘ ቴክኒሻን
+        //   → ያ አንድ ፒን ብቻ ወዲያውኑ በ map.removeLayer ይወገዳል፣ ማጣቀሻውም ይሰረዛል
+        // • ፒኖች በቴክኒሻኑ ID (staff doc id) ይቀመጣሉ → Map<technicianId, L.Marker>
+        // ============================================================
+        const LIVE_PIN_AVAILABLE_STATUS = 'free';
+        const LIVE_PIN_STALE_MS = 5 * 60 * 1000; // heartbeat ከዚህ በላይ ካረፈደ (መተግበሪያው ከተዘጋ) ፒኑ ይወገዳል፤ 0 = አጥፋ
 
-                // ለእያንዳንዱ ቴክኒሻን የመጨረሻውን (አዲሱን) ቦታ ብቻ፤ ልክ ያልሆኑ መጋጠሚያዎች ይታለፋሉ
-                const locations = {};
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    if (data.technician && !locations[data.technician] && HEMap.validCoords(data.latitude, data.longitude)) {
-                        locations[data.technician] = data;
-                    }
-                });
-
-                const names = Object.keys(locations);
-                if (names.length === 0) {
-                    L.popup().setLatLng(HEMap.ADDIS_CENTER).setContent('ምንም ቴክኒሻን ቦታ አልተጋራም').openOn(map);
-                    return;
-                }
-                names.forEach(name => {
-                    const loc = locations[name];
-                    const when = loc.timestamp && loc.timestamp.toDate ? formatEthDateTime(loc.timestamp) : '—';
-                    const popupContent = `<strong>${HEMap.esc(loc.technician)}</strong><br/>ሁኔታ: ${HEMap.esc(loc.status || '—')}<br/>${HEMap.esc(when)}`;
-                    markersArr.push(L.marker([Number(loc.latitude), Number(loc.longitude)]).addTo(map).bindPopup(popupContent));
-                });
-                HEMap.fitPoints(map, markersArr.map(m => [m.getLatLng().lat, m.getLatLng().lng]), { maxZoom: 15 });
-            } catch (error) {
-                console.error('Map load error:', error);
-                showToast('❌ ካርታ መጫን አልተቻለም', 'error');
+        function isTechAvailableForPin(t) {
+            if (!t || t.role !== 'technician' || t.isPhoneOperator) return false;
+            if (t.status !== LIVE_PIN_AVAILABLE_STATUS || t.isOnline !== true) return false;
+            if (LIVE_PIN_STALE_MS > 0) {
+                const hb = t.lastHeartbeat && t.lastHeartbeat.toDate ? t.lastHeartbeat.toDate().getTime() : 0;
+                if (!hb || Date.now() - hb > LIVE_PIN_STALE_MS) return false;
             }
+            return true;
+        }
+
+        function techPinPopupHtml(t) {
+            const E = HEMap.esc;
+            const phone = String(t.phone || '').trim();
+            const tg = String(t.telegramUsername || '').replace(/^@/, '').trim();
+            let html = `<strong>👨‍🔧 ${E(t.name || '—')}</strong><br/>🟢 ነጻ`;
+            if (phone) html += `<br/>📞 <a href="tel:${E(phone)}">${E(phone)}</a>`;
+            if (tg) html += `<br/>✈️ <a href="https://t.me/${E(encodeURIComponent(tg))}" target="_blank" rel="noopener noreferrer">@${E(tg)}</a>`;
+            return html;
+        }
+
+        /** በአንድ ካርታ ላይ ቀጥታ ፒኖችን ይጀምራል። ካርታው በ map.remove() ሲወገድ listener ራሱ ይቆማል። */
+        function startLiveTechPins(map) {
+            if (!map) return null;
+            if (map._liveTechPins) return map._liveTechPins;
+
+            const markers = new Map();   // technicianId → L.Marker
+            const known = new Map();     // technicianId → የመጨረሻው staff data (ለ stale ፍተሻ)
+            let firstSnapshot = true;
+            let unsubscribe = null;
+            let sweepTimer = null;
+            let countEl = null;
+
+            const countControl = L.control({ position: 'topright' });
+            countControl.onAdd = function () {
+                countEl = L.DomUtil.create('div', 'leaflet-bar');
+                countEl.style.cssText = 'background:#fff;color:#0F172A;padding:6px 10px;font-size:13px;font-weight:600;border-radius:8px;';
+                return countEl;
+            };
+            countControl.addTo(map);
+            function updateCount() {
+                if (countEl) countEl.textContent = markers.size ? `🟢 ነጻ ቴክኒሻኖች: ${markers.size}` : 'ምንም ነጻ ቴክኒሻን የለም';
+            }
+
+            function removePin(id) {
+                const m = markers.get(id);
+                if (!m) return;
+                map.removeLayer(m);   // ይህን አንድ ፒን ብቻ ከካርታው ያስወግዳል
+                markers.delete(id);   // ማጣቀሻውንም ይሰርዛል
+            }
+
+            function syncPin(id, t) {
+                const lat = Number(t.currentLat), lng = Number(t.currentLng);
+                const show = isTechAvailableForPin(t) && HEMap.validCoords(lat, lng);
+                if (!show) { removePin(id); return; }
+                const existing = markers.get(id);
+                if (existing) {                        // አሁንም ነጻ → ቦታውን/መረጃውን ብቻ ያዘምናል (ፒኑ አይደገምም)
+                    existing.setLatLng([lat, lng]);
+                    existing.setPopupContent(techPinPopupHtml(t));
+                } else {
+                    const m = L.marker([lat, lng], { title: t.name || '' }).addTo(map).bindPopup(techPinPopupHtml(t));
+                    markers.set(id, m);
+                }
+            }
+
+            unsubscribe = db.collection('staff').where('role', '==', 'technician').onSnapshot((snap) => {
+                snap.docChanges().forEach((ch) => {
+                    const id = ch.doc.id;
+                    if (ch.type === 'removed') { known.delete(id); removePin(id); return; }
+                    const data = ch.doc.data();
+                    known.set(id, data);
+                    syncPin(id, data);
+                });
+                updateCount();
+                if (firstSnapshot) {
+                    firstSnapshot = false;
+                    if (markers.size) {
+                        HEMap.fitPoints(map, Array.from(markers.values()).map(m => [m.getLatLng().lat, m.getLatLng().lng]), { maxZoom: 15 });
+                    }
+                }
+            }, (error) => {
+                console.error('Live technician pins listener error:', error);
+                showToast('❌ የቴክኒሻን ካርታ መከታተል አልተቻለም', 'error');
+            });
+
+            // ምንም ለውጥ ባይመጣም heartbeat ያረጀ ቴክኒሻን ፒን እንዲወገድ በየ 30 ሰከንዱ ይፈትሻል
+            if (LIVE_PIN_STALE_MS > 0) {
+                sweepTimer = setInterval(() => {
+                    known.forEach((t, id) => syncPin(id, t));
+                    updateCount();
+                }, 30000);
+            }
+
+            function stop() {
+                try { if (unsubscribe) unsubscribe(); } catch (e) {}
+                unsubscribe = null;
+                if (sweepTimer) { clearInterval(sweepTimer); sweepTimer = null; }
+                markers.clear();
+                known.clear();
+                map._liveTechPins = null;
+            }
+            map.on('unload', stop);   // map.remove() ሲጠራ listener እና timer ይጸዳሉ
+
+            map._liveTechPins = { stop, markers };
+            return map._liveTechPins;
+        }
+
+        // የቀድሞው populateTechMap (ታሪካዊ ቦታዎችን አንድ ጊዜ የሚስል) በቀጥታ ፒኖች ተተክቷል።
+        // ፊርማው (map, markersArr) ተጠብቋል፤ ነባር ጥሪዎች (loadTechMap, openFullMap) አይቀየሩም።
+        async function populateTechMap(map, markersArr) {
+            if (Array.isArray(markersArr)) markersArr.length = 0;
+            startLiveTechPins(map);
         }
 
         async function loadTechMap() {
