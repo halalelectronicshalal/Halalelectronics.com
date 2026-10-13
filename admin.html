@@ -3144,7 +3144,7 @@
             } catch (e) { showToast('❌ ' + e.message, 'error'); }
         }
 
-        function fieldTechs() { return allTechnicians.filter(t => !t.isPhoneOperator); } // 📞 ኦፕሬተሮች ለስራ አይመደቡም
+        function fieldTechs() { return allTechnicians.filter(t => !t.isPhoneOperator && !t.isOffice); } // 📞 ኦፕሬተሮች ለስራ አይመደቡም
         let allPendingRegistrations = []; // ✅ NEW: ራሳቸውን የመዘገቡ ግን ገና ያልፀደቁ ተጠቃሚዎች
         let allStaff = [];
         let allDailyReports = []; // ✅ NEW: የባለሙያዎች ዕለታዊ ሪፖርት ዳታ
@@ -4141,7 +4141,7 @@
             let html = '';
             allPendingRegistrations.forEach(p => {
                 html += `<tr>
-                    <td><strong>${p.name || '—'}</strong></td>
+                    <td><strong>${p.name || '—'}</strong>${p.isOffice ? ' <span class="status-badge status-pending" style="font-size:0.65rem;">🏢 ቢሮ (ለገጽ)</span>' : ''}</td>
                     <td>${p.phone || '—'}</td>
                     <td>${p.address || '—'}</td>
                     <td>${formatEthDateTime(p.createdAt) || '—'}</td>
@@ -4152,6 +4152,41 @@
                 </tr>`;
             });
             body.innerHTML = html;
+        }
+
+
+        // ============================================================
+        // 🔑 የገጽ ፈቃድ — ለብቻ የቆሙ ገጾች (finance.html / new-orders.html / new-entry.html)
+        // የተመዘገበ ሠራተኛ በስልክ+ይለፍ ቃል ገብቶ የትኞቹን ገጾች እንደሚያይ አድሚን እዚህ ይመርጣል።
+        // ፈቃዱ በ staff/{id}.pages ውስጥ ይቀመጣል፤ Worker ከዚያ ያነብና በ session/Firebase token ላይ ያደርገዋል።
+        // ============================================================
+        const PAGE_PERMS = [
+            ['finance', '💰 ፋይናንስ (finance.html)', 'ገቢ/ወጪ፣ ብድር፣ የቴክኒሻን ገቢ ማጠቃለያ'],
+            ['newOrders', '🆕 አዲስ ትዕዛዞች (new-orders.html)', 'ያልተመደቡ ትዕዛዞችን ማየትና ለቴክኒሻን መመደብ'],
+            ['newEntry', '➕ አዲስ ግቤት (new-entry.html)', 'ገቢ/ወጪ ግቤት ማስገባት']
+        ];
+        function editPagePermissions(id) {
+            const t = allTechnicians.find(x => x.id === id) || (typeof allStaff !== 'undefined' ? allStaff.find(x => x.id === id) : null);
+            if (!t) return;
+            const cur = Array.isArray(t.pages) ? t.pages : [];
+            const rows = PAGE_PERMS.map(([k, label, hint]) => `
+                <label style="display:flex; gap:10px; align-items:flex-start; padding:10px 0; border-bottom:1px solid var(--border-light); cursor:pointer;">
+                    <input type="checkbox" class="pagePermChk" value="${k}" ${cur.includes(k) ? 'checked' : ''} style="width:auto; margin-top:4px;" />
+                    <span><strong>${label}</strong><br><span class="text-muted" style="font-size:0.8rem;">${hint}</span></span>
+                </label>`).join('');
+            openModal(`🔑 የገጽ ፈቃድ — ${t.name || ''}`, `
+                <p class="text-muted" style="margin-bottom:8px;">ምልክት የተደረገባቸውን ገጾች ብቻ ይህ ሰው በስልክና በይለፍ ቃል ገብቶ ማየት ይችላል። ሁሉንም ምልክት ካነሱ ፈቃዱ ይሻራል።</p>
+                ${rows}
+                <button class="btn btn-success btn-block" style="margin-top:14px;" onclick="savePagePermissions('${id}')"><i class="fas fa-save"></i> አስቀምጥ</button>`);
+        }
+        async function savePagePermissions(id) {
+            const pages = [...document.querySelectorAll('.pagePermChk:checked')].map(c => c.value);
+            try {
+                await db.collection('staff').doc(id).update({ pages });
+                await db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'set_page_permissions', details: `የገጽ ፈቃድ ተቀይሯል (${pages.join(', ') || 'ምንም'})`, timestamp: new Date() });
+                showToast('✅ የገጽ ፈቃድ ተቀምጧል', 'success');
+                closeModal();
+            } catch (e) { showToast('❌ ' + e.message, 'error'); }
         }
 
         async function approveRegistration(id) {
@@ -5609,6 +5644,7 @@ ${locationLine}
                     <td>
                         <button class="btn btn-xs btn-primary" onclick="viewTech('${tech.id}')"><i class="fas fa-eye"></i></button>
                         <button class="btn btn-xs ${warn && warn.manual ? 'btn-danger' : 'btn-secondary'}" title="ዋርኒግ ምልክት አድርግ/አንሳ" onclick="toggleTechWarning('${tech.id}')"><i class="fas fa-flag"></i></button>
+                        <button class="btn btn-xs ${Array.isArray(tech.pages) && tech.pages.length ? 'btn-success' : 'btn-secondary'}" title="የገጽ ፈቃድ (ፋይናንስ / አዲስ ትዕዛዞች / አዲስ ግቤት)" onclick="editPagePermissions('${tech.id}')"><i class="fas fa-key"></i></button>
                         <button class="btn btn-xs btn-secondary" title="መልእክት ላክ" onclick="showSendMessageModal('${tech.id}')"><i class="fas fa-comment-dots"></i></button>
                         ${(tech.isPhoneOperator || allTechnicians.filter(x => x.isPhoneOperator).length < 2) ? `<button class="btn btn-xs btn-secondary" title="ኦፕሬተር (ስልክ/ሾፕ) አድርግ" onclick="togglePhoneOperator('${tech.id}')"><i class="fas fa-headset"></i></button>` : ''}
                         <button class="btn btn-xs btn-danger" onclick="deleteTech('${tech.id}')"><i class="fas fa-trash"></i></button>
