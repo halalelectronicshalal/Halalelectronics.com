@@ -19,6 +19,17 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 db.settings({ experimentalAutoDetectLongPolling: true, merge: true });
 
+// 🔁 APP_ROLE="pages" → የተመዘገቡ ሠራተኞች ራሳቸው session (he_session_pages) አላቸው።
+//    አድሚን በ admin.html ከገባ ደግሞ እዚህ በራስ-ሰር ይገባል (ያንን session ይገለብጣል)።
+if (window.APP_ROLE === 'pages') {
+    try {
+        const ok = (raw) => { try { const x = JSON.parse(raw || 'null'); return !!(x && x.token && x.staff && x.exp && x.exp * 1000 > Date.now()); } catch (e) { return false; } };
+        const mine = localStorage.getItem('he_session_pages');
+        const adm = localStorage.getItem('he_session_admin');
+        if (!ok(mine) && ok(adm) && JSON.parse(adm).staff.role === 'admin') localStorage.setItem('he_session_pages', adm);
+    } catch (e) {}
+}
+
 const WORKER_BASE_URL = "https://halalelectronics.ashenafi6275.workers.dev";
 const HE_ROLE = (typeof window !== 'undefined' && window.APP_ROLE) || 'operator';
 const HE_SESSION_KEY = 'he_session_' + HE_ROLE;
@@ -198,6 +209,11 @@ function getDateKey(d) {
 function escHtml(v) {
     return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+/** በ activity / staff መስክ የሚገባ ስም — አድሚን «አስተዳዳሪ»፣ ሌላ ሠራተኛ ራሱ ስሙ */
+function heUserName() {
+    const s = heGetSession();
+    return (s && s.staff && s.staff.role !== 'admin' && s.staff.name) ? s.staff.name : 'አስተዳዳሪ';
+}
 function showToast(message, type = 'success') {
     const toast = document.getElementById('toast');
     if (!toast) return;
@@ -239,6 +255,8 @@ async function sendSmsNotification(message, phone) {
    HE.boot(staff => { ...ገጹን አስጀምር... })
    ============================================================ */
 const HE = (() => {
+    const PAGE_LABEL = { finance: ['finance.html', '💰 ፋይናንስ'], newOrders: ['new-orders.html', '🆕 አዲስ ትዕዛዞች'], newEntry: ['new-entry.html', '➕ አዲስ ግቤት'] };
+
     function injectChrome() {
         if (document.getElementById('heGate')) return;
         const wrap = document.createElement('div');
@@ -254,37 +272,126 @@ const HE = (() => {
         <div id="heGate">
             <div class="he-login-box">
                 <img src="icon-512.png" alt="ሀላል ኤሌክትሮኒክስ" />
-                <h2 id="heGateTitle">የአድሚን መግቢያ</h2>
-                <p class="sub">በአድሚን ስልክ ቁጥርና የይለፍ ቃል ይግቡ</p>
-                <form id="heLoginForm">
-                    <div class="form-group"><label>📱 ስልክ ቁጥር</label><input type="tel" id="heLoginPhone" placeholder="ለምሳሌ: 09XXXXXXXX" required autocomplete="username" /></div>
-                    <div class="form-group"><label>🔒 የይለፍ ቃል</label><input type="password" id="heLoginPassword" placeholder="የይለፍ ቃል" required autocomplete="current-password" /></div>
-                    <button type="submit" class="btn btn-primary btn-block" id="heLoginBtn"><i class="fas fa-sign-in-alt"></i> ግባ</button>
-                    <div class="he-err" id="heLoginError"></div>
-                </form>
-                <div class="text-center"><a href="admin.html">← ወደ አድሚን ገፅ</a></div>
+                <h2 id="heGateTitle">መግቢያ</h2>
+
+                <!-- ===== መግቢያ ===== -->
+                <div id="heLoginPane">
+                    <p class="sub">በስልክ ቁጥርና በይለፍ ቃል ይግቡ</p>
+                    <form id="heLoginForm">
+                        <div class="form-group"><label>📱 ስልክ ቁጥር</label><input type="tel" id="heLoginPhone" placeholder="ለምሳሌ: 09XXXXXXXX" required autocomplete="username" /></div>
+                        <div class="form-group"><label>🔒 የይለፍ ቃል</label><input type="password" id="heLoginPassword" placeholder="የይለፍ ቃል" required autocomplete="current-password" /></div>
+                        <button type="submit" class="btn btn-primary btn-block" id="heLoginBtn"><i class="fas fa-sign-in-alt"></i> ግባ</button>
+                        <div class="he-err" id="heLoginError"></div>
+                    </form>
+                    <div class="text-center" style="display:flex;flex-direction:column;gap:8px;">
+                        <a href="#" onclick="HE.pane('register');return false;">📝 አዲስ ነዎት? እዚህ ይመዝገቡ</a>
+                        <a href="#" onclick="HE.forgot();return false;">❓ የይለፍ ቃል ረሱ?</a>
+                        <a href="admin.html" class="admin-link">← ወደ አድሚን ገፅ</a>
+                    </div>
+                </div>
+
+                <!-- ===== ምዝገባ ===== -->
+                <div id="heRegisterPane" style="display:none;">
+                    <p class="sub">ከተመዘገቡ በኋላ አድሚኑ ሲያፀድቅና የገጽ ፈቃድ ሲሰጥዎ መግባት ይችላሉ።</p>
+                    <form id="heRegisterForm">
+                        <div class="form-group"><label>👤 ሙሉ ስም</label><input type="text" id="heRegName" required /></div>
+                        <div class="form-group"><label>📱 ስልክ ቁጥር</label><input type="tel" id="heRegPhone" placeholder="09XXXXXXXX" required /></div>
+                        <div class="form-group"><label>🏠 አድራሻ</label><input type="text" id="heRegAddress" required /></div>
+                        <div class="form-group"><label>🔒 የይለፍ ቃል (ቢያንስ 8 ፊደል)</label><input type="password" id="heRegPassword" required autocomplete="new-password" /></div>
+                        <button type="submit" class="btn btn-primary btn-block" id="heRegBtn"><i class="fas fa-user-plus"></i> ተመዝገብ</button>
+                        <div class="he-err" id="heRegError"></div>
+                    </form>
+                    <div class="text-center"><a href="#" onclick="HE.pane('login');return false;">🔙 አካውንት አለኝ — ልግባ</a></div>
+                </div>
+
+                <!-- ===== ማጽደቅ መጠበቅ ===== -->
+                <div id="hePendingPane" style="display:none;text-align:center;">
+                    <i class="fas fa-hourglass-half" style="font-size:2.4rem;color:var(--secondary);margin:6px 0 12px;"></i>
+                    <p style="font-weight:700;">⏳ ምዝገባዎ ተልኳል!</p>
+                    <p class="text-muted" style="font-size:.9rem;">አድሚኑ እስኪያፀድቅና የገጽ ፈቃድ እስኪሰጥዎ ይጠብቁ። ከዚያ በስልክና በይለፍ ቃልዎ ይግቡ።</p>
+                    <button type="button" class="btn btn-outline" onclick="HE.pane('login')">🔙 ወደ መግቢያ</button>
+                </div>
+
+                <!-- ===== ፈቃድ የለም ===== -->
+                <div id="heNoAccessPane" style="display:none;text-align:center;">
+                    <i class="fas fa-ban" style="font-size:2.4rem;color:var(--emergency);margin:6px 0 12px;"></i>
+                    <p style="font-weight:700;">⛔ ለዚህ ገጽ ፈቃድ የለዎትም</p>
+                    <p class="text-muted" style="font-size:.9rem;">አድሚኑን ያነጋግሩ። ፈቃድ የተሰጠዎት ገጾች ካሉ ከታች ይታያሉ።</p>
+                    <div id="heNoAccessLinks" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
+                    <button type="button" class="btn btn-secondary" onclick="HE.logout()"><i class="fas fa-sign-out-alt"></i> ውጣ</button>
+                </div>
             </div>
         </div>`;
         while (wrap.firstChild) document.body.appendChild(wrap.firstChild);
         document.getElementById('modalOverlay').addEventListener('click', function (e) { if (e.target === this) closeModal(); });
     }
 
+    function pane(name) {
+        ['Login', 'Register', 'Pending', 'NoAccess'].forEach(p => {
+            const el = document.getElementById('he' + p + 'Pane');
+            if (el) el.style.display = (p.toLowerCase() === name.toLowerCase()) ? '' : 'none';
+        });
+        document.getElementById('heGate').classList.add('show');
+    }
+
+    const isAdminStaff = (st) => !!(st && st.role === 'admin');
+    const canOpen = (st, page) => isAdminStaff(st) || (Array.isArray(st && st.pages) && st.pages.includes(page));
+
+    function applyAccess(staff, page) {
+        document.body.classList.toggle('not-admin', !isAdminStaff(staff));
+        document.querySelectorAll('[data-page]').forEach(a => { a.style.display = canOpen(staff, a.dataset.page) ? '' : 'none'; });
+        const who = document.getElementById('heWho');
+        if (who && staff) who.textContent = '👤 ' + (staff.name || 'አድሚን');
+    }
+
+    const LOGIN_ERR = {
+        'no-pages-access': '⛔ ለእነዚህ ገጾች ገና ፈቃድ አልተሰጠዎትም — አድሚኑን ያነጋግሩ'
+    };
+    const REG_ERR = {
+        'duplicate': '❌ ይህ ስልክ ቁጥር ቀድሞ ተመዝግቧል — ይግቡ',
+        'weak-password': '❌ የይለፍ ቃል ቢያንስ 8 ፊደል/ቁጥር ሊኖረው ይገባል',
+        'invalid': '❌ ስም፣ አድራሻ ወይም ስልክ ቁጥር ትክክል አይደለም',
+        'too-many-attempts': '⛔ ብዙ ሙከራ ተደርጓል፤ ቆይተው ይሞክሩ'
+    };
+
     async function boot(onReady, opts = {}) {
         injectChrome();
+        const page = opts.page || null;
         if (opts.title) document.getElementById('heGateTitle').textContent = opts.title;
         await authReady;
-        const start = (staff) => {
+
+        const enter = (staff) => {
             document.getElementById('heGate').classList.remove('show');
-            const who = document.getElementById('heWho');
-            if (who && staff) who.textContent = '👤 ' + (staff.name || 'አድሚን');
+            applyAccess(staff, page);
             onReady(staff);
         };
-        if (heIsAdminSession()) { start(heGetSession().staff); return; }
+        const showNoAccess = (staff) => {
+            const box = document.getElementById('heNoAccessLinks');
+            const links = (staff.pages || []).filter(p => PAGE_LABEL[p]).map(p => `<a class="btn btn-outline btn-block" href="${PAGE_LABEL[p][0]}">${PAGE_LABEL[p][1]}</a>`).join('');
+            box.innerHTML = links || '<span class="text-muted">ምንም ፈቃድ የለዎትም</span>';
+            pane('noaccess');
+        };
 
-        const gate = document.getElementById('heGate');
-        gate.classList.add('show');
-        const form = document.getElementById('heLoginForm');
-        form.addEventListener('submit', async (e) => {
+        // ── የተቀመጠ session ካለ፦ ፈቃዱን ከ Worker አድሱ (አድሚን ከሻረው ወዲያው ይሰራል)
+        let s = heGetSession();
+        if (s && !isAdminStaff(s.staff)) {
+            try {
+                const r = await callWorker('session', {});
+                if (r && r.ok) {
+                    heSetSession(r);
+                    if (r.firebaseToken) await firebase.auth().signInWithCustomToken(r.firebaseToken);
+                } else if (r && !r.ok) { await heLogout(); }
+            } catch (e) { console.warn('session refresh failed (offline?)', e); }
+            s = heGetSession();
+        }
+        if (s) {
+            if (page && !canOpen(s.staff, page)) { document.getElementById('heGate').classList.add('show'); showNoAccess(s.staff); }
+            else enter(s.staff);
+            return;
+        }
+
+        pane('login');
+        document.getElementById('heLoginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const err = document.getElementById('heLoginError'), btn = document.getElementById('heLoginBtn');
             err.textContent = '';
@@ -293,13 +400,13 @@ const HE = (() => {
             try {
                 const phone = document.getElementById('heLoginPhone').value.trim();
                 const password = document.getElementById('heLoginPassword').value;
-                const res = await callWorker('login', { phone, password, role: 'admin' });
-                if (res && res.ok && res.staff && res.staff.role === 'admin') {
+                const res = await callWorker('login', { phone, password, role: 'pages' });
+                if (res && res.ok && res.staff) {
                     await heSignInWithResult(res);
                     document.getElementById('heLoginPassword').value = '';
-                    start(res.staff);
+                    if (page && !canOpen(res.staff, page)) showNoAccess(res.staff); else enter(res.staff);
                 } else {
-                    err.textContent = heLoginErrorText(res && res.error, 'admin');
+                    err.textContent = LOGIN_ERR[res && res.error] || heLoginErrorText(res && res.error, 'pages');
                 }
             } catch (ex) {
                 err.textContent = '❌ ' + (ex && ex.message ? ex.message : 'መግባት አልተቻለም');
@@ -307,8 +414,75 @@ const HE = (() => {
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> ግባ';
         });
+
+        document.getElementById('heRegisterForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const err = document.getElementById('heRegError'), btn = document.getElementById('heRegBtn');
+            err.textContent = '';
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> በመላክ ላይ...';
+            try {
+                const res = await callWorker('register', {
+                    name: document.getElementById('heRegName').value.trim(),
+                    phone: document.getElementById('heRegPhone').value.trim(),
+                    address: document.getElementById('heRegAddress').value.trim(),
+                    password: document.getElementById('heRegPassword').value,
+                    portal: 'pages'
+                });
+                if (res && res.ok) {
+                    e.target.reset();
+                    pane('pending');
+                } else {
+                    err.textContent = REG_ERR[res && res.error] || '❌ መመዝገብ አልተቻለም፣ እንደገና ይሞክሩ';
+                }
+            } catch (ex) {
+                err.textContent = '❌ ' + (ex && ex.message ? ex.message : 'መመዝገብ አልተቻለም');
+            }
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-user-plus"></i> ተመዝገብ';
+        });
+    }
+
+    /* የይለፍ ቃል መልሶ ማግኛ — በ Worker (requestReset / confirmReset) */
+    function forgot() {
+        const html = `
+            <div id="fpStep1">
+                <p class="text-muted" style="margin-bottom:10px;">በተመዘገቡበት ስልክ ቁጥር ኮድ ይላካል።</p>
+                <div class="form-group"><label>📱 ስልክ ቁጥር</label><input type="tel" id="fpPhone" placeholder="09XXXXXXXX" /></div>
+                <button class="btn btn-primary btn-block" id="fpSendBtn" onclick="HE._fpSend()">ኮድ ላክ</button>
+            </div>
+            <div id="fpStep2" style="display:none;">
+                <div class="form-group"><label>🔢 የደረሰዎት ኮድ</label><input type="text" id="fpCode" /></div>
+                <div class="form-group"><label>🔒 አዲስ የይለፍ ቃል</label><input type="password" id="fpNew" autocomplete="new-password" /></div>
+                <div class="form-group"><label>🔒 አረጋግጡ</label><input type="password" id="fpConfirm" autocomplete="new-password" /></div>
+                <button class="btn btn-success btn-block" id="fpResetBtn" onclick="HE._fpConfirm()">ቀይር</button>
+            </div>
+            <div class="he-err" id="fpErr"></div>`;
+        openModal('❓ የይለፍ ቃል መልሶ ማግኛ', html);
+    }
+    async function _fpSend() {
+        const err = document.getElementById('fpErr'); err.textContent = '';
+        const phone = document.getElementById('fpPhone').value.trim();
+        if (!phone) { err.textContent = '❌ ስልክ ቁጥር ያስገቡ'; return; }
+        try {
+            const r = await callWorker('requestReset', { phone });
+            if (r && r.ok) { window._fpPhone = phone; document.getElementById('fpStep1').style.display = 'none'; document.getElementById('fpStep2').style.display = ''; }
+            else err.textContent = '⛔ ብዙ ሙከራ ተደርጓል፤ ቆይተው ይሞክሩ';
+        } catch (e) { err.textContent = '❌ ' + e.message; }
+    }
+    async function _fpConfirm() {
+        const err = document.getElementById('fpErr'); err.textContent = '';
+        const code = document.getElementById('fpCode').value.trim(), nw = document.getElementById('fpNew').value, cf = document.getElementById('fpConfirm').value;
+        if (!code || !nw) { err.textContent = '❌ ሁሉንም ይሙሉ'; return; }
+        if (nw.length < 8) { err.textContent = '❌ የይለፍ ቃል ቢያንስ 8 ፊደል ይሁን'; return; }
+        if (nw !== cf) { err.textContent = '❌ ሁለቱ የይለፍ ቃሎች አይመሳሰሉም'; return; }
+        try {
+            const r = await callWorker('confirmReset', { phone: window._fpPhone, code, newPassword: nw });
+            if (r && r.ok) { closeModal(); showToast('✅ የይለፍ ቃል ተቀይሯል — አሁን ይግቡ', 'success'); document.getElementById('heLoginPhone').value = window._fpPhone || ''; }
+            else err.textContent = '❌ ኮዱ ትክክል አይደለም ወይም ጊዜው አልፎበታል';
+        } catch (e) { err.textContent = '❌ ' + e.message; }
     }
 
     async function logout() { await heLogout(); location.reload(); }
-    return { boot, logout };
+    return { boot, logout, pane, forgot, _fpSend, _fpConfirm };
 })();
