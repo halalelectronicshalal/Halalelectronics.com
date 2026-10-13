@@ -1,0 +1,70 @@
+/* ሀላል ኤሌክትሮኒክስ — ለብቻ የቆሙ የአድሚን ገጾች (finance / new-orders / new-entry) የጋራ ዘይቤ */
+:root{--primary:#0F4C81;--primary-dark:#0A3A63;--secondary:#2DAAE1;--success:#16A34A;--warning:#F59E0B;--emergency:#DC2626;
+--bg:#F1F5F9;--card:#fff;--text:#1F2937;--text-muted:#64748B;--border:#E2E8F0;--border-light:#EEF2F7;--radius:14px;--radius-sm:8px;--radius-lg:18px;--shadow-xl:0 20px 50px rgba(0,0,0,.25)}
+@media (prefers-color-scheme:dark){:root{--bg:#14171A;--card:#1E2328;--text:#ECECE9;--text-muted:#9AA3AB;--border:#2E343A;--border-light:#262C32}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:'Noto Sans Ethiopic',system-ui,sans-serif;font-size:15px}
+a{color:var(--secondary);text-decoration:none}
+.hidden{display:none!important}
+.text-muted{color:var(--text-muted)}.text-center{text-align:center}.flex{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+input,select,textarea,button{font-family:inherit;font-size:1rem}
+input,select,textarea{width:100%;padding:11px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--card);color:var(--text)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--secondary)}
+textarea{min-height:80px}
+label{display:block;font-weight:600;font-size:.85rem;margin:0 0 4px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.form-group{margin-bottom:12px}
+.form-group small{display:block;color:var(--text-muted);font-size:.75rem;margin-top:2px}
+.eth-picker-part{padding:9px 4px}
+/* header */
+.he-top{background:var(--primary);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;position:sticky;top:0;z-index:50;flex-wrap:wrap}
+.he-top h1{margin:0;font-size:1.1rem;display:flex;align-items:center;gap:8px}
+.he-top .he-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.he-top a,.he-top button{background:rgba(255,255,255,.16);color:#fff;border:0;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:.82rem;font-weight:600}
+.he-top .who{font-size:.78rem;opacity:.85}
+.he-wrap{max-width:1100px;margin:0 auto;padding:14px}
+/* cards, buttons */
+.card{background:var(--card);border-radius:var(--radius);padding:18px;margin-bottom:16px;box-shadow:0 2px 12px rgba(15,76,129,.08)}
+.card-header{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.card-header h3{margin:0;font-size:1.05rem}
+.filters{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.btn{border:0;border-radius:10px;padding:11px 16px;font-weight:700;cursor:pointer;background:var(--border);color:var(--text)}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+.btn-primary{background:var(--primary);color:#fff}.btn-secondary{background:#475569;color:#fff}.btn-success{background:var(--success);color:#fff}.btn-danger{background:var(--emergency);color:#fff}
+.btn-outline{background:transparent;border:1.5px solid var(--primary);color:var(--primary)}
+.btn-sm{padding:7px 12px;font-size:.82rem}.btn-xs{padding:4px 8px;font-size:.74rem;border-radius:7px}.btn-block{display:block;width:100%}
+/* stats */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.stat-card{background:var(--card);border-radius:var(--radius);padding:14px 10px;text-align:center;box-shadow:0 2px 12px rgba(15,76,129,.08)}
+.stat-card .icon{font-size:1.4rem;color:var(--primary);margin-bottom:4px}
+.stat-card .number{font-size:1.3rem;font-weight:800}
+.stat-card .label{font-size:.72rem;color:var(--text-muted);margin-top:2px}
+/* tables */
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.88rem}
+th,td{padding:9px 8px;text-align:left;border-bottom:1px solid var(--border-light);vertical-align:top}
+th{font-size:.76rem;color:var(--text-muted);text-transform:none;white-space:nowrap}
+.status-badge{display:inline-block;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700}
+.status-pending{background:#FEF3C7;color:#92400E}.status-completed{background:#DCFCE7;color:#166534}.status-assigned{background:#DBEAFE;color:#1E40AF}
+/* toast & modal */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(120px);background:#1F2937;color:#fff;padding:12px 18px;border-radius:10px;z-index:10000;max-width:92vw;transition:.3s;font-weight:600}
+.toast.show{transform:translateX(-50%) translateY(0)}.toast.success{background:#15803D}.toast.error{background:#B91C1C}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;padding:16px}
+.modal-overlay.show{display:flex}
+.modal{background:var(--card);border-radius:var(--radius-lg);max-width:800px;width:100%;max-height:90vh;overflow-y:auto;padding:24px;box-shadow:var(--shadow-xl)}
+.modal-header{display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:2px solid var(--border);margin-bottom:14px}
+.modal-header h2{margin:0;font-size:1.15rem}
+.modal-header .close-btn{background:none;border:0;font-size:1.6rem;color:var(--text-muted);cursor:pointer}
+.modal-footer{padding-top:12px;border-top:2px solid var(--border);margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.photo-gallery{display:flex;gap:8px;flex-wrap:wrap}.photo-gallery img{width:96px;height:96px;object-fit:cover;border-radius:8px;cursor:pointer}
+/* login gate */
+#heGate{position:fixed;inset:0;z-index:20000;display:none;align-items:center;justify-content:center;padding:20px;background:linear-gradient(160deg,#0A3A63,#0F4C81)}
+#heGate.show{display:flex}
+.he-login-box{width:100%;max-width:380px;background:var(--card);border-radius:18px;padding:26px 22px}
+.he-login-box img{height:64px;border-radius:12px;display:block;margin:0 auto 8px}
+.he-login-box h2{text-align:center;margin:0 0 4px;font-size:1.2rem}
+.he-login-box p.sub{text-align:center;color:var(--text-muted);margin:0 0 16px;font-size:.85rem}
+.he-err{color:var(--emergency);font-size:.85rem;min-height:20px;margin:8px 0}
+.lock-card{text-align:center;padding:36px 18px}
+.lock-card .fa-lock{font-size:3rem;color:var(--primary);margin-bottom:12px}
+@media (max-width:640px){.form-row{grid-template-columns:1fr}.card{padding:14px}.stats-grid{grid-template-columns:1fr 1fr}}
