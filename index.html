@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ሀላል ኤሌክትሮኒክስ</title>
+<link rel="manifest" href="manifest.json" />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Ethiopic:wght@400;600;700&display=swap" rel="stylesheet">
+ <script>
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('mode') !== 'admin') {
+    window.location.href = "customer.html";
+  }
+</script>
+<style>
+ html,body{margin:0;min-height:100%;background:#14171A;color:#ECECE9;font-family:'Noto Sans Ethiopic',sans-serif}
+ .box{max-width:360px;margin:0 auto;padding:48px 20px;text-align:center}
+ img{width:96px;height:96px;border-radius:20px}
+ a.btn{display:block;margin:14px 0;padding:16px;border-radius:12px;text-decoration:none;font-weight:700;font-size:1.05rem}
+ .a{background:#F5A623;color:#14171A}.t{background:#2E343A;color:#ECECE9;border:1px solid #F5A623}
+</style>
+<script>
+ // የገባ ተጠቃሚ ካለ በቀጥታ ወደ ገፁ ይወስዳል
+ try {
+   var q = location.search + location.hash;
+   if (/approveRequest=|assignOrder=/.test(location.search) || (function(){try{var a=JSON.parse(localStorage.getItem('he_session_admin')||'null');return !!(a&&a.exp*1000>Date.now()&&a.staff&&a.staff.role==='admin');}catch(e){return false;}})()) location.replace('admin.html' + q);
+   else if (localStorage.getItem('techId') && localStorage.getItem('techName') && (function(){try{var t=JSON.parse(localStorage.getItem('he_session_technician')||'null');return !!(t&&t.exp*1000>Date.now());}catch(e){return false;}})()) location.replace('technician.html' + q);
+ } catch (e) {}
+</script>
+</head>
+<body>
+ <div class="box">
+  <img src="icon-512.png" alt="ሀላል ኤሌክትሮኒክስ">
+  <h2>ሀላል ኤሌክትሮኒክስ</h2>
+  <a class="btn a" href="admin.html">👨‍💼 አድሚን</a>
+  <a class="btn t" href="technician.html">👷 ቴክኒሻን</a>
+  <a class="btn t" href="customer.html">🛒 ደንበኛ</a>
+ </div>
+</body>
+</html>
