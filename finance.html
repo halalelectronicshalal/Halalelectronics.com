@@ -1,0 +1,1241 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0F4C81" />
+<title>ሀላል - ፋይናንስ</title>
+<link rel="manifest" href="finance-manifest.json" />
+<link rel="icon" href="icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Ethiopic:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="stylesheet" href="he-common.css" />
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script>window.APP_ROLE = "pages";</script>
+<script src="he-common.js"></script>
+</head>
+<body>
+<header class="he-top">
+    <h1><i class="fas fa-money-bill-wave"></i> ፋይናንስ</h1>
+    <div class="he-actions">
+        <span class="who" id="heWho"></span>
+        <a href="new-entry.html" data-page="newEntry"><i class="fas fa-plus-circle"></i> አዲስ ግቤት</a>
+        <button type="button" onclick="HE.logout()"><i class="fas fa-sign-out-alt"></i> ውጣ</button>
+    </div>
+</header>
+<main class="he-wrap">
+            <div id="tab-finance">
+                <div id="financeLock" class="card" style="text-align:center; padding:40px;">
+                    <i class="fas fa-lock" style="font-size:3rem; color:var(--primary); margin-bottom:12px;"></i>
+                    <h3>🔐 ፋይናንስ የተጠበቀ ነው</h3>
+                    <p class="text-muted">እባክዎ ለማየት የይለፍ ቃሉን ያስገቡ</p>
+                    <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap; max-width:400px; margin:12px auto;">
+                        <input type="password" id="financePassInput" placeholder="የይለፍ ቃል" style="max-width:200px;" />
+                        <button class="btn btn-primary" id="unlockFinanceBtn"><i class="fas fa-unlock"></i> ክፈት</button>
+                    </div>
+                    <div id="financeError" style="color:var(--emergency); display:none;">❌ የተሳሳተ የይለፍ ቃል!</div>
+                </div>
+                <div id="financeContent" style="display:none;">
+                    <div class="stats-grid" id="financeStats">
+                        <div class="stat-card">
+                            <div class="icon"><i class="fas fa-arrow-up" style="color:var(--success);"></i></div>
+                            <div class="number" id="finTotalIncome" style="color:var(--success);">0 ብር</div>
+                            <div class="label">ጠቅላላ የገባ ገቢ</div>
+                            <div class="label" id="finIncomeNote" style="font-size:0.62rem;"></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="icon"><i class="fas fa-arrow-down" style="color:var(--emergency);"></i></div>
+                            <div class="number" id="finTotalExpense" style="color:var(--emergency);">0 ብር</div>
+                            <div class="label">ጠቅላላ ወጪ</div>
+                            <div class="label" id="finExpenseNote" style="font-size:0.62rem;"></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="icon"><i class="fas fa-coins" style="color:var(--primary);"></i></div>
+                            <div class="number" id="finNetProfit" style="color:var(--primary);">0 ብር</div>
+                            <div class="label">ወደ ድርጅቱ የገባ የተጣራ ትርፍ</div>
+                            <div class="label" id="finNetNote" style="font-size:0.62rem;"></div>
+                        </div>
+                    </div>
+                    <!-- ✅ በቴክኒሻን ገቢ ማጠቃለያ - አሁን በፋይናንስ ውስጥ (ከፋይናንስ ይለፍ ቃል ጀርባ) እንደ ካርድ ተቀምጧል -->
+                    <div class="card" id="techIncomeCard">
+                        <div class="card-header"><h3><i class="fas fa-money-bill-wave"></i> 💰 በቴክኒሻን ገቢ ማጠቃለያ</h3></div>
+                        <div id="techIncomeSummaryBody"><p class="text-muted text-center">በመጫን ላይ...</p></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><h3><i class="fas fa-plus-circle"></i> + አዲስ ግቤት</h3></div>
+                        <div class="form-row">
+                            <input type="text" id="txDesc" placeholder="መግለጫ" />
+                            <input type="number" id="txAmount" placeholder="ገንዘብ" step="0.01" />
+                        </div>
+                        <div class="form-row">
+                            <select id="txType">
+                                <option value="income">💰 ገቢ</option>
+                                <option value="expense">💸 ወጪ</option>
+                            </select>
+                            <div id="txDateEthContainer" style="display:grid; grid-template-columns:1fr 1.5fr 1fr; gap:4px;"></div>
+                            <input type="date" id="txDate" style="display:none;" />
+                        </div>
+                        <button class="btn btn-primary" id="addTxBtn"><i class="fas fa-save"></i> ያስገቡ</button>
+                    </div>
+                    <div class="card">
+                        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                            <h3><i class="fas fa-list"></i> 📋 የግቤቶች ታሪክ</h3>
+                            <div class="flex" style="gap:6px; flex-wrap:wrap;">
+                                <button class="btn btn-secondary btn-sm" id="exportFinanceBtn" onclick="showFinanceExportModal()"><i class="fas fa-file-download"></i> የሂሳብ ማውረጃ (CSV)</button>
+                            </div>
+                        </div>
+                        <div id="txList"><p class="text-muted text-center">ምንም ግቤት የለም</p></div>
+                    </div>
+
+                    <!-- ✅ NEW: ጠቅላላ የዕለቱ እንቅስቃሴ ማውረጃ -->
+                    <div class="card" id="dailyActivityCard">
+                        <div class="card-header"><h3><i class="fas fa-calendar-day"></i> 📅 የዕለቱ ጠቅላላ እንቅስቃሴ</h3></div>
+                        <p class="text-muted" style="margin-bottom:10px; font-size:0.85rem;">ቀን ይምረጡ - የዚያ ቀን ገቢ/ወጪ፣ የተሰጠና የተቀበልነው ብድር፣ የተከፈሉ ብድሮች፣ የቴክኒሻን ሪፖርቶችና ትዕዛዞች በአንድ ፋይል ይወርዳሉ።</p>
+                        <div class="form-row" style="align-items:flex-end;">
+                            <div id="dailyActDateEthContainer" style="display:grid; grid-template-columns:1fr 1.5fr 1fr; gap:4px;"></div>
+                            <input type="date" id="dailyActDate" style="display:none;" />
+                            <button class="btn btn-secondary" onclick="renderDailyActivityPreview()"><i class="fas fa-eye"></i> እይ</button>
+                            <button class="btn btn-primary" onclick="exportDailyActivityCSV()"><i class="fas fa-file-download"></i> የዕለቱን አውርድ (Excel)</button>
+                        </div>
+                        <div id="dailyActPreview" style="margin-top:12px;"></div>
+                    </div>
+
+                    <!-- ✅ NEW: DEBT / CREDIT TRACKER (ብድር/እዳ መከታተያ) -->
+                    <div class="stats-grid" id="debtStats">
+                        <div class="stat-card">
+                            <div class="icon"><i class="fas fa-hand-holding-usd" style="color:var(--warning);"></i></div>
+                            <div class="number" id="debtReceivable" style="color:var(--warning);">0 ብር</div>
+                            <div class="label">ደንበኛ ያልከፈለው (የሚገባን)</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="icon"><i class="fas fa-file-invoice-dollar" style="color:var(--emergency);"></i></div>
+                            <div class="number" id="debtPayable" style="color:var(--emergency);">0 ብር</div>
+                            <div class="label">እኛ ያልከፈልነው (የምንገባ)</div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><h3><i class="fas fa-hand-holding-usd"></i> + አዲስ ብድር/እዳ</h3></div>
+                        <div class="form-row">
+                            <input type="text" id="debtPerson" placeholder="የሰው/ደንበኛ ስም" />
+                            <input type="text" id="debtPhone" placeholder="ስልክ (አማራጭ)" />
+                        </div>
+                        <div class="form-row">
+                            <input type="number" id="debtAmount" placeholder="ገንዘብ" step="0.01" />
+                            <select id="debtType">
+                                <option value="receivable">🟡 ደንበኛ ያለብን (የሚከፍለን)</option>
+                                <option value="payable">🔴 እኛ ያለብን (የምንከፍለው)</option>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <input type="text" id="debtNote" placeholder="ምክንያት / ማብራሪያ" />
+                        </div>
+                        <button class="btn btn-primary" id="addDebtBtn"><i class="fas fa-save"></i> ያስገቡ</button>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-list"></i> 📋 የብድር/እዳ ዝርዝር</h3>
+                            <div class="filters">
+                                <button class="btn btn-secondary btn-sm" onclick="showFinanceExportModal()"><i class="fas fa-file-download"></i> አውርድ</button>
+                                <select id="debtFilter">
+                                    <option value="unpaid">ያልተከፈለ</option>
+                                    <option value="all">ሁሉም</option>
+                                    <option value="paid">የተከፈለ</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="table-wrap">
+                            <table>
+                                <thead><tr><th>ስም</th><th>አይነት</th><th>ገንዘብ</th><th>ማብራሪያ</th><th>ሁኔታ</th><th>እርምጃ</th></tr></thead>
+                                <tbody id="debtBody"><tr><td colspan="6" class="text-center text-muted">ምንም የለም</td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <!-- 🔑 የፋይናንስ ይለፍ ቃል መቀየሪያ -->
+                    <div class="card admin-only" id="financePwCard">
+                        <div class="card-header"><h3><i class="fas fa-key"></i> 🔑 የፋይናንስ ይለፍ ቃል መቀየር</h3></div>
+                        <div id="finPwMsg" role="alert" aria-live="polite" style="display:none; padding:10px 14px; border-radius:var(--radius-sm); margin-bottom:12px; font-weight:600;"></div>
+                        <div class="form-group">
+                            <label for="finPwCurrent">አሁን ያለው ይለፍ ቃል</label>
+                            <input type="password" id="finPwCurrent" autocomplete="current-password" placeholder="አሁን ያለው ይለፍ ቃል" />
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="finPwNew">አዲስ ይለፍ ቃል</label>
+                                <input type="password" id="finPwNew" autocomplete="new-password" placeholder="ቢያንስ 8 ፊደላት" />
+                            </div>
+                            <div class="form-group">
+                                <label for="finPwConfirm">አዲሱን ያረጋግጡ</label>
+                                <input type="password" id="finPwConfirm" autocomplete="new-password" placeholder="አዲሱን እንደገና ያስገቡ" />
+                            </div>
+                        </div>
+                        <label style="display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:0.9rem; cursor:pointer;">
+                            <input type="checkbox" id="finPwShow" onchange="toggleFinPwVisibility(this.checked)" /> የይለፍ ቃሎችን አሳይ
+                        </label>
+                        <button class="btn btn-primary" id="finPwBtn" onclick="changeFinancePassword()"><i class="fas fa-save"></i> የይለፍ ቃል ቀይር</button>
+                    </div>
+
+                </div>
+            </div>
+</main>
+
+<script>
+/* ============================================================
+   STATE
+   ============================================================ */
+let allTransactions = [];
+let allDebts = [];
+let allDailyReports = [];
+let allOrders = [];          // ለ "የዕለቱ ጠቅላላ እንቅስቃሴ" ብቻ
+let isFinanceUnlocked = false;
+window._techSummaryCustomRange = window._techSummaryCustomRange || { start: '', end: '' };
+window._techSummaryGroupBy = window._techSummaryGroupBy || 'tech';
+
+/* ============================================================
+   በቴክኒሻን ገቢ ማጠቃለያ + ማውረጃዎች  (admin.html ውስጥ ካለው ጋር ተመሳሳይ)
+   ============================================================ */
+// ============================================================
+// ✅ በቴክኒሻን ገቢ ማጠቃለያ (Per-Technician Income Summary)
+// ከ dailyReports (ከቴክኒሻን በራሱ ከሚላከው ሪፖርት) ዳታ በቀጥታ ይሰላል።
+// ወደ ድርጅቱ የገባ (companyAmount) + ወደ ሰራተኛ የገባ (techShareAmount) + ጠቅላላ ድምር ያካትታል።
+// ============================================================
+window._techSummaryCustomRange = window._techSummaryCustomRange || { start: '', end: '' };
+window._techSummaryGroupBy = window._techSummaryGroupBy || 'tech'; // 'tech' = በቴክኒሻን ድምር፣ 'day' = በቴክኒሻን + በቀን
+
+// dateKey (YYYY-MM-DD) → የኢትዮጵያ ቀን አቆጣጠር
+function techSummaryDateLabel(dateKey) {
+    if (!dateKey) return '—';
+    const p = String(dateKey).split('-').map(Number);
+    if (p.length !== 3 || p.some(isNaN)) return String(dateKey);
+    return formatEthDate(new Date(p[0], p[1] - 1, p[2]));
+}
+
+// ✅ አሁን ማጠቃለያው ብቅ-ባይ (modal) አይደለም - በፋይናንስ ገጽ ውስጥ ባለው ካርድ (#techIncomeSummaryBody) ውስጥ ይታያል።
+function showTechIncomeSummary(rangeFilter, groupBy) {
+    const box = document.getElementById('techIncomeSummaryBody');
+    if (!box) { try { switchTab('finance'); } catch (e) {} return; }
+
+    rangeFilter = rangeFilter || window._techSummaryLastRange || 'all';
+    window._techSummaryLastRange = rangeFilter;
+    if (groupBy) window._techSummaryGroupBy = groupBy;
+    const group = window._techSummaryGroupBy;
+    const now = new Date();
+    let startKey = null, endKey = null;
+
+    if (rangeFilter === 'today') {
+        startKey = getDateKey(now);
+    } else if (rangeFilter === 'week') {
+        const weekAgo = new Date(now.getTime() - 10 * 86400000); // ባለፉት 10 ቀናት
+        startKey = getDateKey(weekAgo);
+    } else if (rangeFilter === 'month') {
+        const monthAgo = new Date(now); monthAgo.setMonth(monthAgo.getMonth() - 1);
+        startKey = getDateKey(monthAgo);
+    } else if (rangeFilter === 'custom') {
+        startKey = window._techSummaryCustomRange.start || null;
+        endKey = window._techSummaryCustomRange.end || null;
+    }
+
+    const relevant = allDailyReports.filter(r => {
+        if (!r.dateKey) return false;
+        if (startKey && r.dateKey < startKey) return false;
+        if (endKey && r.dateKey > endKey) return false;
+        return true;
+    });
+    window._techSummaryReports = relevant; // used by exportTechSummaryCSV()
+
+    const summary = {};
+    relevant.forEach(r => {
+        const techKey = r.technicianId || r.technicianName;
+        const key = group === 'day' ? techKey + '|' + r.dateKey : techKey;
+        if (!summary[key]) summary[key] = {
+            key: techKey, name: r.technicianName, jobs: 0, income: 0, expense: 0,
+            companyAmount: 0, techShareAmount: 0, reports: 0, unapproved: 0,
+            minDate: r.dateKey, maxDate: r.dateKey
+        };
+        const row = summary[key];
+        row.jobs += (r.jobs || 0);
+        row.income += (r.totalIncome ?? r.income ?? 0);
+        row.expense += (r.totalExpense || 0);
+        row.companyAmount += (r.companyAmount || 0);
+        row.techShareAmount += (r.techShareAmount || 0);
+        row.reports += 1;
+        if (!r.approved) row.unapproved += 1;
+        if (r.dateKey < row.minDate) row.minDate = r.dateKey;
+        if (r.dateKey > row.maxDate) row.maxDate = r.dateKey;
+    });
+
+    const rows = Object.values(summary).sort((a, b) =>
+        group === 'day' ? (b.maxDate.localeCompare(a.maxDate) || String(a.name).localeCompare(String(b.name))) : b.income - a.income);
+    const grandTotalIncome = rows.reduce((s, r) => s + r.income, 0);
+    const grandTotalExpense = rows.reduce((s, r) => s + r.expense, 0);
+    const grandTotalCompany = rows.reduce((s, r) => s + r.companyAmount, 0);
+    const grandTotalTechShare = rows.reduce((s, r) => s + r.techShareAmount, 0);
+    const grandTotalJobs = rows.reduce((s, r) => s + r.jobs, 0);
+
+    const rangeBtn = (val, label) => `<button class="btn btn-sm ${rangeFilter === val ? 'btn-primary' : 'btn-outline'}" onclick="showTechIncomeSummary('${val}')">${label}</button>`;
+    const groupBtn = (val, label) => `<button class="btn btn-sm ${group === val ? 'btn-primary' : 'btn-outline'}" onclick="showTechIncomeSummary(null, '${val}')">${label}</button>`;
+
+    window._techSummaryRows = rows; // used by exportTechSummaryCSV()
+
+    let html = `
+        <div class="flex" style="margin-bottom:10px; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+            <div class="flex" style="gap:6px; flex-wrap:wrap;">
+                ${rangeBtn('today', 'ዛሬ')}
+                ${rangeBtn('week', 'ባለፉት 10 ቀናት')}
+                ${rangeBtn('month', 'ባለፉት 30 ቀናት')}
+                ${rangeBtn('all', 'ጠቅላላ')}
+            </div>
+            <div class="flex" style="gap:6px; flex-wrap:wrap;">
+                ${groupBtn('tech', '👤 በቴክኒሻን')}
+                ${groupBtn('day', '📅 በቴክኒሻን + በቀን')}
+            </div>
+        </div>
+        <div class="form-row" style="align-items:flex-end; margin-bottom:16px;">
+            <div class="form-group" style="margin-bottom:0;">
+                <label style="font-size:0.75rem;">ከቀን</label>
+                <input type="date" id="techSummaryStartDate" value="${window._techSummaryCustomRange.start || ''}" style="padding:6px;" />
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+                <label style="font-size:0.75rem;">እስከ ቀን</label>
+                <input type="date" id="techSummaryEndDate" value="${window._techSummaryCustomRange.end || ''}" style="padding:6px;" />
+            </div>
+            <button class="btn btn-sm ${rangeFilter === 'custom' ? 'btn-primary' : 'btn-secondary'}" onclick="applyTechSummaryCustomRange()"><i class="fas fa-filter"></i> አጣራ</button>
+            <button class="btn btn-sm btn-outline" onclick="exportTechSummaryCSV()"><i class="fas fa-file-excel"></i> Excel አውርድ</button>
+        </div>
+        <div class="stats-grid" style="margin-bottom:16px;">
+            <div class="stat-card" style="padding:10px;">
+                <div class="number" style="color:#059669; font-size:1.3rem;">${grandTotalIncome.toLocaleString()} ብር</div>
+                <div class="label">ጠቅላላ ገቢ</div>
+            </div>
+            <div class="stat-card" style="padding:10px;">
+                <div class="number" style="color:var(--emergency); font-size:1.3rem;">${grandTotalExpense.toLocaleString()} ብር</div>
+                <div class="label">ጠቅላላ ወጪ</div>
+            </div>
+            <div class="stat-card" style="padding:10px;">
+                <div class="number" style="color:#2563eb; font-size:1.3rem;">${grandTotalCompany.toLocaleString()} ብር</div>
+                <div class="label">ወደ ድርጅቱ የገባ</div>
+            </div>
+            <div class="stat-card" style="padding:10px;">
+                <div class="number" style="color:#7c3aed; font-size:1.3rem;">${grandTotalTechShare.toLocaleString()} ብር</div>
+                <div class="label">ወደ ሰራተኛ የገባ</div>
+            </div>
+        </div>
+    `;
+
+    if (rows.length === 0) {
+        html += `<p class="text-center text-muted">በዚህ ጊዜ ውስጥ ምንም ሪፖርት የተመዘገበ ገቢ የለም</p>`;
+    } else {
+        html += `<div class="table-wrap"><table>
+            <thead><tr>
+                <th>ቴክኒሻን</th><th>ቀን</th><th>ስራዎች</th><th>ገቢ (ብር)</th><th>ወጪ (ብር)</th>
+                <th>ወደ ድርጅቱ</th><th>ወደ ሰራተኛ</th><th>ሪፖርቶች</th><th>እርምጃ</th>
+            </tr></thead>
+            <tbody>`;
+        rows.forEach(r => {
+            // ቀን፦ በ"በቴክኒሻን + በቀን" እይታ የዚያ ቀን፤ በ"በቴክኒሻን" እይታ የመጨረሻው ሪፖርት ቀን (ከአንድ ቀን በላይ ከሆነ የመጀመሪያውም ይታያል)
+            const dateCell = (group === 'day' || r.minDate === r.maxDate)
+                ? techSummaryDateLabel(r.maxDate)
+                : `${techSummaryDateLabel(r.maxDate)}<div class="text-muted" style="font-size:0.68rem;">ከ ${techSummaryDateLabel(r.minDate)}</div>`;
+            html += `<tr>
+                <td><strong>${r.name}</strong>${r.unapproved > 0 ? ` <span class="status-badge status-pending" style="font-size:0.65rem;">${r.unapproved} ያልጸደቁ</span>` : ''}</td>
+                <td style="white-space:nowrap;">${dateCell}</td>
+                <td>${r.jobs}</td>
+                <td>${r.income.toLocaleString()}</td>
+                <td>${r.expense.toLocaleString()}</td>
+                <td style="color:#2563eb; font-weight:600;">${r.companyAmount.toLocaleString()}</td>
+                <td style="color:#7c3aed; font-weight:600;">${r.techShareAmount.toLocaleString()}</td>
+                <td>${r.reports}</td>
+                <td><button class="btn btn-xs btn-outline" onclick="viewTechIncomeDetail('${r.key}')"><i class="fas fa-list"></i> ዝርዝር</button></td>
+            </tr>`;
+        });
+        html += `
+            <tr style="font-weight:900; background:var(--bg);">
+                <td>ጠቅላላ ድምር</td>
+                <td></td>
+                <td>${grandTotalJobs}</td>
+                <td>${grandTotalIncome.toLocaleString()}</td>
+                <td>${grandTotalExpense.toLocaleString()}</td>
+                <td style="color:#2563eb;">${grandTotalCompany.toLocaleString()}</td>
+                <td style="color:#7c3aed;">${grandTotalTechShare.toLocaleString()}</td>
+                <td>${rows.reduce((s,r)=>s+r.reports,0)}</td>
+                <td></td>
+            </tr>
+        `;
+        html += `</tbody></table></div>`;
+    }
+
+    box.innerHTML = html;
+}
+
+function applyTechSummaryCustomRange() {
+    const start = document.getElementById('techSummaryStartDate').value || '';
+    const end = document.getElementById('techSummaryEndDate').value || '';
+    if (!start && !end) {
+        showToast('እባክዎ ቢያንስ አንድ ቀን ይምረጡ', 'error');
+        return;
+    }
+    window._techSummaryCustomRange = { start, end };
+    showTechIncomeSummary('custom');
+}
+
+// ✅ NEW: እያንዳንዱን ቴክኒሻን ሪፖርት ዝርዝር ማየት + የተሳሳተ ሪፖርት ማረሚያ (edit)
+function viewTechIncomeDetail(techKey) {
+    const reports = allDailyReports
+        .filter(r => (r.technicianId || r.technicianName) === techKey)
+        .slice()
+        .sort((a, b) => (b.dateKey || '').localeCompare(a.dateKey || ''));
+
+    const techName = reports.length ? reports[0].technicianName : '';
+
+    let html = `<div style="margin-bottom:12px;"><button class="btn btn-secondary btn-sm" onclick="closeModal()"><i class="fas fa-arrow-left"></i> ወደ ማጠቃለያ ተመለስ</button></div>`;
+
+    if (reports.length === 0) {
+        html += `<p class="text-center text-muted">ምንም ሪፖርት የለም</p>`;
+    } else {
+        html += `<div class="table-wrap"><table>
+            <thead><tr><th>ቀን</th><th>ገቢ</th><th>ወጪ</th><th>ለድርጅት</th><th>ለሰራተኛ</th><th>ሁኔታ</th><th>እርምጃ</th></tr></thead>
+            <tbody>`;
+        reports.forEach(r => {
+            html += `<tr>
+                <td>${r.dateKey || '—'}</td>
+                <td>${(r.totalIncome ?? r.income ?? 0).toLocaleString()}</td>
+                <td>${(r.totalExpense || 0).toLocaleString()}</td>
+                <td style="color:#2563eb;">${(r.companyAmount || 0).toLocaleString()}</td>
+                <td style="color:#7c3aed;">${(r.techShareAmount || 0).toLocaleString()}</td>
+                <td>${r.approved ? '<span class="status-badge status-completed">✅ ጸድቋል</span>' : '<span class="status-badge status-pending">⏳ አልጸደቀም</span>'}</td>
+                <td><button class="btn btn-xs btn-outline" onclick="editDailyReport('${r.id}')"><i class="fas fa-edit"></i> አርም</button></td>
+            </tr>`;
+        });
+        html += `</tbody></table></div>`;
+    }
+
+    openModal(`📋 ${techName} - የገቢ ዝርዝር`, html);
+}
+
+// ✅ NEW: የተሳሳተ ሪፖርት ገቢ/ወጪ ማረሚያ (Edit a wrong daily report entry)
+function editDailyReport(reportId) {
+    const r = allDailyReports.find(rep => rep.id === reportId);
+    if (!r) { showToast('ሪፖርቱ አልተገኘም', 'error'); return; }
+
+    const html = `
+        <div class="form-row">
+            <div class="form-group">
+                <label>ገቢ (ብር)</label>
+                <input type="number" id="editRepIncome" step="0.01" value="${r.totalIncome ?? r.income ?? 0}" oninput="recalcEditReportShares()" />
+            </div>
+            <div class="form-group">
+                <label>ወጪ (ብር)</label>
+                <input type="number" id="editRepExpense" step="0.01" value="${r.totalExpense || 0}" oninput="recalcEditReportShares()" />
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>የባለሙያ ድርሻ (%)</label>
+                <input type="number" id="editRepSharePercent" min="0" max="100" step="0.1" value="${r.techSharePercent || 0}" oninput="recalcEditReportShares()" />
+            </div>
+            <div class="form-group">
+                <label>ትርፍ (በራሱ ይሰላል)</label>
+                <input type="number" id="editRepProfit" value="${(r.profit ?? ((r.totalIncome||0)-(r.totalExpense||0)))}" readonly style="background:var(--bg);" />
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>ወደ ሰራተኛ የገባ (በራሱ ይሰላል)</label>
+                <input type="number" id="editRepTechShare" value="${r.techShareAmount || 0}" readonly style="background:var(--bg);" />
+            </div>
+            <div class="form-group">
+                <label>ወደ ድርጅቱ የገባ (በራሱ ይሰላል)</label>
+                <input type="number" id="editRepCompanyAmount" value="${r.companyAmount || 0}" readonly style="background:var(--bg);" />
+            </div>
+        </div>
+        <div class="form-group">
+            <label>ማብራሪያ / ማስታወሻ</label>
+            <textarea id="editRepNotes">${(r.notes || r.remarks || '').replace(/</g,'&lt;')}</textarea>
+        </div>
+        <button class="btn btn-success btn-block" onclick="saveEditedDailyReport('${reportId}')"><i class="fas fa-save"></i> አስቀምጥ</button>
+    `;
+    openModal(`✏️ የ${r.technicianName || ''} ሪፖርት ማረሚያ (${r.dateKey || ''})`, html);
+}
+
+function recalcEditReportShares() {
+    const income = parseFloat(document.getElementById('editRepIncome').value) || 0;
+    const expense = parseFloat(document.getElementById('editRepExpense').value) || 0;
+    let sharePercent = parseFloat(document.getElementById('editRepSharePercent').value) || 0;
+    sharePercent = Math.max(0, Math.min(100, sharePercent));
+    const profit = income - expense;
+    const techShare = profit * (sharePercent / 100);
+    const companyAmount = profit - techShare;
+    document.getElementById('editRepProfit').value = profit.toFixed(2);
+    document.getElementById('editRepTechShare').value = techShare.toFixed(2);
+    document.getElementById('editRepCompanyAmount').value = companyAmount.toFixed(2);
+}
+
+async function saveEditedDailyReport(reportId) {
+    const income = parseFloat(document.getElementById('editRepIncome').value) || 0;
+    const expense = parseFloat(document.getElementById('editRepExpense').value) || 0;
+    let sharePercent = parseFloat(document.getElementById('editRepSharePercent').value) || 0;
+    sharePercent = Math.max(0, Math.min(100, sharePercent));
+    const profit = income - expense;
+    const techShare = profit * (sharePercent / 100);
+    const companyAmount = profit - techShare;
+    const notes = document.getElementById('editRepNotes').value.trim();
+
+    try {
+        await db.collection('dailyReports').doc(reportId).update({
+            totalIncome: income,
+            income: income,
+            totalExpense: expense,
+            techSharePercent: sharePercent,
+            profit: profit,
+            techShareAmount: techShare,
+            companyAmount: companyAmount,
+            notes: notes,
+            editedByAdmin: true,
+            editedAt: new Date()
+        });
+        await db.collection('activity').add({
+            user: heUserName(),
+            action: 'edit_daily_report',
+            details: `ሪፖርት #${reportId.substring(0,8)} ተስተካክሏል (ገቢ:${income}, ወጪ:${expense})`,
+            timestamp: new Date()
+        });
+        showToast('✅ ሪፖርቱ ተስተካክሏል!', 'success');
+        closeModal();
+    } catch (error) {
+        showToast('❌ ' + error.message, 'error');
+    }
+}
+
+// ============================================================
+// EXCEL EXPORT (CSV - opens directly in Excel, no library needed)
+// ============================================================
+function exportTechSummaryCSV() {
+    const rows = window._techSummaryRows || [];
+    const reports = (window._techSummaryReports || []).slice().sort((a, b) =>
+        (a.dateKey || '').localeCompare(b.dateKey || '') || String(a.technicianName).localeCompare(String(b.technicianName)));
+    if (rows.length === 0) {
+        showToast('የሚወርድ ዳታ የለም', 'error');
+        return;
+    }
+    const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+    const line = (arr) => arr.map(q).join(',') + '\n';
+    const dLabel = (dk) => techSummaryDateLabel(dk);
+
+    // ---- 1) ማጠቃለያ (በቴክኒሻን፣ ቀን ከቴክኒሻን አጠገብ)
+    let csv = '\uFEFF';
+    csv += line(['ማጠቃለያ']);
+    csv += line(['ቴክኒሻን', 'ቀን', 'ስራዎች', 'ገቢ (ብር)', 'ወጪ (ብር)', 'ወደ ድርጅቱ የገባ (ብር)', 'ወደ ሰራተኛ የገባ (ብር)', 'ሪፖርቶች', 'ያልጸደቁ']);
+    let totJobs=0, totIncome=0, totExpense=0, totCompany=0, totTech=0, totReports=0;
+    rows.forEach(r => {
+        totJobs += r.jobs; totIncome += r.income; totExpense += r.expense;
+        totCompany += r.companyAmount; totTech += r.techShareAmount; totReports += r.reports;
+        const date = (r.minDate === r.maxDate) ? dLabel(r.maxDate) : `${dLabel(r.minDate)} - ${dLabel(r.maxDate)}`;
+        csv += line([r.name || '', date, r.jobs, r.income, r.expense, r.companyAmount, r.techShareAmount, r.reports, r.unapproved]);
+    });
+    csv += line(['ጠቅላላ ድምር', '', totJobs, totIncome, totExpense, totCompany, totTech, totReports, '']);
+
+    // ---- 2) እያንዳንዱ ዕለታዊ ሪፖርት
+    csv += '\n' + line(['ዕለታዊ ሪፖርቶች']);
+    csv += line(['ቀን', 'ቴክኒሻን', 'የተላኩ ስራዎች', 'የተጠናቀቁ', 'ያልተጠናቀቁ', 'ገቢ (ብር)', 'ወጪ (ብር)', 'ትርፍ (ብር)', 'ለድርጅት (ብር)', 'ለሰራተኛ (ብር)', 'የተቀማጭ (ብር)', 'የስራ አይነቶች', 'ያልተጠናቀቁ ምክንያቶች', 'ማብራሪያ', 'ሁኔታ']);
+    reports.forEach(r => {
+        csv += line([
+            dLabel(r.dateKey), r.technicianName || '',
+            r.totalSent ?? r.jobs ?? 0, r.completedCount ?? '', r.notCompletedCount ?? '',
+            r.totalIncome ?? r.income ?? 0, r.totalExpense || 0, r.profit ?? '',
+            r.companyAmount || 0, r.techShareAmount || 0, r.deposited || 0,
+            (r.workTypes || []).join(' | '), (r.notCompletedReasons || []).join(' | '),
+            r.remarks || r.notes || '', r.approved ? 'ጸድቋል' : 'አልጸደቀም'
+        ]);
+    });
+
+    // ---- 3) የስራ ዝርዝር - የተሰራም ያልተሰራም (ሁሉም የተዘገበ ስራ)
+    csv += '\n' + line(['የስራ ዝርዝር (የተሰራም ያልተሰራም)']);
+    csv += line(['ቀን', 'ቴክኒሻን', 'ደንበኛ', 'ሁኔታ', 'ካልተጠናቀቀ ምክንያት']);
+    reports.forEach(r => {
+        (r.jobStatuses || []).forEach(j => {
+            const done = j.status === 'completed';
+            csv += line([dLabel(r.dateKey), r.technicianName || '', j.customer || '—', done ? '✅ ተሰርቷል' : '❌ አልተሰራም', done ? '' : (j.reason || '')]);
+        });
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const rangeSuffix = window._techSummaryLastRange === 'custom'
+        ? `_${window._techSummaryCustomRange.start || 'start'}_${window._techSummaryCustomRange.end || 'end'}`
+        : `_${window._techSummaryLastRange || 'all'}`;
+    a.href = url;
+    a.download = `tech-income-summary${rangeSuffix}-${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('✅ Excel ፋይል ወርዷል!', 'success');
+}
+
+/* ============================================================
+   ፋይናንስ ዋና ኮድ (admin.html ውስጥ ካለው ጋር ተመሳሳይ)
+   ============================================================ */
+// ============================================================
+// FINANCE
+// ============================================================
+// 🔒 SECURITY FIX: the finance password ("Income2026") used to be
+// hardcoded and compared right here in the client - visible to
+// anyone via view-source, regardless of the lock UI. It's now
+// verified by a Cloud Function against a Secret Manager value.
+async function unlockFinance() {
+    const input = document.getElementById('financePassInput').value;
+    const error = document.getElementById('financeError');
+    const btn = document.getElementById('unlockFinanceBtn');
+    if (btn) btn.disabled = true;
+
+    let ok = false;
+    try {
+        const res = await callWorker('verifyFinancePassword', { password: input });
+        ok = !!(res && res.ok);
+    } catch (e) {
+        console.warn('⚠️ Finance password check failed:', e);
+    }
+    if (btn) btn.disabled = false;
+
+    if (ok) {
+        isFinanceUnlocked = true;
+        document.getElementById('financeLock').style.display = 'none';
+        document.getElementById('financeContent').style.display = 'block';
+        error.style.display = 'none';
+        document.getElementById('financePassInput').value = '';
+        updateFinanceStats();
+        renderTransactions();
+        try { showTechIncomeSummary(); } catch (e) { console.warn('techIncomeSummary render failed', e); }
+        showToast('🔓 ፋይናንስ ተከፍቷል!', 'success');
+    } else {
+        error.style.display = 'block';
+        document.getElementById('financePassInput').value = '';
+        setTimeout(() => error.style.display = 'none', 3000);
+        showToast('❌ የተሳሳተ የይለፍ ቃል!', 'error');
+    }
+}
+
+// ============================================================
+// 🔑 FINANCE PASSWORD CHANGE
+// ማረጋገጫው እና hash ማስቀመጡ በ Worker (changeFinancePassword) ውስጥ ነው።
+// ============================================================
+function toggleFinPwVisibility(show) {
+    ['finPwCurrent', 'finPwNew', 'finPwConfirm'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.type = show ? 'text' : 'password';
+    });
+}
+function showFinPwMsg(text, type) {
+    const box = document.getElementById('finPwMsg');
+    if (!box) return;
+    const ok = type === 'success';
+    box.textContent = text;
+    box.style.display = 'block';
+    box.style.background = ok ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)';
+    box.style.color = ok ? '#15803d' : '#b91c1c';
+    box.style.border = '1px solid ' + (ok ? '#86efac' : '#fca5a5');
+}
+async function changeFinancePassword() {
+    const cur = document.getElementById('finPwCurrent');
+    const nw = document.getElementById('finPwNew');
+    const cf = document.getElementById('finPwConfirm');
+    const btn = document.getElementById('finPwBtn');
+    const fail = (msg) => { showFinPwMsg('❌ ' + msg, 'error'); showToast('❌ ' + msg, 'error'); };
+
+    if (!isFinanceUnlocked) return fail('መጀመሪያ ፋይናንስን ይክፈቱ');
+    if (!cur.value || !nw.value || !cf.value) return fail('እባክዎ ሁሉንም መስኮች ይሙሉ');
+    if (nw.value.length < 8) return fail('አዲስ ይለፍ ቃል ቢያንስ 8 ፊደላት ሊኖረው ይገባል');
+    if (nw.value.length > 200) return fail('አዲስ ይለፍ ቃል በጣም ረጅም ነው');
+    if (nw.value !== cf.value) return fail('አዲሱ ይለፍ ቃል እና ማረጋገጫው አይመሳሰሉም');
+    if (nw.value === cur.value) return fail('አዲስ ይለፍ ቃል ከአሁኑ የተለየ መሆን አለበት');
+
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> በመቀየር ላይ...';
+    try {
+        const res = await callWorker('changeFinancePassword', { oldPassword: cur.value, newPassword: nw.value });
+        if (res && res.ok) {
+            cur.value = nw.value = cf.value = '';
+            const sh = document.getElementById('finPwShow');
+            if (sh) { sh.checked = false; toggleFinPwVisibility(false); }
+            showFinPwMsg('✅ የፋይናንስ ይለፍ ቃል በተሳካ ሁኔታ ተቀይሯል!', 'success');
+            showToast('✅ የፋይናንስ ይለፍ ቃል ተቀይሯል!', 'success');
+            try {
+                db.collection('activity').add({ user: heUserName(), action: 'change_finance_password', details: 'የፋይናንስ ይለፍ ቃል ተቀይሯል', timestamp: new Date() });
+            } catch (e) {}
+        } else {
+            const map = {
+                'wrong-old-password': 'የአሁኑ ይለፍ ቃል ተሳስቷል',
+                'same-password': 'አዲስ ይለፍ ቃል ከአሁኑ የተለየ መሆን አለበት',
+                'invalid': 'አዲስ ይለፍ ቃል ቢያንስ 8 ፊደላት ሊኖረው ይገባል',
+                'too-many-attempts': 'ብዙ ሙከራ ተደርጓል፤ ከ10 ደቂቃ በኋላ ይሞክሩ',
+                'unauthorized': 'ክፍለ ጊዜዎ አብቅቷል፤ እንደገና ይግቡ',
+                'forbidden': 'ይህን ለማድረግ ፈቃድ የለዎትም'
+            };
+            fail((res && map[res.error]) || 'ይለፍ ቃል መቀየር አልተቻለም፣ እንደገና ይሞክሩ');
+        }
+    } catch (e) {
+        console.warn('⚠️ Finance password change failed:', e);
+        fail('ከአገልጋዩ ጋር መገናኘት አልተቻለም፣ እንደገና ይሞክሩ');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+    }
+}
+
+function updateFinanceStats() {
+    const sum = (arr, f) => arr.reduce((s, x) => s + (parseFloat(f(x)) || 0), 0);
+    const txIncome = sum(allTransactions.filter(t => t.type === 'income'), t => t.amount);
+    const txExpense = sum(allTransactions.filter(t => t.type === 'expense'), t => t.amount);
+    // 💳 የተከፈለ ብድር፦ ደንበኛ የከፈለን (ወደ ድርጅቱ የገባ) እና እኛ የከፈልነው (የወጣ)
+    const collected = sum(allDebts.filter(d => d.type !== 'payable' && d.status === 'paid'), d => d.amount);
+    const paidOut = sum(allDebts.filter(d => d.type === 'payable' && d.status === 'paid'), d => d.amount);
+    // 👷 ለሰራተኛ የተሰጠ ድርሻ ወደ ድርጅቱ የገባ አይደለም → ከተጣራ ትርፍ ይቀነሳል
+    const techShare = sum(allDailyReports, r => r.techShareAmount);
+
+    const income = txIncome + collected;      // ጠቅላላ የገባ (ብድር የተሰበሰበን ጨምሮ)
+    const expense = txExpense + paidOut;      // ጠቅላላ ወጪ (የከፈልነውን ብድር ጨምሮ)
+    const net = income - expense - techShare; // ወደ ድርጅቱ የገባ ትርፍ ብቻ
+
+    const f = (n) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ብር';
+    document.getElementById('finTotalIncome').textContent = f(income);
+    document.getElementById('finTotalExpense').textContent = f(expense);
+    document.getElementById('finNetProfit').textContent = f(net);
+    const setNote = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+    setNote('finIncomeNote', collected > 0 ? `ከዚህ ውስጥ ደንበኛ የከፈለን ብድር ${f(collected)}` : '');
+    setNote('finExpenseNote', paidOut > 0 ? `ከዚህ ውስጥ የከፈልነው ብድር ${f(paidOut)}` : '');
+    setNote('finNetNote', techShare > 0 ? `ለሰራተኛ የተሰጠ ${f(techShare)} ተቀንሷል` : '');
+}
+
+function renderTransactions() {
+    const container = document.getElementById('txList');
+    if (allTransactions.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center">ምንም ግቤት የለም</p>';
+        return;
+    }
+    let html = '';
+    allTransactions.slice(0, 30).forEach(tx => {
+        const date = tx.date ? formatEthDate(new Date(tx.date)) : '—';
+        const sign = tx.type === 'income' ? '+' : '-';
+        const color = tx.type === 'income' ? 'var(--success)' : 'var(--emergency)';
+        html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border-light);">
+            <div style="flex:1; min-width:0;"><span style="font-weight:500;">${tx.description || '—'}</span> <span class="text-muted" style="font-size:0.8rem;">${date}</span></div>
+            <div style="font-weight:700; color:${color}; white-space:nowrap;">${sign} ${parseFloat(tx.amount || 0).toFixed(2)} ብር</div>
+            <div style="display:flex; gap:4px;">
+                <button class="btn btn-xs btn-outline" onclick="editTransaction('${tx.id}')" title="አርም"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-xs btn-danger" onclick="deleteTransaction('${tx.id}')" title="ሰርዝ"><i class="fas fa-trash"></i></button>
+            </div>
+        </div>`;
+    });
+    container.innerHTML = html;
+}
+
+// ✅ NEW: የተሳሳተ የገቢ/ወጪ ግቤት ማረሚያ (Edit a wrong finance entry)
+function editTransaction(txId) {
+    const tx = allTransactions.find(t => t.id === txId);
+    if (!tx) { showToast('ግቤቱ አልተገኘም', 'error'); return; }
+    const html = `
+        <div class="form-group">
+            <label>መግለጫ</label>
+            <input type="text" id="editTxDesc" value="${(tx.description || '').replace(/"/g,'&quot;')}" />
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>ገንዘብ (ብር)</label>
+                <input type="number" id="editTxAmount" step="0.01" value="${tx.amount || 0}" />
+            </div>
+            <div class="form-group">
+                <label>ዓይነት</label>
+                <select id="editTxType">
+                    <option value="income" ${tx.type === 'income' ? 'selected' : ''}>💰 ገቢ</option>
+                    <option value="expense" ${tx.type === 'expense' ? 'selected' : ''}>💸 ወጪ</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>ቀን</label>
+            <input type="date" id="editTxDate" value="${tx.date || ''}" />
+        </div>
+        <button class="btn btn-success btn-block" onclick="saveEditedTransaction('${txId}')"><i class="fas fa-save"></i> አስቀምጥ</button>
+    `;
+    openModal('✏️ ግቤት ማረሚያ', html);
+}
+
+async function saveEditedTransaction(txId) {
+    const desc = document.getElementById('editTxDesc').value.trim();
+    const amount = parseFloat(document.getElementById('editTxAmount').value);
+    const type = document.getElementById('editTxType').value;
+    const date = document.getElementById('editTxDate').value;
+
+    if (!desc || isNaN(amount) || amount <= 0) {
+        showToast('እባክዎ ትክክለኛ መግለጫ እና ገንዘብ ያስገቡ', 'error');
+        return;
+    }
+    try {
+        await db.collection('transactions').doc(txId).update({
+            description: desc, amount: amount, type: type, date: date,
+            editedByAdmin: true, editedAt: new Date()
+        });
+        await db.collection('activity').add({
+            user: heUserName(), action: 'edit_transaction',
+            details: `ግቤት ${desc} ተስተካክሏል`, timestamp: new Date()
+        });
+        showToast('✅ ግቤቱ ተስተካክሏል!', 'success');
+        closeModal();
+    } catch (error) {
+        showToast('❌ ' + error.message, 'error');
+    }
+}
+
+async function deleteTransaction(txId) {
+    if (!confirm('እርግጠኛ ነዎት ይህን ግቤት መሰረዝ ይፈልጋሉ?')) return;
+    try {
+        await db.collection('transactions').doc(txId).delete();
+        showToast('✅ ግቤቱ ተሰርዟል', 'success');
+    } catch (error) {
+        showToast('❌ ' + error.message, 'error');
+    }
+}
+
+// ============================================================
+// ✅ የሂሳብ ማውረጃ - ሁሉንም የፋይናንስ ስራዎች ያካትታል:
+//    ገቢ/ወጪ ግቤቶች፣ ብድር (የተሰጠ + የተቀበልነው)፣ የተከፈሉ ብድሮች፣ የቴክኒሻን ዕለታዊ ሪፖርት ገቢ
+// ============================================================
+function showFinanceExportModal() {
+    const html = `
+        <p class="text-muted" style="margin-bottom:12px;">ለተወሰነ ጊዜ ብቻ ማውረድ ከፈለጉ ቀን ይምረጡ፣ ካልመረጡ ሁሉም ይወርዳል።<br>
+        ፋይሉ ውስጥ: ገቢ/ወጪ፣ ብድር/እዳ (የተከፈለውም ያልተከፈለውም)፣ የቴክኒሻን ዕለታዊ ሪፖርት እና ጠቅላላ ማጠቃለያ ይገኛሉ።</p>
+        <div class="form-row">
+            <div class="form-group">
+                <label>ከቀን</label>
+                <input type="date" id="finExportStart" />
+            </div>
+            <div class="form-group">
+                <label>እስከ ቀን</label>
+                <input type="date" id="finExportEnd" />
+            </div>
+        </div>
+        <button class="btn btn-primary btn-block" onclick="exportFinanceCSV()"><i class="fas fa-file-excel"></i> Excel አውርድ</button>
+    `;
+    openModal('📅 የሂሳብ ማውረጃ - ቀን ይምረጡ', html);
+}
+
+// ---- ትናንሽ አጋዥ ተግባራት ----
+function finToKey(v) {
+    if (!v) return '';
+    if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+    const d = v.toDate ? v.toDate() : (v instanceof Date ? v : new Date(v));
+    return isNaN(d.getTime()) ? '' : getDateKey(d);
+}
+function finTxKey(tx) { return finToKey(tx.date) || finToKey(tx.createdAt); }
+function finInRange(key, start, end) {
+    if (!key) return !start && !end;
+    if (start && key < start) return false;
+    if (end && key > end) return false;
+    return true;
+}
+function finDebtTypeLabel(d) {
+    return d.type === 'payable' ? 'የተቀበልነው ብድር (እኛ የምንከፍለው)' : 'የሰጠነው ብድር (የሚከፍለን)';
+}
+function finCsvLine(arr) {
+    return arr.map(c => {
+        const v = String(c ?? '');
+        return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+    }).join(',') + '\r\n';
+}
+function finDownloadCSV(csv, fileName) {
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+const finNum = (v) => parseFloat(v || 0) || 0;
+
+// ✅ የሂሳብ ማውረጃ (CSV) - በቀን ክልል
+function exportFinanceCSV() {
+    if (!isFinanceUnlocked) {
+        showToast('❌ እባክዎ መጀመሪያ ፋይናንስ ይክፈቱ', 'error');
+        return;
+    }
+    const startDate = (document.getElementById('finExportStart') || {}).value || '';
+    const endDate = (document.getElementById('finExportEnd') || {}).value || '';
+    const hasRange = !!(startDate || endDate);
+
+    // 1) ገቢ/ወጪ
+    const txs = allTransactions.filter(tx => finInRange(finTxKey(tx), startDate, endDate))
+        .sort((a, b) => finTxKey(a).localeCompare(finTxKey(b)));
+
+    // 2) ብድር/እዳ: በተመዘገበበት ቀን ወይም በተከፈለበት ቀን በክልሉ ውስጥ ከሆነ ይገባል
+    const debts = allDebts.filter(d => {
+        const ck = finToKey(d.createdAt), pk = finToKey(d.paidAt);
+        return finInRange(ck, startDate, endDate) || (pk && finInRange(pk, startDate, endDate));
+    }).sort((a, b) => finToKey(a.createdAt).localeCompare(finToKey(b.createdAt)));
+
+    // 3) የቴክኒሻን ዕለታዊ ሪፖርት
+    const reports = allDailyReports.filter(r => r.dateKey && finInRange(r.dateKey, startDate, endDate))
+        .sort((a, b) => a.dateKey.localeCompare(b.dateKey) || String(a.technicianName).localeCompare(String(b.technicianName)));
+
+    if (!txs.length && !debts.length && !reports.length) {
+        showToast('❌ በተመረጠው ቀን ውስጥ ምንም የፋይናንስ ግቤት የለም', 'error');
+        return;
+    }
+
+    let csv = '';
+    let totalIncome = 0, totalExpense = 0;
+
+    csv += finCsvLine(['1. ገቢ እና ወጪ ግቤቶች']);
+    csv += finCsvLine(['ቀን', 'መግለጫ', 'ዓይነት', 'ገንዘብ (ብር)']);
+    txs.forEach(tx => {
+        const amt = finNum(tx.amount);
+        if (tx.type === 'income') totalIncome += amt; else totalExpense += amt;
+        csv += finCsvLine([finTxKey(tx) ? formatEthDate(new Date(finTxKey(tx))) : '—', tx.description || '—', tx.type === 'income' ? 'ገቢ' : 'ወጪ', amt.toFixed(2)]);
+    });
+    csv += finCsvLine(['', 'ጠቅላላ ገቢ (ግቤቶች)', '', totalIncome.toFixed(2)]);
+    csv += finCsvLine(['', 'ጠቅላላ ወጪ (ግቤቶች)', '', totalExpense.toFixed(2)]);
+    csv += finCsvLine(['', 'የተጣራ (ግቤቶች ብቻ)', '', (totalIncome - totalExpense).toFixed(2)]);
+
+    // ብድር/እዳ
+    const sum = { recGiven: 0, recPaid: 0, payTaken: 0, payPaid: 0 };
+    csv += '\r\n' + finCsvLine(['2. ብድር/እዳ (የሰጠነው + የተቀበልነው፣ የተከፈለም ያልተከፈለም)']);
+    csv += finCsvLine(['የተመዘገበበት ቀን', 'ስም', 'ስልክ', 'ዓይነት', 'ገንዘብ (ብር)', 'ማብራሪያ', 'ሁኔታ', 'የተከፈለበት ቀን']);
+    debts.forEach(d => {
+        const amt = finNum(d.amount), paid = d.status === 'paid';
+        if (d.type === 'payable') { sum.payTaken += amt; if (paid) sum.payPaid += amt; }
+        else { sum.recGiven += amt; if (paid) sum.recPaid += amt; }
+        const ck = finToKey(d.createdAt), pk = finToKey(d.paidAt);
+        csv += finCsvLine([ck ? formatEthDate(new Date(ck)) : '—', d.person || '—', d.phone || '', finDebtTypeLabel(d), amt.toFixed(2), d.note || '', paid ? 'ተከፍሏል' : 'ያልተከፈለ', pk ? formatEthDate(new Date(pk)) : '']);
+    });
+    csv += finCsvLine(['', 'የሰጠነው ብድር (የሚከፍለን) ጠቅላላ', '', '', sum.recGiven.toFixed(2)]);
+    csv += finCsvLine(['', '   ከዚህ ውስጥ የተከፈለን', '', '', sum.recPaid.toFixed(2)]);
+    csv += finCsvLine(['', '   ገና ያልተከፈለን', '', '', (sum.recGiven - sum.recPaid).toFixed(2)]);
+    csv += finCsvLine(['', 'የተቀበልነው ብድር (እኛ የምንከፍለው) ጠቅላላ', '', '', sum.payTaken.toFixed(2)]);
+    csv += finCsvLine(['', '   ከዚህ ውስጥ የከፈልነው', '', '', sum.payPaid.toFixed(2)]);
+    csv += finCsvLine(['', '   ገና ያልከፈልነው', '', '', (sum.payTaken - sum.payPaid).toFixed(2)]);
+
+    // የቴክኒሻን ሪፖርት
+    let rInc = 0, rExp = 0, rCo = 0, rTech = 0;
+    csv += '\r\n' + finCsvLine(['3. የቴክኒሻን ዕለታዊ ሪፖርት ገቢ']);
+    csv += finCsvLine(['ቀን', 'ቴክኒሻን', 'ስራዎች', 'ገቢ (ብር)', 'ወጪ (ብር)', 'ለድርጅት (ብር)', 'ለሰራተኛ (ብር)', 'ሁኔታ']);
+    reports.forEach(r => {
+        const inc = finNum(r.totalIncome ?? r.income), exp = finNum(r.totalExpense);
+        rInc += inc; rExp += exp; rCo += finNum(r.companyAmount); rTech += finNum(r.techShareAmount);
+        csv += finCsvLine([techSummaryDateLabel(r.dateKey), r.technicianName || '', r.jobs ?? r.completedCount ?? 0, inc.toFixed(2), exp.toFixed(2), finNum(r.companyAmount).toFixed(2), finNum(r.techShareAmount).toFixed(2), r.approved ? 'ጸድቋል' : 'አልጸደቀም']);
+    });
+    csv += finCsvLine(['', 'ጠቅላላ', '', rInc.toFixed(2), rExp.toFixed(2), rCo.toFixed(2), rTech.toFixed(2), '']);
+
+    // 4) 💰 ማጠቃለያ — የተከፈለ ብድርን ጨምሮ፤ ወደ ድርጅቱ የገባ ትርፍ ብቻ
+    const paidInRange = debts.filter(d => d.status === 'paid' && finInRange(finToKey(d.paidAt), startDate, endDate));
+    const collected = paidInRange.filter(d => d.type !== 'payable').reduce((s, d) => s + finNum(d.amount), 0);
+    const paidOut = paidInRange.filter(d => d.type === 'payable').reduce((s, d) => s + finNum(d.amount), 0);
+    const allIn = totalIncome + collected, allOut = totalExpense + paidOut;
+    csv += '\r\n' + finCsvLine(['4. ማጠቃለያ (የተከፈለ ብድርን ጨምሮ)']);
+    csv += finCsvLine(['', 'ጠቅላላ የገባ ገቢ (ግቤቶች + ደንበኛ የከፈለን ብድር)', '', allIn.toFixed(2)]);
+    csv += finCsvLine(['', '   ከዚህ ውስጥ ደንበኛ የከፈለን ብድር', '', collected.toFixed(2)]);
+    csv += finCsvLine(['', 'ጠቅላላ ወጪ (ግቤቶች + የከፈልነው ብድር)', '', allOut.toFixed(2)]);
+    csv += finCsvLine(['', '   ከዚህ ውስጥ የከፈልነው ብድር', '', paidOut.toFixed(2)]);
+    csv += finCsvLine(['', 'ለሰራተኛ የተሰጠ ድርሻ (ተቀንሷል)', '', rTech.toFixed(2)]);
+    csv += finCsvLine(['', 'ወደ ድርጅቱ የገባ የተጣራ ትርፍ', '', (allIn - allOut - rTech).toFixed(2)]);
+
+    const fileSuffix = hasRange ? `_${startDate || 'start'}_${endDate || 'end'}` : '';
+    finDownloadCSV(csv, `የሂሳብ_ሪፖርት${fileSuffix}_${getDateKey(new Date())}.csv`);
+    showToast('✅ የሂሳብ ሪፖርት ወርዷል', 'success');
+    closeModal();
+}
+
+// ============================================================
+// ✅ ጠቅላላ የዕለቱ እንቅስቃሴ (Daily Activity) - ቅድመ-እይታ + ማውረጃ
+// ============================================================
+function collectDailyActivity(dk) {
+    const orderCreated = allOrders.filter(o => finToKey(o.createdAt) === dk);
+    const orderDone = allOrders.filter(o => finToKey(o.completedAt) === dk);
+    return {
+        txs: allTransactions.filter(tx => finTxKey(tx) === dk),
+        debtsNew: allDebts.filter(d => finToKey(d.createdAt) === dk),
+        debtsPaid: allDebts.filter(d => d.status === 'paid' && finToKey(d.paidAt) === dk),
+        reports: allDailyReports.filter(r => r.dateKey === dk),
+        orderCreated, orderDone
+    };
+}
+function dailyActTotals(x) {
+    const income = x.txs.filter(t => t.type === 'income').reduce((s, t) => s + finNum(t.amount), 0);
+    const expense = x.txs.filter(t => t.type === 'expense').reduce((s, t) => s + finNum(t.amount), 0);
+    const given = x.debtsNew.filter(d => d.type !== 'payable').reduce((s, d) => s + finNum(d.amount), 0);
+    const taken = x.debtsNew.filter(d => d.type === 'payable').reduce((s, d) => s + finNum(d.amount), 0);
+    const recvPaid = x.debtsPaid.filter(d => d.type !== 'payable').reduce((s, d) => s + finNum(d.amount), 0);
+    const payPaid = x.debtsPaid.filter(d => d.type === 'payable').reduce((s, d) => s + finNum(d.amount), 0);
+    const repIncome = x.reports.reduce((s, r) => s + finNum(r.totalIncome ?? r.income), 0);
+    const repExpense = x.reports.reduce((s, r) => s + finNum(r.totalExpense), 0);
+    return { income, expense, given, taken, recvPaid, payPaid, repIncome, repExpense };
+}
+function renderDailyActivityPreview() {
+    const dk = (document.getElementById('dailyActDate') || {}).value || getDateKey(new Date());
+    const x = collectDailyActivity(dk), t = dailyActTotals(x);
+    const cell = (label, val, color) => `<div class="stat-card" style="padding:10px;"><div class="number" style="font-size:1.15rem; color:${color};">${val}</div><div class="label">${label}</div></div>`;
+    const f = (n) => n.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' ብር';
+    document.getElementById('dailyActPreview').innerHTML = `
+        <p style="font-weight:700; margin-bottom:8px;">${techSummaryDateLabel(dk)}</p>
+        <div class="stats-grid">
+            ${cell('ገቢ', f(t.income), 'var(--success)')}
+            ${cell('ወጪ', f(t.expense), 'var(--emergency)')}
+            ${cell('አዲስ የሰጠነው ብድር', f(t.given), 'var(--warning)')}
+            ${cell('አዲስ የተቀበልነው ብድር', f(t.taken), 'var(--emergency)')}
+            ${cell('የተከፈለን ብድር', f(t.recvPaid), 'var(--success)')}
+            ${cell('የከፈልነው ብድር', f(t.payPaid), 'var(--emergency)')}
+            ${cell('የቴክኒሻን ሪፖርት ገቢ', f(t.repIncome), 'var(--primary)')}
+            ${cell('የተጠናቀቁ ትዕዛዞች', x.orderDone.length, 'var(--primary)')}
+        </div>`;
+}
+function exportDailyActivityCSV() {
+    if (!isFinanceUnlocked) { showToast('❌ እባክዎ መጀመሪያ ፋይናንስ ይክፈቱ', 'error'); return; }
+    const dk = (document.getElementById('dailyActDate') || {}).value || getDateKey(new Date());
+    const x = collectDailyActivity(dk), t = dailyActTotals(x);
+    const total = x.txs.length + x.debtsNew.length + x.debtsPaid.length + x.reports.length + x.orderCreated.length + x.orderDone.length;
+    if (!total) { showToast('❌ በዚህ ቀን ምንም እንቅስቃሴ የለም', 'error'); return; }
+    const L = finCsvLine;
+    const fx = (n) => n.toFixed(2);
+    const time = (v) => { const d = v && v.toDate ? v.toDate() : (v ? new Date(v) : null); return d && !isNaN(d) ? d.toTimeString().slice(0, 5) : ''; };
+
+    let csv = L(['ጠቅላላ የዕለቱ እንቅስቃሴ', techSummaryDateLabel(dk), dk]);
+    csv += '\r\n' + L(['ማጠቃለያ']);
+    csv += L(['ገቢ (ግቤት)', fx(t.income)]);
+    csv += L(['ወጪ (ግቤት)', fx(t.expense)]);
+    csv += L(['የተጣራ (ገቢ - ወጪ)', fx(t.income - t.expense)]);
+    csv += L(['አዲስ የሰጠነው ብድር (የሚከፍለን)', fx(t.given)]);
+    csv += L(['አዲስ የተቀበልነው ብድር (የምንከፍለው)', fx(t.taken)]);
+    csv += L(['የተከፈለን ብድር (ተመላሽ)', fx(t.recvPaid)]);
+    csv += L(['የከፈልነው ብድር', fx(t.payPaid)]);
+    csv += L(['የቴክኒሻን ሪፖርት ገቢ', fx(t.repIncome)]);
+    csv += L(['የቴክኒሻን ሪፖርት ወጪ', fx(t.repExpense)]);
+    csv += L(['አዲስ ትዕዛዞች', x.orderCreated.length]);
+    csv += L(['የተጠናቀቁ ትዕዛዞች', x.orderDone.length]);
+
+    csv += '\r\n' + L(['1. ገቢ እና ወጪ ግቤቶች']) + L(['ሰዓት', 'መግለጫ', 'ዓይነት', 'ገንዘብ (ብር)']);
+    x.txs.forEach(tx => { csv += L([time(tx.createdAt), tx.description || '—', tx.type === 'income' ? 'ገቢ' : 'ወጪ', fx(finNum(tx.amount))]); });
+
+    csv += '\r\n' + L(['2. በዚህ ቀን የተመዘገበ ብድር/እዳ']) + L(['ስም', 'ስልክ', 'ዓይነት', 'ገንዘብ (ብር)', 'ማብራሪያ', 'ሁኔታ']);
+    x.debtsNew.forEach(d => { csv += L([d.person || '—', d.phone || '', finDebtTypeLabel(d), fx(finNum(d.amount)), d.note || '', d.status === 'paid' ? 'ተከፍሏል' : 'ያልተከፈለ']); });
+
+    csv += '\r\n' + L(['3. በዚህ ቀን የተከፈሉ ብድሮች']) + L(['ስም', 'ስልክ', 'ዓይነት', 'ገንዘብ (ብር)', 'ማብራሪያ', 'የተመዘገበበት ቀን']);
+    x.debtsPaid.forEach(d => { const ck = finToKey(d.createdAt); csv += L([d.person || '—', d.phone || '', finDebtTypeLabel(d), fx(finNum(d.amount)), d.note || '', ck ? formatEthDate(new Date(ck)) : '']); });
+
+    csv += '\r\n' + L(['4. የቴክኒሻን ዕለታዊ ሪፖርቶች']) + L(['ቴክኒሻን', 'ስራዎች', 'ገቢ (ብር)', 'ወጪ (ብር)', 'ለድርጅት (ብር)', 'ለሰራተኛ (ብር)', 'ማብራሪያ', 'ሁኔታ']);
+    x.reports.forEach(r => { csv += L([r.technicianName || '', r.jobs ?? r.completedCount ?? 0, fx(finNum(r.totalIncome ?? r.income)), fx(finNum(r.totalExpense)), fx(finNum(r.companyAmount)), fx(finNum(r.techShareAmount)), r.remarks || r.notes || '', r.approved ? 'ጸድቋል' : 'አልጸደቀም']); });
+
+    csv += '\r\n' + L(['5. በዚህ ቀን የገቡ ትዕዛዞች']) + L(['ሰዓት', 'ደንበኛ', 'እቃ', 'ሁኔታ']);
+    x.orderCreated.forEach(o => { csv += L([time(o.createdAt), o.fullName || '—', o.appliance || '—', o.status || 'Pending']); });
+
+    csv += '\r\n' + L(['6. በዚህ ቀን የተጠናቀቁ ትዕዛዞች']) + L(['ሰዓት', 'ደንበኛ', 'እቃ', 'ቴክኒሻን']);
+    x.orderDone.forEach(o => { csv += L([time(o.completedAt), o.fullName || '—', o.appliance || '—', o.technicianName || o.assignedTechName || '']); });
+
+    finDownloadCSV(csv, `የዕለቱ_እንቅስቃሴ_${dk}.csv`);
+    showToast('✅ የዕለቱ እንቅስቃሴ ወርዷል', 'success');
+}
+
+async function addTransaction() {
+    const desc = document.getElementById('txDesc').value.trim();
+    const amount = parseFloat(document.getElementById('txAmount').value);
+    const type = document.getElementById('txType').value;
+    const date = document.getElementById('txDate').value || new Date().toISOString().split('T')[0];
+
+    if (!desc || isNaN(amount) || amount <= 0) {
+        showToast('እባክዎ ትክክለኛ መግለጫ እና ገንዘብ ያስገቡ', 'error');
+        return;
+    }
+
+    try {
+        await db.collection('transactions').add({
+            description: desc,
+            amount: amount,
+            type: type,
+            date: date,
+            staff: heUserName(),
+            createdAt: new Date()
+        });
+        await db.collection('activity').add({
+            user: heUserName(),
+            action: 'add_transaction',
+            details: `${desc} - ${amount} ብር (${type})`,
+            timestamp: new Date()
+        });
+        document.getElementById('txDesc').value = '';
+        document.getElementById('txAmount').value = '';
+        document.getElementById('txDate').value = '';
+        showToast('✅ ግቤት ተጨምሯል!', 'success');
+    } catch (error) {
+        showToast('❌ ' + error.message, 'error');
+    }
+}
+
+// ============================================================
+// ✅ NEW: DEBT / CREDIT TRACKER (ብድር/እዳ መከታተያ)
+// ============================================================
+function loadDebts() {
+    db.collection('debts').orderBy('createdAt', 'desc').onSnapshot((snapshot) => {
+        allDebts = [];
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            data.id = doc.id;
+            allDebts.push(data);
+        });
+        try { updateFinanceStats(); } catch (e) {}
+        updateDebtStats();
+        renderDebts();
+    });
+}
+
+function updateDebtStats() {
+    const receivable = allDebts.filter(d => d.type === 'receivable' && d.status !== 'paid')
+        .reduce((s, d) => s + parseFloat(d.amount || 0), 0);
+    const payable = allDebts.filter(d => d.type === 'payable' && d.status !== 'paid')
+        .reduce((s, d) => s + parseFloat(d.amount || 0), 0);
+    document.getElementById('debtReceivable').textContent = receivable.toFixed(2) + ' ብር';
+    document.getElementById('debtPayable').textContent = payable.toFixed(2) + ' ብር';
+}
+
+function renderDebts() {
+    const filter = document.getElementById('debtFilter').value;
+    const body = document.getElementById('debtBody');
+    let list = allDebts;
+    if (filter === 'unpaid') list = allDebts.filter(d => d.status !== 'paid');
+    else if (filter === 'paid') list = allDebts.filter(d => d.status === 'paid');
+
+    if (list.length === 0) {
+        body.innerHTML = '<tr><td colspan="6" class="text-center text-muted">ምንም የለም</td></tr>';
+        return;
+    }
+
+    body.innerHTML = list.map(d => {
+        const typeLabel = d.type === 'payable' ? '🔴 የምንከፍለው' : '🟡 የሚከፍለን';
+        const statusLabel = d.status === 'paid' ? '<span style="color:var(--success); font-weight:600;">✅ ተከፍሏል</span>' : '<span style="color:var(--warning); font-weight:600;">⏳ ያልተከፈለ</span>';
+        const payBtn = d.status === 'paid' ? '' : `<button class="btn btn-sm btn-success" onclick="markDebtPaid('${d.id}')"><i class="fas fa-check"></i></button>`;
+        return `<tr>
+            <td>${d.person || '—'}${d.phone ? '<br><span class="text-muted" style="font-size:0.75rem;">' + d.phone + '</span>' : ''}</td>
+            <td>${typeLabel}</td>
+            <td style="font-weight:700;">${parseFloat(d.amount || 0).toFixed(2)} ብር</td>
+            <td>${d.note || '—'}</td>
+            <td>${statusLabel}</td>
+            <td style="display:flex; gap:6px;">${payBtn}<button class="btn btn-sm btn-danger" onclick="deleteDebt('${d.id}')"><i class="fas fa-trash"></i></button></td>
+        </tr>`;
+    }).join('');
+}
+
+async function addDebt() {
+    const person = document.getElementById('debtPerson').value.trim();
+    const phone = document.getElementById('debtPhone').value.trim();
+    const amount = parseFloat(document.getElementById('debtAmount').value);
+    const type = document.getElementById('debtType').value;
+    const note = document.getElementById('debtNote').value.trim();
+
+    if (!person || isNaN(amount) || amount <= 0) {
+        showToast('እባክዎ ትክክለኛ ስም እና ገንዘብ ያስገቡ', 'error');
+        return;
+    }
+
+    try {
+        await db.collection('debts').add({
+            person: person,
+            phone: phone,
+            amount: amount,
+            type: type,
+            note: note,
+            status: 'unpaid',
+            staff: heUserName(),
+            createdAt: new Date()
+        });
+        await db.collection('activity').add({
+            user: heUserName(),
+            action: 'add_debt',
+            details: `${person} - ${amount} ብር (${type === 'payable' ? 'የምንከፍለው' : 'የሚከፍለን'})`,
+            timestamp: new Date()
+        });
+        document.getElementById('debtPerson').value = '';
+        document.getElementById('debtPhone').value = '';
+        document.getElementById('debtAmount').value = '';
+        document.getElementById('debtNote').value = '';
+        showToast('✅ ግቤት ተጨምሯል!', 'success');
+    } catch (error) {
+        showToast('❌ ' + error.message, 'error');
+    }
+}
+
+async function markDebtPaid(id) {
+    try {
+        await db.collection('debts').doc(id).update({ status: 'paid', paidAt: new Date() });
+        showToast('✅ እንደተከፈለ ተመዝግቧል', 'success');
+    } catch (error) {
+        showToast('❌ ' + error.message, 'error');
+    }
+}
+
+async function deleteDebt(id) {
+    if (!confirm('እርግጠኛ ነዎት ይህን ግቤት መሰረዝ ይፈልጋሉ?')) return;
+    try {
+        await db.collection('debts').doc(id).delete();
+        showToast('✅ ተሰርዟል', 'success');
+    } catch (error) {
+        showToast('❌ ' + error.message, 'error');
+    }
+}
+
+/* ============================================================
+   ዳታ መጫን (real-time)
+   ============================================================ */
+function loadTransactions() {
+    db.collection('transactions').orderBy('createdAt', 'desc').onSnapshot((snapshot) => {
+        allTransactions = [];
+        snapshot.forEach(doc => { const d = doc.data(); d.id = doc.id; allTransactions.push(d); });
+        if (isFinanceUnlocked) { updateFinanceStats(); renderTransactions(); }
+    }, (e) => console.warn('transactions listener', e));
+}
+function loadDailyReports() {
+    db.collection('dailyReports').onSnapshot((snapshot) => {
+        allDailyReports = [];
+        snapshot.forEach(doc => { const d = doc.data(); d.id = doc.id; allDailyReports.push(d); });
+        if (!isFinanceUnlocked) return;
+        try { updateFinanceStats(); } catch (e) {}
+        try {
+            const ae = document.activeElement;
+            if (!(ae && ae.closest && ae.closest('#techIncomeSummaryBody'))) showTechIncomeSummary();
+        } catch (e) { console.warn('techIncomeSummary refresh failed', e); }
+    }, (e) => console.warn('dailyReports listener', e));
+}
+function loadOrdersForActivity() {
+    db.collection('orders').onSnapshot((snapshot) => {
+        allOrders = [];
+        snapshot.forEach(doc => { const d = doc.data(); d.id = doc.id; allOrders.push(d); });
+    }, (e) => console.warn('orders listener', e));
+}
+
+/* ============================================================
+   ገጽ ማስነሻ
+   ============================================================ */
+HE.boot(() => {
+    const todayISO = new Date().toISOString().slice(0, 10);
+    document.getElementById('txDateEthContainer').innerHTML = buildEthiopianPickerHTML('txDateEth', 'txDate', todayISO);
+    document.getElementById('txDate').value = todayISO;
+    document.getElementById('dailyActDateEthContainer').innerHTML = buildEthiopianPickerHTML('dailyActDateEth', 'dailyActDate', getDateKey(new Date()));
+    document.getElementById('dailyActDate').value = getDateKey(new Date());
+
+    document.getElementById('unlockFinanceBtn').addEventListener('click', unlockFinance);
+    document.getElementById('financePassInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') unlockFinance(); });
+    document.getElementById('addTxBtn').addEventListener('click', addTransaction);
+    document.getElementById('addDebtBtn').addEventListener('click', addDebt);
+    document.getElementById('debtFilter').addEventListener('change', renderDebts);
+
+    loadTransactions();
+    loadDebts();
+    loadDailyReports();
+    loadOrdersForActivity();
+}, { title: 'ፋይናንስ — የአድሚን መግቢያ', page: 'finance' });
+</script>
+</body>
+</html>
