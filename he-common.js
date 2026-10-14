@@ -2,8 +2,7 @@
  * ሀላል ኤሌክትሮኒክስ — ለብቻ የቆሙ የአድሚን ገጾች የጋራ ኮድ
  * (finance.html · new-orders.html · new-entry.html)
  * ------------------------------------------------------------------
- * • ከ admin.html ጋር አንድ session ይጋራል (localStorage "he_session_admin") →
- *   አድሚን ላይ ከገቡ እዚህ በራስ-ሰር ተገብቷል፤ እዚህ ከገቡም admin.html ተገብቷል።
+ * • የራሱ session (localStorage "he_session_pages") አለው — ሁሉም ሰው መጀመሪያ መግባት/መመዝገብ አለበት።
  * • ከዚህ ፋይል በፊት  window.APP_ROLE = "admin"  መቀመጥ አለበት።
  * • መግቢያ፣ Firebase፣ Worker ጥሪ፣ የኢትዮጵያ ቀን፣ toast/modal እዚህ አሉ።
  */
@@ -19,16 +18,8 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 db.settings({ experimentalAutoDetectLongPolling: true, merge: true });
 
-// 🔁 APP_ROLE="pages" → የተመዘገቡ ሠራተኞች ራሳቸው session (he_session_pages) አላቸው።
-//    አድሚን በ admin.html ከገባ ደግሞ እዚህ በራስ-ሰር ይገባል (ያንን session ይገለብጣል)።
-if (window.APP_ROLE === 'pages') {
-    try {
-        const ok = (raw) => { try { const x = JSON.parse(raw || 'null'); return !!(x && x.token && x.staff && x.exp && x.exp * 1000 > Date.now()); } catch (e) { return false; } };
-        const mine = localStorage.getItem('he_session_pages');
-        const adm = localStorage.getItem('he_session_admin');
-        if (!ok(mine) && ok(adm) && JSON.parse(adm).staff.role === 'admin') localStorage.setItem('he_session_pages', adm);
-    } catch (e) {}
-}
+// 🔐 እነዚህ ገጾች የራሳቸው session (he_session_pages) አላቸው — ከ admin.html ጋር አይጋሩም።
+//    ሁሉም ሰው (አድሚንም) መጀመሪያ በስልክና በይለፍ ቃል መግባት ወይም መመዝገብ አለበት።
 
 const WORKER_BASE_URL = "https://halalelectronics.ashenafi6275.workers.dev";
 const HE_ROLE = (typeof window !== 'undefined' && window.APP_ROLE) || 'operator';
@@ -284,7 +275,7 @@ const HE = (() => {
                         <div class="he-err" id="heLoginError"></div>
                     </form>
                     <div class="text-center" style="display:flex;flex-direction:column;gap:8px;">
-                        <a href="#" onclick="HE.pane('register');return false;">📝 አዲስ ነዎት? እዚህ ይመዝገቡ</a>
+                        <a href="#" class="btn btn-outline" onclick="HE.pane('register');return false;">📝 አዲስ ነዎት? እዚህ ይመዝገቡ</a>
                         <a href="#" onclick="HE.forgot();return false;">❓ የይለፍ ቃል ረሱ?</a>
                     </div>
                 </div>
