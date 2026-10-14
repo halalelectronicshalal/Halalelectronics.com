@@ -286,7 +286,6 @@ const HE = (() => {
                     <div class="text-center" style="display:flex;flex-direction:column;gap:8px;">
                         <a href="#" onclick="HE.pane('register');return false;">📝 አዲስ ነዎት? እዚህ ይመዝገቡ</a>
                         <a href="#" onclick="HE.forgot();return false;">❓ የይለፍ ቃል ረሱ?</a>
-                        <a href="admin.html" class="admin-link">← ወደ አድሚን ገፅ</a>
                     </div>
                 </div>
 
@@ -362,6 +361,7 @@ const HE = (() => {
 
         const enter = (staff) => {
             document.getElementById('heGate').classList.remove('show');
+            document.body.classList.add('he-ready');
             applyAccess(staff, page);
             onReady(staff);
         };
