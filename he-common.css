@@ -68,3 +68,11 @@ th{font-size:.76rem;color:var(--text-muted);text-transform:none;white-space:nowr
 .lock-card{text-align:center;padding:36px 18px}
 .lock-card .fa-lock{font-size:3rem;color:var(--primary);margin-bottom:12px}
 @media (max-width:640px){.form-row{grid-template-columns:1fr}.card{padding:14px}.stats-grid{grid-template-columns:1fr 1fr}}
+
+/* ፈቃድ — አድሚን ብቻ የሚታዩ */
+.not-admin .admin-only{display:none!important}
+.btn-block{width:100%}
+a.btn{display:inline-block;text-align:center}
+
+/* 🔐 ሳይገቡ ምንም ነገር አይታይም — መግቢያው ብቻ */
+body:not(.he-ready) .he-top,body:not(.he-ready) main{display:none!important}
