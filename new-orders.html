@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0F4C81" />
+<title>ሀላል - አዲስ ትዕዛዞች</title>
+<link rel="manifest" href="new-orders-manifest.json" />
+<link rel="icon" href="icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Ethiopic:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="stylesheet" href="he-common.css" />
+<style>
+.order-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border-light)}
+.order-row:last-child{border-bottom:0}
+.order-row.hl{background:rgba(245,158,11,.15);border-radius:10px;padding-left:8px;padding-right:8px;outline:2px solid var(--warning)}
+.order-info{flex:1;min-width:220px}
+.order-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.order-actions select{width:auto;max-width:230px;padding:7px 8px;font-size:.82rem;border-radius:8px}
+.tag{display:inline-block;border-radius:6px;padding:1px 7px;font-size:.68rem;font-weight:700;background:var(--border);color:var(--text-muted)}
+.search-row{display:grid;grid-template-columns:1fr 180px;gap:10px;margin-bottom:12px}
+@media (max-width:640px){.search-row{grid-template-columns:1fr}.order-actions select{max-width:100%;flex:1}}
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script>window.APP_ROLE = "pages";</script>
+<script src="he-common.js"></script>
+</head>
+<body>
+<header class="he-top">
+    <h1><i class="fas fa-bell"></i> አዲስ ትዕዛዞች <span id="topBadge" class="status-badge" style="background:var(--emergency);color:#fff;">0</span></h1>
+    <div class="he-actions">
+        <span class="who" id="heWho"></span>
+        <button type="button" id="notifyBtn" onclick="enableNotifications()"><i class="fas fa-bell"></i> ማሳወቂያ ፍቀድ</button>
+        <a href="admin.html" class="admin-only"><i class="fas fa-arrow-left"></i> አድሚን</a>
+        <a href="finance.html" data-page="finance"><i class="fas fa-money-bill-wave"></i> ፋይናንስ</a>
+        <a href="new-entry.html" data-page="newEntry"><i class="fas fa-plus-circle"></i> አዲስ ግቤት</a>
+        <button type="button" onclick="HE.logout()"><i class="fas fa-sign-out-alt"></i> ውጣ</button>
+    </div>
+</header>
+<main class="he-wrap">
+    <div class="stats-grid">
+        <div class="stat-card"><div class="icon"><i class="fas fa-clock" style="color:var(--warning);"></i></div><div class="number" id="statPending" style="color:var(--warning);">0</div><div class="label">ገና ያልተመደቡ</div></div>
+        <div class="stat-card"><div class="icon"><i class="fas fa-user-check" style="color:var(--primary);"></i></div><div class="number" id="statAssigned">0</div><div class="label">የተመደቡ (ክፍት ስራ)</div></div>
+        <div class="stat-card"><div class="icon"><i class="fas fa-circle" style="color:var(--success);"></i></div><div class="number" id="statFree" style="color:var(--success);">0</div><div class="label">ነጻ ቴክኒሻኖች</div></div>
+    </div>
+
+    <div class="card" id="dashNewOrdersCard">
+        <div class="card-header">
+            <h3><i class="fas fa-bell"></i> 🆕 አዲስ ትዕዛዞች (ገና ያልተመደቡ) <span class="status-badge" id="dashNewOrdersBadge" style="background:var(--emergency);color:#fff;">0</span></h3>
+        </div>
+        <div class="search-row">
+            <input type="search" id="orderSearch" placeholder="🔍 በስም ወይም በስልክ ፈልግ..." />
+            <select id="sourceFilter">
+                <option value="all">ሁሉም ምንጭ</option>
+                <option value="web">🌐 ከደንበኛ ገጽ</option>
+                <option value="phone">📞 በስልክ</option>
+                <option value="shop">🏪 ከሾፕ</option>
+            </select>
+        </div>
+        <div id="dashNewOrdersList"><p class="text-muted text-center">በመጫን ላይ...</p></div>
+    </div>
+</main>
+
+<script>
+/* ============================================================
+   STATE
+   ============================================================ */
+let allOrders = [];
+let allTechnicians = [];
+let allDailyReports = [];
+let ordersFirstLoadDone = false;
+const _urlParams = new URLSearchParams(location.search);
+let highlightOrderId = _urlParams.get('assignOrder') || null;   // ከቴሌግራም "መድብ" ቁልፍ
+
+/* ============================================================
+   ቴክኒሻን ሁኔታ / ዋርኒግ / ራንክ (admin.html ጋር ተመሳሳይ)
+   ============================================================ */
+const UNREPORTED_HOURS = 24; // ከዚህ ሰዓት በላይ የተመደበ ስራ ሪፖርት ካልተደረገበት ራስ-ሰር ዋርኒግ
+function startOfTodayMs() { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); }
+function toMs(v) {
+    try {
+        if (!v) return 0;
+        if (v.toDate) return v.toDate().getTime();
+        if (typeof v.seconds === 'number') return v.seconds * 1000;
+        const t = new Date(v).getTime();
+        return isNaN(t) ? 0 : t;
+    } catch (e) { return 0; }
+}
+function techUnreportedCount(tech) {
+    const lim = Date.now() - UNREPORTED_HOURS * 3600 * 1000;
+    return allOrders.filter(o => o.technician === tech.name && o.status === 'Assigned' && toMs(o.assignedAt) > 0 && toMs(o.assignedAt) < lim).length;
+}
+/** { reasons:[...], manual:bool, auto:bool } ወይም null */
+function techWarning(tech) {
+    const reasons = [];
+    const manual = !!(tech.warning && tech.warning.active);
+    if (manual) reasons.push(tech.warning.reason || 'በአድሚን ዋርኒግ ተሰጥቷል');
+    const n = techUnreportedCount(tech);
+    if (n > 0) reasons.push(`${n} ስራ ሪፖርት አልተደረገም (ከ${UNREPORTED_HOURS} ሰዓት በላይ)`);
+    return reasons.length ? { reasons, manual, auto: n > 0 } : null;
+}
+function techNotTodayToday(tech) {
+    const lim = startOfTodayMs();
+    return allOrders.some(o => o.technician === tech.name && o.status === 'NotToday' && toMs(o.completedAt) >= lim);
+}
+function techIsOffline(t) { return t.isOnline !== true || t.status === 'off-duty'; }
+/** 🔴 በስራ ላይ ያለ ቴክኒሻን ክፍት (Assigned) ስራዎች ብዛት */
+function techOpenAssignedCount(t) {
+    return allOrders.filter(o => o.status === 'Assigned' && (o.technicianId ? o.technicianId === t.id : o.technician === t.name)).length;
+}
+/** 'busy' (🔴 በስራ ላይ) | 'off' (⚪ «ዛሬ አልወጣሁም» ያለ) | 'free' (🟢 ከሁለቱ ውጪ ሁሉ — «ነጻ ነኝ» ባይልክም) */
+function techWorkState(t) {
+    if (t.status === 'working' || techOpenAssignedCount(t) > 0) return 'busy';
+    if (t.status === 'off-duty') return 'off';
+    return 'free';
+}
+/* ============================================================
+   🏅 የቴክኒሻን ራንክ — 50% ባስገባው ገቢ + 50% ጠቅላላ የስራ አፈጻጸም (ባለፉት 30 ቀናት ሪፖርቶች)
+     • ገቢ ነጥብ  = የቴክኒሻኑ ገቢ ÷ ከሁሉም ከፍተኛው ገቢ
+     • አፈጻጸም   = የተሰሩ ስራዎች ÷ (የተሰሩ + ያልተሰሩ)
+     • ጠቅላላ    = 50% × ገቢ ነጥብ + 50% × አፈጻጸም  (0–100%)
+   ሪፖርት ያላስገባ ቴክኒሻን ራንክ አይሰጠውም።
+   ============================================================ */
+const TECH_RANK_DAYS = 30;
+function techRankMap() {
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - TECH_RANK_DAYS);
+    const ck = cutoff.getFullYear() + '-' + String(cutoff.getMonth() + 1).padStart(2, '0') + '-' + String(cutoff.getDate()).padStart(2, '0');
+    const acc = new Map();
+    (allDailyReports || []).forEach(r => {
+        if (!r.dateKey || r.dateKey < ck) return;
+        const t = fieldTechs().find(x => (r.technicianId && x.id === r.technicianId) || (!r.technicianId && x.name === r.technicianName));
+        if (!t) return;
+        const a = acc.get(t.id) || { income: 0, done: 0, total: 0, reports: 0 };
+        const jobs = Array.isArray(r.jobStatuses) ? r.jobStatuses : [];
+        if (jobs.length) {
+            jobs.forEach(j => { const u = Math.max(1, parseInt(j && j.count, 10) || 1); a.total += u; if (j.status === 'completed') a.done += u; });
+        } else {
+            const d = parseFloat(r.completedCount) || 0, n = parseFloat(r.notCompletedCount) || 0;
+            a.done += d; a.total += d + n;
+        }
+        a.income += parseFloat(r.totalIncome ?? r.income) || 0;
+        a.reports += 1;
+        acc.set(t.id, a);
+    });
+    const maxIncome = Math.max(0, ...[...acc.values()].map(a => a.income));
+    const rows = [...acc.entries()].map(([id, a]) => {
+        const incomeScore = maxIncome > 0 ? a.income / maxIncome : 0;
+        const rate = a.total > 0 ? a.done / a.total : 0;
+        return { id, income: a.income, rate, incomeScore, score: Math.round((0.5 * incomeScore + 0.5 * rate) * 1000) / 10, reports: a.reports };
+    }).sort((x, y) => y.score - x.score || y.income - x.income);
+    const map = new Map();
+    rows.forEach((r, i) => map.set(r.id, Object.assign(r, { rank: i + 1, of: rows.length })));
+    return map;
+}
+function techRankBadge(t, map) {
+    const r = (map || techRankMap()).get(t.id);
+    if (!r) return '';
+    const medal = r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : r.rank === 3 ? '🥉' : '🏅';
+    const tip = `ራንክ ${r.rank}/${r.of} • ጠቅላላ ${r.score}% • ገቢ ${Math.round(r.incomeScore * 100)}% (${Math.round(r.income).toLocaleString()} ብር) • አፈጻጸም ${Math.round(r.rate * 100)}%`;
+    return ` <span title="${tip}" style="font-size:0.72rem; font-weight:700; color:#B45309; background:#FEF3C7; border-radius:50px; padding:1px 8px; white-space:nowrap;">${medal} #${r.rank} · ${r.score}%</span>`;
+}
+const TECH_STATE_UI = {
+    busy: { dot: '🔴', color: '#DC2626', text: 'በስራ ላይ' },
+    free: { dot: '🟢', color: '#16A34A', text: 'ነጻ' },
+    off:  { dot: '⚪', color: '#64748B', text: 'ዛሬ አልወጣም' }
+};
+function techOptionsHtml() {
+    const _rk = techRankMap();
+    return fieldTechs().map(t => {
+        const st = techWorkState(t);
+        const ui = TECH_STATE_UI[st];
+        const nt = techNotTodayToday(t);
+        const w = techWarning(t);
+        const tags = ' (' + ui.text + ')' + (nt ? ' ⚠️ዛሬ አይመቸኝም' : '') + (w ? ' 🚩ዋርኒግ' : '');
+        const addr = t.address && t.address !== '—' ? ' - ' + t.address : '';
+        const rk = _rk.get(t.id);
+        const rkTxt = rk ? ` 🏅#${rk.rank}·${rk.score}%` : '';
+        return `<option value="${escHtml(t.name)}" style="color:${ui.color};${st === 'busy' ? 'font-weight:700;' : ''}">${ui.dot} ${escHtml(t.name)}${rkTxt}${tags}${escHtml(addr)}</option>`;
+    }).join('');
+}
+function fieldTechs() { return allTechnicians.filter(t => !t.isPhoneOperator && !t.isOffice); } // 📞 ኦፕሬተሮች ለስራ አይመደቡም
+
+/* ============================================================
+   አዲስ ትዕዛዝ ማንቂያ (ድምጽ + toast + ትብ ብልጭታ + browser notification)
+   ============================================================ */
+
+const originalDocTitle = document.title;
+let titleFlashInterval = null;
+
+function playNewOrderBeep() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        [0, 0.18].forEach((delay, i) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = i === 0 ? 880 : 1046.5;
+            gain.gain.setValueAtTime(0.0001, ctx.currentTime + delay);
+            gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + delay + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + delay + 0.16);
+            osc.connect(gain).connect(ctx.destination);
+            osc.start(ctx.currentTime + delay);
+            osc.stop(ctx.currentTime + delay + 0.18);
+        });
+    } catch (e) { console.warn('New-order beep failed (non-fatal):', e); }
+}
+
+function flashDocTitle(text) {
+    if (titleFlashInterval) return; // already flashing
+    let toggle = false;
+    titleFlashInterval = setInterval(() => {
+        document.title = toggle ? text : originalDocTitle;
+        toggle = !toggle;
+    }, 1000);
+    const stop = () => {
+        clearInterval(titleFlashInterval);
+        titleFlashInterval = null;
+        document.title = originalDocTitle;
+        window.removeEventListener('focus', stop);
+    };
+    window.addEventListener('focus', stop);
+}
+
+function notifyNewOrder(order) {
+    // 1) ድምጽ
+    playNewOrderBeep();
+    // 2) Toast
+    showToast(`🆕 አዲስ ትዕዛዝ ደረሰ፦ ${order.fullName || 'ደንበኛ'} — ${order.appliance || ''}`, 'success');
+    // 3) ትብ (tab) ርዕስ ብልጭ ድርግም ካልታየ (ሌላ tab ላይ ከሆነ)
+    if (document.hidden) flashDocTitle('🆕 አዲስ ትዕዛዝ ደረሰ!');
+    // 4) Browser system notification (ፍቃድ ካለ)
+    try {
+        if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('🆕 አዲስ ትዕዛዝ ደረሰ', {
+                body: `${order.fullName || 'ደንበኛ'} — ${order.appliance || ''} — ${order.address || ''}`,
+                icon: 'icon-192.png'
+            });
+        }
+    } catch (e) { console.warn('Notification popup failed (non-fatal):', e); }
+}
+function enableNotifications() {
+    if (!('Notification' in window)) { showToast('ይህ browser ማሳወቂያ አይደግፍም', 'error'); return; }
+    Notification.requestPermission().then(p => {
+        showToast(p === 'granted' ? '✅ ማሳወቂያ ተፈቅዷል' : '⚠️ ማሳወቂያ አልተፈቀደም', p === 'granted' ? 'success' : 'error');
+        const b = document.getElementById('notifyBtn'); if (b && p === 'granted') b.style.display = 'none';
+    });
+}
+
+/* ============================================================
+   ምንጭ (ደንበኛ ገጽ / ስልክ / ሾፕ)
+   ============================================================ */
+const SRC_META = {
+    web:   { label: '🌐 ከደንበኛ ገጽ', short: 'ደንበኛ ገጽ' },
+    phone: { label: '📞 በስልክ',       short: 'ስልክ' },
+    shop:  { label: '🏪 ከሾፕ',        short: 'ሾፕ' }
+};
+function orderSource(o) {
+    if (o.source === 'phone_admin') return 'phone';
+    if (o.source === 'shop_admin') return 'shop';
+    return 'web';
+}
+function srcLabel(o) {
+    const k = orderSource(o);
+    const by = (k !== 'web' && o.createdByName) ? ' · ' + String(o.createdByName).replace(/</g, '&lt;') : '';
+    return SRC_META[k].label + by;
+}
+
+/* ============================================================
+   ምደባ / ምክር / ስረዛ (admin.html ውስጥ ካለው ጋር ተመሳሳይ)
+   ============================================================ */
+function recommendTechnician(orderId) {
+    const activeTechs = fieldTechs().filter(t => !t.status || t.status === 'active');
+    if (activeTechs.length === 0) {
+        showToast('ንቁ ቴክኒሻን አልተገኘም / No active technician found', 'error');
+        return;
+    }
+
+    // Count open jobs (Pending/Assigned) currently on each technician
+    const load = {};
+    activeTechs.forEach(t => load[t.name] = 0);
+    allOrders.forEach(o => {
+        if (o.status === 'Assigned' && o.technician && load.hasOwnProperty(o.technician)) {
+            load[o.technician]++;
+        }
+    });
+
+    // Pick the technician with the fewest open jobs (round-robin on ties)
+    let best = activeTechs[0].name;
+    let bestLoad = load[best];
+    activeTechs.forEach(t => {
+        if (load[t.name] < bestLoad) {
+            best = t.name;
+            bestLoad = load[t.name];
+        }
+    });
+
+    const select = document.querySelector(`.dashAssignSelect[data-id="${orderId}"]`);
+    if (select) {
+        select.value = best;
+        select.style.borderColor = 'var(--success)';
+        select.style.background = '#F0FDF4';
+    }
+    showToast(`🤖 ተመክሯል፡ ${best} (አሁን ${bestLoad} ክፍት ስራ አለው) — "ምድብ" ተጫን ለማረጋገጥ`, 'success');
+}
+
+async function assignOrder(orderId) {
+    // ✅ NEW: ከ Dashboard ላይ ካለው quick-assign select ወይም ከ Orders ትር ላይ ካለው select ይነበብ
+    const dashSelect = document.querySelector(`.dashAssignSelect[data-id="${orderId}"]`);
+    const ordersSelect = document.querySelector(`.assignSelect[data-id="${orderId}"]`);
+    const select = (dashSelect && dashSelect.value) ? dashSelect : ordersSelect;
+    let techName = select ? select.value.trim() : '';
+
+    if (!techName) {
+        showToast('እባክዎ ቴክኒሻን ይምረጡ / Please select a technician', 'error');
+        return;
+    }
+
+    // Validate that the technician exists in the staff list
+    const techExists = allTechnicians.some(t => t.name === techName);
+    if (!techExists) {
+        showToast(`ይህ ቴክኒሻን (${techName}) የለም / Technician not found`, 'error');
+        return;
+    }
+
+    // ⚠️ ኦፍላይን / "ዛሬ አይመቸኝም" ያለ / ዋርኒግ ያለበት ከሆነ ከመመደብ በፊት ያስጠነቅቃል
+    const _selTech = allTechnicians.find(t => t.name === techName);
+    if (_selTech) {
+        const _warns = [];
+        if (techWorkState(_selTech) === 'busy') _warns.push('🔴 አሁን በስራ ላይ ነው (ክፍት ስራ አለው)');
+        else if (_selTech.status === 'off-duty') _warns.push('⚪ «ዛሬ አልወጣሁም» ብሏል');
+        else if (techIsOffline(_selTech)) _warns.push('📴 ኦንላይን አይደለም');
+        if (techNotTodayToday(_selTech)) _warns.push('⚠️ ዛሬ "አይመቸኝም" ብሎ ልኳል');
+        const _w = techWarning(_selTech);
+        if (_w) _warns.push('🚩 ዋርኒግ: ' + _w.reasons.join('፣ '));
+        if (_warns.length && !confirm(`${techName}\n${_warns.join('\n')}\n\nቢሆንም ይመድቡት?`)) return;
+    }
+
+    try {
+        await db.collection('orders').doc(orderId).update({
+            status: 'Assigned',
+            technician: techName,  // store exact name
+            assignedAt: new Date(),
+            assignedBy: (heGetSession().staff.role === 'admin' ? 'admin' : 'office')
+        });
+
+        await db.collection('activity').add({
+            user: heUserName(),
+            action: 'assign_order',
+            details: `ትዕዛዝ #${orderId.substring(0,8)} ለ ${techName} ተመድቧል`,
+            timestamp: new Date()
+        });
+
+        const orderSnap = await db.collection('orders').doc(orderId).get();
+        const order = orderSnap.data();
+
+        // ✅ FIX: ማሳወቂያው ወደ አድሚን group ሳይሆን ቀጥታ ለ ተመደበው ቴክኒሻን ራሱ ይላካል
+        const assignedTech = allTechnicians.find(t => t.name === techName);
+        // ✅ NEW: ደንበኛው ቦታውን ፒን አድርጎ ከሆነ የናቪጌሽን ሊንክ በመልእክቱ ውስጥ ይካተት
+        const hasOrderLocation = order.customerLat && order.customerLng;
+        const locationLine = hasOrderLocation
+            ? `📍 *ካርታ ላይ ይመልከቱ:* https://www.google.com/maps/dir/?api=1&destination=${order.customerLat},${order.customerLng}\n`
+            : '';
+
+        const jobMessage = `
+📋 *አዲስ ስራ ተመድቦልዎታል!* 🛠️
+
+🆔 *ትዕዛዝ:* #${orderId.substring(0,8)}
+👤 *ደንበኛ:* ${order.fullName || '—'}
+📱 *ስልክ:* ${order.phone || '—'}
+🔧 *መሳሪያ:* ${order.appliance || '—'}
+📍 *አድራሻ:* ${order.address || '—'}
+${locationLine}
+⏰ ${formatEthDateTime(new Date())}
+        `;
+
+        // ✅ FIX: ስራ ሲመደብ ትዕዛዙ ለ ተመደበው ቴክኒሻን ብቻ ይተላለፍ - ወደ አድሚን group
+        // ብሮድካስት አይላክም (አድሚኖች ራሳቸው ዳሽቦርዱ ላይ real-time listener ስላላቸው
+        // ቀድሞውኑ ያውቃሉ፣ ስለዚህ ለሁሉም መላክ አያስፈልግም)
+        if (assignedTech && assignedTech.chatId) {
+            await sendTelegramNotification(jobMessage, assignedTech.chatId);
+        } else {
+            showToast(`⚠️ የ ${techName} Telegram አልተገናኘም - መልእክት በቴሌግራም አልደረሰውም (push/ዳሽቦርድ ላይ ብቻ ያያል)`, 'error');
+        }
+
+        // ✅ NEW: ከቴሌግራም/ፑሽ በተጨማሪ ወይም ቴክኒሻኑ ቴሌግራም ባይገናኝም ስራው
+        // ሁልጊዜ በ SMS text ወደ ስልኩ ይድርሰው (ኢንተርኔት ባይኖረውም እንኳ ይደርሰዋል)
+        const smsMessage = `Halal Electronics: አዲስ ስራ ተመድቦልዎታል! ደንበኛ: ${order.fullName || '—'} ስልክ: ${order.phone || '—'} መሳሪያ: ${order.appliance || '—'} አድራሻ: ${order.address || '—'}`;
+        if (assignedTech && assignedTech.phone) {
+            await sendSmsNotification(smsMessage, assignedTech.phone);
+        }
+
+        // ✅ Push notification (FCM) queue - handled by the 5-min notify job
+        if (assignedTech && assignedTech.id) {
+            await db.collection('pushQueue').add({
+                toStaffId: assignedTech.id,
+                title: '📋 አዲስ ስራ ተመድቦልዎታል',
+                body: `${order.appliance || 'ስራ'} - ${order.fullName || ''} (${order.address || ''})`,
+                // ✅ NEW: ቦታው ካለ ወደ ናቪጌሽን የሚወስድ ሊንክ ከፑሽ ማሳወቂያው ጋር ይላክ
+                locationUrl: hasOrderLocation ? `https://www.google.com/maps/dir/?api=1&destination=${order.customerLat},${order.customerLng}` : null,
+                createdAt: Date.now(),
+                sent: false
+            });
+        }
+
+        showToast(`✅ ስራው ለ ${techName} ተመድቧል / Assigned to ${techName}`, 'success');
+        
+    } catch (error) {
+        showToast('❌ ' + error.message, 'error');
+        console.error('Assignment error:', error);
+    }
+}
+
+async function deleteOrder(orderId) {
+    if (!confirm('ይህን ትዕዛዝ መሰረዝ እርግጠኛ ነዎት?')) return;
+    try {
+        await db.collection('orders').doc(orderId).delete();
+        await db.collection('activity').add({
+            user: heUserName(),
+            action: 'delete_order',
+            details: `ትዕዛዝ #${orderId.substring(0,8)} ተሰርዟል`,
+            timestamp: new Date()
+        });
+        showToast('✅ ትዕዛዝ ተሰርዟል', 'success');
+    } catch (error) {
+        showToast('❌ ' + error.message, 'error');
+    }
+}
+
+/* ============================================================
+   ዝርዝር ማሳያ
+   ============================================================ */
+function viewOrder(orderId) {
+    const o = allOrders.find(x => x.id === orderId);
+    if (!o) return;
+    const d = o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : null;
+    const mapUrl = (o.customerLat && o.customerLng)
+        ? `https://www.google.com/maps/dir/?api=1&destination=${o.customerLat},${o.customerLng}`
+        : (o.mapsLink || '');
+    const row = (k, v) => `<tr><th style="width:130px;">${k}</th><td>${v}</td></tr>`;
+    const html = `<div class="table-wrap"><table>
+        ${row('🆔 ትዕዛዝ', '#' + escHtml(o.id.substring(0, 8)))}
+        ${row('👤 ደንበኛ', escHtml(o.fullName || '—'))}
+        ${row('📱 ስልክ', o.phone ? `<a href="tel:${escHtml(o.phone)}">${escHtml(o.phone)}</a>` : '—')}
+        ${row('📍 አድራሻ', escHtml(o.address || '—'))}
+        ${row('🔧 መሳሪያ', escHtml(o.appliance || '—'))}
+        ${row('❓ ችግር', escHtml(o.problem || '—'))}
+        ${row('📅 የተፈለገ ቀን', escHtml(o.preferredDay || '—'))}
+        ${row('🕒 የገባበት', d ? formatEthDateTime(d) : '—')}
+        ${row('📌 ምንጭ', srcLabel(o))}
+        ${o.suggestedWorkerName ? row('⭐ ደንበኛ የመረጠው', escHtml(o.suggestedWorkerName)) : ''}
+        ${o.foundUs ? row('📣 እኛን ያገኙት', escHtml(o.foundUs + (o.foundUsText ? ' - ' + o.foundUsText : ''))) : ''}
+        ${mapUrl ? row('🗺️ ካርታ', `<a href="${escHtml(mapUrl)}" target="_blank" rel="noopener">በካርታ ላይ ክፈት</a>`) : ''}
+    </table></div>`;
+    openModal('🧾 የትዕዛዝ ዝርዝር', html);
+}
+
+/* ============================================================
+   ዝርዝሩን መሳል
+   ============================================================ */
+function renderDashNewOrders() {
+    const list = document.getElementById('dashNewOrdersList');
+    const pending = allOrders.filter(o => o.status === 'Pending')
+        .sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
+
+    // ስታቲስቲክስ
+    ['dashNewOrdersBadge', 'topBadge', 'statPending'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = pending.length; });
+    document.getElementById('statAssigned').textContent = allOrders.filter(o => o.status === 'Assigned').length;
+    document.getElementById('statFree').textContent = fieldTechs().filter(t => techWorkState(t) === 'free').length;
+
+    // ማጣሪያ
+    const q = (document.getElementById('orderSearch').value || '').trim().toLowerCase();
+    const sf = document.getElementById('sourceFilter').value;
+    const shown = pending.filter(o =>
+        (sf === 'all' || orderSource(o) === sf) &&
+        (!q || (o.fullName || '').toLowerCase().includes(q) || (o.phone || '').includes(q)));
+
+    // በግማሽ የተመረጠ ቴክኒሻን እንዳይጠፋ ማስቀመጥ
+    const keep = {};
+    list.querySelectorAll('.dashAssignSelect').forEach(s => { if (s.value) keep[s.dataset.id] = s.value; });
+
+    if (!shown.length) {
+        list.innerHTML = `<p class="text-muted text-center">${pending.length ? 'ከፍለጋው ጋር የሚመሳሰል ትዕዛዝ የለም' : 'ምንም አዲስ ትዕዛዝ የለም'}</p>`;
+        return;
+    }
+    const techOptions = techOptionsHtml();
+    list.innerHTML = shown.map(order => {
+        const date = order.createdAt && order.createdAt.toDate ? order.createdAt.toDate() : new Date();
+        const hl = order.id === highlightOrderId ? ' hl' : '';
+        return `<div class="order-row${hl}" id="ord-${order.id}">
+            <div class="order-info">
+                <div style="font-weight:600;">${escHtml(order.fullName || '—')} <span class="text-muted" style="font-weight:400; font-size:0.8rem;">• ${escHtml(order.appliance || '—')}</span></div>
+                <div class="text-muted" style="font-size:0.78rem;">📱 ${order.phone ? `<a href="tel:${escHtml(order.phone)}" style="font-weight:600;">${escHtml(order.phone)}</a>` : '—'}
+                    &nbsp; <i class="fas fa-map-marker-alt"></i> ${escHtml(order.address || '—')}
+                    &nbsp; <i class="fas fa-clock"></i> ${formatEthDateTime(date)}</div>
+                <div style="margin-top:3px;"><span class="tag">${srcLabel(order)}</span>
+                    ${order.preferredDay ? `<span class="tag" style="color:var(--primary);">📅 ${escHtml(order.preferredDay)}</span>` : ''}
+                    ${order.suggestedWorkerName ? `<span class="tag" style="color:#B45309;">⭐ ${escHtml(order.suggestedWorkerName)}</span>` : ''}</div>
+            </div>
+            <div class="order-actions">
+                <select class="dashAssignSelect" data-id="${order.id}"><option value="">ቴክኒሻን ምረጥ</option>${techOptions}</select>
+                <button class="btn btn-xs btn-secondary" onclick="recommendTechnician('${order.id}')" title="ዝቅተኛ ስራ ያለበትን ቴክኒሻን ምከር"><i class="fas fa-robot"></i></button>
+                <button class="btn btn-sm btn-success" onclick="assignOrder('${order.id}')"><i class="fas fa-check"></i> መድብ</button>
+                <button class="btn btn-sm btn-primary" onclick="viewOrder('${order.id}')" title="ዝርዝር"><i class="fas fa-eye"></i></button>
+                <button class="btn btn-xs btn-danger admin-only" onclick="deleteOrder('${order.id}')" title="ሰርዝ"><i class="fas fa-trash"></i></button>
+            </div>
+        </div>`;
+    }).join('');
+    list.querySelectorAll('.dashAssignSelect').forEach(s => { if (keep[s.dataset.id]) s.value = keep[s.dataset.id]; });
+
+    if (highlightOrderId) {
+        const el = document.getElementById('ord-' + highlightOrderId);
+        if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); highlightOrderId = null; }
+    }
+}
+
+/* ============================================================
+   ዳታ መጫን (real-time)
+   ============================================================ */
+function loadOrders() {
+    // ያልተመደቡ + ክፍት ስራ ብቻ (የቴክኒሻን ሁኔታ ለማወቅ) — ሙሉ ታሪክ አይጫንም
+    db.collection('orders').where('status', 'in', ['Pending', 'Assigned', 'NotToday']).onSnapshot((snapshot) => {
+        allOrders = [];
+        snapshot.forEach(doc => { const d = doc.data(); d.id = doc.id; allOrders.push(d); });
+        if (ordersFirstLoadDone) {
+            snapshot.docChanges().forEach(change => {
+                if (change.type === 'added' && change.doc.data().status === 'Pending') notifyNewOrder(change.doc.data());
+            });
+        } else { ordersFirstLoadDone = true; }
+        renderDashNewOrders();
+    }, (e) => { console.warn('orders listener', e); showToast('❌ ትዕዛዞችን መጫን አልተቻለም: ' + e.message, 'error'); });
+}
+function loadTechnicians() {
+    db.collection('staff').onSnapshot((snapshot) => {
+        allTechnicians = [];
+        snapshot.forEach(doc => {
+            const d = doc.data(); d.id = doc.id;
+            if (d.status !== 'pending' && d.role !== 'admin' && d.status !== 'rejected') allTechnicians.push(d);
+        });
+        renderDashNewOrders();
+    }, (e) => console.warn('staff listener', e));
+}
+function loadDailyReports() {
+    // ለራንክ — ባለፉት 30 ቀናት ብቻ
+    const c = new Date(); c.setDate(c.getDate() - TECH_RANK_DAYS);
+    db.collection('dailyReports').where('dateKey', '>=', getDateKey(c)).onSnapshot((snapshot) => {
+        allDailyReports = [];
+        snapshot.forEach(doc => { const d = doc.data(); d.id = doc.id; allDailyReports.push(d); });
+        renderDashNewOrders();
+    }, (e) => console.warn('dailyReports listener', e));
+}
+
+HE.boot(() => {
+    try { if ('Notification' in window && Notification.permission === 'granted') document.getElementById('notifyBtn').style.display = 'none'; } catch (e) {}
+    document.getElementById('orderSearch').addEventListener('input', renderDashNewOrders);
+    document.getElementById('sourceFilter').addEventListener('change', renderDashNewOrders);
+    loadOrders();
+    loadTechnicians();
+    loadDailyReports();
+}, { title: 'አዲስ ትዕዛዞች — የአድሚን መግቢያ', page: 'newOrders' });
+</script>
+</body>
+</html>
