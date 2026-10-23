@@ -63,8 +63,8 @@
 
         <!-- 📋 የቅርብ ጊዜ ግቤቶች -->
         <div class="stats-grid" style="grid-template-columns:1fr 1fr;">
-            <div class="stat-card"><div class="number" id="todayIncome" style="color:var(--success);">0 ብር</div><div class="label">የዛሬ ገቢ (ግቤት)</div></div>
-            <div class="stat-card"><div class="number" id="todayExpense" style="color:var(--emergency);">0 ብር</div><div class="label">የዛሬ ወጪ (ግቤት)</div></div>
+            <div class="stat-card"><div class="number" id="todayIncome" style="color:var(--success);">0 ብር</div><div class="label">የዛሬ ገቢ (የእርስዎ ግቤት)</div></div>
+            <div class="stat-card"><div class="number" id="todayExpense" style="color:var(--emergency);">0 ብር</div><div class="label">የዛሬ ወጪ (የእርስዎ ግቤት)</div></div>
         </div>
         <div class="card">
             <div class="card-header"><h3><i class="fas fa-list"></i> 📋 የቅርብ ጊዜ ግቤቶች</h3><a href="finance.html" data-page="finance" class="btn btn-sm btn-outline">ሁሉንም በፋይናንስ ገፅ</a></div>
@@ -120,7 +120,7 @@ async function addTransaction() {
     const btn = document.getElementById('addTxBtn');
     btn.disabled = true;
     try {
-        await db.collection('transactions').add({ description: desc, amount, type, date, staff: heUserName(), createdAt: new Date() });
+        await db.collection('transactions').add({ description: desc, amount, type, date, staff: heUserName(), staffId: ((heGetSession() || {}).staff || {}).id || '', createdAt: new Date() });
         await db.collection('activity').add({ user: heUserName(), action: 'add_transaction', details: `${desc} - ${amount} ብር (${type})`, timestamp: new Date() });
         document.getElementById('txDesc').value = '';
         document.getElementById('txAmount').value = '';
@@ -133,16 +133,23 @@ async function addTransaction() {
     btn.disabled = false;
 }
 
+// 👤 ራሱ ያስገባውን ግቤት ብቻ ያሳያል (በ staffId፤ ለቆዩ ግቤቶች በስም)
+function isMine(tx) {
+    const me = (heGetSession() || {}).staff || {};
+    if (tx.staffId) return tx.staffId === me.id;
+    return !!tx.staff && tx.staff === heUserName();
+}
 function renderRecent() {
     const box = document.getElementById('txList');
     const f = (n) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ብር';
     const todayKey = getDateKey(new Date());
     const key = (tx) => (tx.date && String(tx.date).slice(0, 10)) || (tx.createdAt && tx.createdAt.toDate ? getDateKey(tx.createdAt.toDate()) : '');
-    const sum = (t) => recentTx.filter(x => x.type === t && key(x) === todayKey).reduce((s, x) => s + (parseFloat(x.amount) || 0), 0);
+    const mine = recentTx.filter(isMine);
+    const sum = (t) => mine.filter(x => x.type === t && key(x) === todayKey).reduce((s, x) => s + (parseFloat(x.amount) || 0), 0);
     document.getElementById('todayIncome').textContent = f(sum('income'));
     document.getElementById('todayExpense').textContent = f(sum('expense'));
-    if (!recentTx.length) { box.innerHTML = '<p class="text-muted text-center">ምንም ግቤት የለም</p>'; return; }
-    box.innerHTML = recentTx.slice(0, 10).map(tx => {
+    if (!mine.length) { box.innerHTML = '<p class="text-muted text-center">ምንም ግቤት የለም</p>'; return; }
+    box.innerHTML = mine.slice(0, 10).map(tx => {
         const inc = tx.type === 'income';
         return `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border-light);">
             <div style="flex:1; min-width:0;"><span style="font-weight:500;">${escHtml(tx.description || '—')}</span>
@@ -158,7 +165,7 @@ HE.boot(() => {
     document.getElementById('financePassInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') unlockFinance(); });
     document.getElementById('addTxBtn').addEventListener('click', addTransaction);
     ['txDesc', 'txAmount'].forEach(id => document.getElementById(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') addTransaction(); }));
-    db.collection('transactions').orderBy('createdAt', 'desc').limit(60).onSnapshot((snap) => {
+    db.collection('transactions').orderBy('createdAt', 'desc').limit(200).onSnapshot((snap) => {
         recentTx = [];
         snap.forEach(doc => { const d = doc.data(); d.id = doc.id; recentTx.push(d); });
         if (isFinanceUnlocked) renderRecent();
