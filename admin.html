@@ -4197,6 +4197,19 @@
             ['newOrders', '🆕 አዲስ ትዕዛዞች (new-orders.html)', 'ያልተመደቡ ትዕዛዞችን ማየትና ለቴክኒሻን መመደብ'],
             ['newEntry', '➕ አዲስ ግቤት (new-entry.html)', 'ገቢ/ወጪ ግቤት ማስገባት']
         ];
+        // 🔐 በዚሁ አሳሽ ሌላ ሠራተኛ (ፋይናንስ/ኦፕሬተር ወዘተ) ከገባ Firebase ተጠቃሚው ይቀየራል → «Missing or insufficient permissions»።
+        //    ከመጻፍ በፊት የአድሚኑን Firebase መግቢያ መልሶ ያረጋግጣል።
+        async function heEnsureAdminAuth() {
+            try {
+                const s = heGetSession();
+                if (!s || !s.staff || s.staff.role !== 'admin') return;
+                const cu = firebase.auth().currentUser;
+                if (cu && cu.uid === s.staff.id) return;
+                const r = await callWorker('session', {});
+                if (r && r.ok && r.firebaseToken) { heSetSession(r); await firebase.auth().signInWithCustomToken(r.firebaseToken); }
+                else showToast('⚠️ እባክዎ ገጹን ያድሱ (F5) እና በአድሚን ይግቡ', 'error');
+            } catch (e) { console.warn('admin re-auth failed', e); }
+        }
         function editPagePermissions(id) {
             const t = staffById(id) || (typeof allStaff !== 'undefined' ? allStaff.find(x => x.id === id) : null);
             if (!t) return;
@@ -4220,6 +4233,7 @@
             if (pick === 'operator' && !(t && t.isPhoneOperator) && allSectorStaff.filter(x => x.isPhoneOperator).length >= 2) { showToast('⚠️ ኦፕሬተር ቢበዛ 2 ሰው ብቻ ነው መሆን የሚችለው', 'error'); return; }
             const pages = (pick && pick !== 'operator') ? [pick] : [];
             try {
+                await heEnsureAdminAuth();
                 // ⚠️ ሩልስ በመስክ ሊገድብ ስለሚችል እያንዳንዱ መስክ ለብቻው ይጻፋል (እንደቀድሞው)
                 const wasOp = !!(t && t.isPhoneOperator), wasPages = Array.isArray(t && t.pages) ? t.pages : [];
                 if (JSON.stringify(wasPages) !== JSON.stringify(pages)) await db.collection('staff').doc(id).update({ pages });
@@ -5851,6 +5865,7 @@ ${locationLine}
             if (makeOp && allSectorStaff.filter(x => x.isPhoneOperator).length >= 2) { showToast('⚠️ ኦፕሬተር ቢበዛ 2 ሰው ብቻ ነው መሆን የሚችለው', 'error'); return; }
             if (!confirm(makeOp ? `${t.name} ን ስልክ/ሾፕ ኦፕሬተር ማድረግ ይፈልጋሉ?\n• ለስራ አይመደብም\n• በ operator.html ገጽ ይገባል` : `${t.name} ን ከኦፕሬተርነት ማስወገድ ይፈልጋሉ?`)) return;
             try {
+                await heEnsureAdminAuth();
                 await db.collection('staff').doc(id).update({ isPhoneOperator: makeOp });
                 if (makeOp && Array.isArray(t.pages) && t.pages.length) await db.collection('staff').doc(id).update({ pages: [] });
                 showToast(makeOp ? '✅ ኦፕሬተር ሆኗል (operator.html)' : '✅ ከኦፕሬተርነት ተወግዷል', 'success');
