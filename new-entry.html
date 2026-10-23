@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0F4C81" />
+<title>ሀላል - አዲስ ግቤት</title>
+<link rel="manifest" href="new-entry-manifest.json" />
+<link rel="icon" href="icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Ethiopic:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="stylesheet" href="he-common.css" />
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script>window.APP_ROLE = "newEntry"; // 🔐 እያንዳንዱ ገጽ የራሱ ለብቻ session አለው (እንደ ኦፕሬተር)</script>
+<script src="he-common.js"></script>
+    <script src="he-eye.js" defer></script>
+</head>
+<body>
+<header class="he-top">
+    <h1><i class="fas fa-plus-circle"></i> አዲስ ግቤት</h1>
+    <div class="he-actions">
+        <span class="who" id="heWho"></span>
+        <a href="finance.html" data-page="finance"><i class="fas fa-money-bill-wave"></i> ፋይናንስ</a>
+        <button type="button" onclick="HE.logout()"><i class="fas fa-sign-out-alt"></i> ውጣ</button>
+    </div>
+</header>
+<main class="he-wrap" style="max-width:640px;">
+
+    <!-- 🔐 ፋይናንስ የይለፍ ቃል (ከፋይናንስ ገፅ ጋር አንድ ነው) -->
+    <div id="financeLock" class="card lock-card">
+        <i class="fas fa-lock"></i>
+        <h3>🔐 ፋይናንስ የተጠበቀ ነው</h3>
+        <p class="text-muted">ግቤት ለማስገባት የፋይናንስ ይለፍ ቃሉን ያስገቡ</p>
+        <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap; max-width:400px; margin:12px auto;">
+            <input type="password" id="financePassInput" placeholder="የይለፍ ቃል" style="max-width:200px;" autocomplete="off" />
+            <button class="btn btn-primary" id="unlockFinanceBtn"><i class="fas fa-unlock"></i> ክፈት</button>
+        </div>
+        <div id="financeError" style="color:var(--emergency); display:none;">❌ የተሳሳተ የይለፍ ቃል!</div>
+    </div>
+
+    <div id="financeContent" style="display:none;">
+        <!-- ➕ አዲስ ግቤት ካርድ -->
+        <div class="card">
+            <div class="card-header"><h3><i class="fas fa-plus-circle"></i> + አዲስ ግቤት</h3></div>
+            <div class="form-row">
+                <input type="text" id="txDesc" placeholder="መግለጫ" />
+                <input type="number" id="txAmount" placeholder="ገንዘብ" step="0.01" inputmode="decimal" />
+            </div>
+            <div class="form-row">
+                <select id="txType">
+                    <option value="income">💰 ገቢ</option>
+                    <option value="expense">💸 ወጪ</option>
+                </select>
+                <div id="txDateEthContainer" style="display:grid; grid-template-columns:1fr 1.5fr 1fr; gap:4px;"></div>
+                <input type="date" id="txDate" style="display:none;" />
+            </div>
+            <button class="btn btn-primary btn-block" id="addTxBtn"><i class="fas fa-save"></i> ያስገቡ</button>
+        </div>
+
+        <!-- 📋 የቅርብ ጊዜ ግቤቶች -->
+        <div class="stats-grid" style="grid-template-columns:1fr 1fr;">
+            <div class="stat-card"><div class="number" id="todayIncome" style="color:var(--success);">0 ብር</div><div class="label">የዛሬ ገቢ (ግቤት)</div></div>
+            <div class="stat-card"><div class="number" id="todayExpense" style="color:var(--emergency);">0 ብር</div><div class="label">የዛሬ ወጪ (ግቤት)</div></div>
+        </div>
+        <div class="card">
+            <div class="card-header"><h3><i class="fas fa-list"></i> 📋 የቅርብ ጊዜ ግቤቶች</h3><a href="finance.html" data-page="finance" class="btn btn-sm btn-outline">ሁሉንም በፋይናንስ ገፅ</a></div>
+            <div id="txList"><p class="text-muted text-center">ምንም ግቤት የለም</p></div>
+        </div>
+    </div>
+</main>
+
+<script>
+let isFinanceUnlocked = false;
+let recentTx = [];
+
+async function unlockFinance() {
+    const input = document.getElementById('financePassInput').value;
+    const error = document.getElementById('financeError');
+    const btn = document.getElementById('unlockFinanceBtn');
+    if (btn) btn.disabled = true;
+    let ok = false;
+    try {
+        const res = await callWorker('verifyFinancePassword', { password: input });
+        ok = !!(res && res.ok);
+    } catch (e) { console.warn('⚠️ Finance password check failed:', e); }
+    if (btn) btn.disabled = false;
+    document.getElementById('financePassInput').value = '';
+    if (ok) {
+        isFinanceUnlocked = true;
+        document.getElementById('financeLock').style.display = 'none';
+        document.getElementById('financeContent').style.display = 'block';
+        error.style.display = 'none';
+        renderRecent();
+        document.getElementById('txDesc').focus();
+        showToast('🔓 ፋይናንስ ተከፍቷል!', 'success');
+    } else {
+        error.style.display = 'block';
+        setTimeout(() => error.style.display = 'none', 3000);
+        showToast('❌ የተሳሳተ የይለፍ ቃል!', 'error');
+    }
+}
+
+function resetDatePicker() {
+    const todayISO = new Date().toISOString().slice(0, 10);
+    document.getElementById('txDateEthContainer').innerHTML = buildEthiopianPickerHTML('txDateEth', 'txDate', todayISO);
+    document.getElementById('txDate').value = todayISO;
+}
+
+async function addTransaction() {
+    const desc = document.getElementById('txDesc').value.trim();
+    const amount = parseFloat(document.getElementById('txAmount').value);
+    const type = document.getElementById('txType').value;
+    const date = document.getElementById('txDate').value || new Date().toISOString().split('T')[0];
+    if (!desc || isNaN(amount) || amount <= 0) { showToast('እባክዎ ትክክለኛ መግለጫ እና ገንዘብ ያስገቡ', 'error'); return; }
+
+    const btn = document.getElementById('addTxBtn');
+    btn.disabled = true;
+    try {
+        await db.collection('transactions').add({ description: desc, amount, type, date, staff: heUserName(), createdAt: new Date() });
+        await db.collection('activity').add({ user: heUserName(), action: 'add_transaction', details: `${desc} - ${amount} ብር (${type})`, timestamp: new Date() });
+        document.getElementById('txDesc').value = '';
+        document.getElementById('txAmount').value = '';
+        resetDatePicker();
+        showToast('✅ ግቤት ተጨምሯል!', 'success');
+        document.getElementById('txDesc').focus();
+    } catch (error) {
+        showToast('❌ ' + error.message, 'error');
+    }
+    btn.disabled = false;
+}
+
+function renderRecent() {
+    const box = document.getElementById('txList');
+    const f = (n) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ብር';
+    const todayKey = getDateKey(new Date());
+    const key = (tx) => (tx.date && String(tx.date).slice(0, 10)) || (tx.createdAt && tx.createdAt.toDate ? getDateKey(tx.createdAt.toDate()) : '');
+    const sum = (t) => recentTx.filter(x => x.type === t && key(x) === todayKey).reduce((s, x) => s + (parseFloat(x.amount) || 0), 0);
+    document.getElementById('todayIncome').textContent = f(sum('income'));
+    document.getElementById('todayExpense').textContent = f(sum('expense'));
+    if (!recentTx.length) { box.innerHTML = '<p class="text-muted text-center">ምንም ግቤት የለም</p>'; return; }
+    box.innerHTML = recentTx.slice(0, 10).map(tx => {
+        const inc = tx.type === 'income';
+        return `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border-light);">
+            <div style="flex:1; min-width:0;"><span style="font-weight:500;">${escHtml(tx.description || '—')}</span>
+            <span class="text-muted" style="font-size:0.8rem;">${tx.date ? formatEthDate(new Date(tx.date)) : '—'}</span></div>
+            <div style="font-weight:700; color:${inc ? 'var(--success)' : 'var(--emergency)'}; white-space:nowrap;">${inc ? '+' : '-'} ${(parseFloat(tx.amount) || 0).toFixed(2)} ብር</div>
+        </div>`;
+    }).join('');
+}
+
+HE.boot(() => {
+    resetDatePicker();
+    document.getElementById('unlockFinanceBtn').addEventListener('click', unlockFinance);
+    document.getElementById('financePassInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') unlockFinance(); });
+    document.getElementById('addTxBtn').addEventListener('click', addTransaction);
+    ['txDesc', 'txAmount'].forEach(id => document.getElementById(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') addTransaction(); }));
+    db.collection('transactions').orderBy('createdAt', 'desc').limit(60).onSnapshot((snap) => {
+        recentTx = [];
+        snap.forEach(doc => { const d = doc.data(); d.id = doc.id; recentTx.push(d); });
+        if (isFinanceUnlocked) renderRecent();
+    }, (e) => console.warn('transactions listener', e));
+}, { title: 'አዲስ ግቤት — የአድሚን መግቢያ', page: 'newEntry' });
+</script>
+</body>
+</html>
