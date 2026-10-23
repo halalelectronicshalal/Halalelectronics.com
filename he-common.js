@@ -308,7 +308,8 @@ const HE = (() => {
                     <p style="font-weight:700;">⛔ ለዚህ ገጽ ፈቃድ የለዎትም</p>
                     <p class="text-muted" style="font-size:.9rem;">አድሚኑን ያነጋግሩ። ፈቃድ የተሰጠዎት ገጾች ካሉ ከታች ይታያሉ።</p>
                     <div id="heNoAccessLinks" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
-                    <button type="button" class="btn btn-secondary" onclick="HE.logout()"><i class="fas fa-sign-out-alt"></i> ውጣ</button>
+                    <p class="text-muted" id="heNoAccessWho" style="font-size:.85rem;"></p>
+                    <button type="button" class="btn btn-primary btn-block" style="margin-bottom:8px;" onclick="HE.logout()"><i class="fas fa-right-left"></i> በሌላ አካውንት (ስልክ + ይለፍ ቃል) ግባ</button>
                 </div>
             </div>
         </div>`;
@@ -360,6 +361,7 @@ const HE = (() => {
             const box = document.getElementById('heNoAccessLinks');
             const links = (staff.pages || []).filter(p => PAGE_LABEL[p]).map(p => `<a class="btn btn-outline btn-block" href="${PAGE_LABEL[p][0]}">${PAGE_LABEL[p][1]}</a>`).join('');
             box.innerHTML = links || '<span class="text-muted">ምንም ፈቃድ የለዎትም</span>';
+            const who = document.getElementById('heNoAccessWho'); if (who) who.textContent = 'አሁን የገቡት፦ ' + (staff.name || '') + (staff.phone ? ' (' + staff.phone + ')' : '');
             pane('noaccess');
         };
 
