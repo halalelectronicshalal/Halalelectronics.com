@@ -4220,7 +4220,10 @@
             if (pick === 'operator' && !(t && t.isPhoneOperator) && allSectorStaff.filter(x => x.isPhoneOperator).length >= 2) { showToast('⚠️ ኦፕሬተር ቢበዛ 2 ሰው ብቻ ነው መሆን የሚችለው', 'error'); return; }
             const pages = (pick && pick !== 'operator') ? [pick] : [];
             try {
-                await db.collection('staff').doc(id).update({ pages, isPhoneOperator: pick === 'operator' });
+                // ⚠️ ሩልስ በመስክ ሊገድብ ስለሚችል እያንዳንዱ መስክ ለብቻው ይጻፋል (እንደቀድሞው)
+                const wasOp = !!(t && t.isPhoneOperator), wasPages = Array.isArray(t && t.pages) ? t.pages : [];
+                if (JSON.stringify(wasPages) !== JSON.stringify(pages)) await db.collection('staff').doc(id).update({ pages });
+                if (wasOp !== (pick === 'operator')) await db.collection('staff').doc(id).update({ isPhoneOperator: pick === 'operator' });
                 await db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'set_page_permissions', details: `የስራ ዘርፍ ተቀይሯል (${pick || 'ቴክኒሻን'})`, timestamp: new Date() });
                 showToast('✅ የስራ ዘርፍ ተቀምጧል', 'success');
                 closeModal();
@@ -5848,7 +5851,8 @@ ${locationLine}
             if (makeOp && allSectorStaff.filter(x => x.isPhoneOperator).length >= 2) { showToast('⚠️ ኦፕሬተር ቢበዛ 2 ሰው ብቻ ነው መሆን የሚችለው', 'error'); return; }
             if (!confirm(makeOp ? `${t.name} ን ስልክ/ሾፕ ኦፕሬተር ማድረግ ይፈልጋሉ?\n• ለስራ አይመደብም\n• በ operator.html ገጽ ይገባል` : `${t.name} ን ከኦፕሬተርነት ማስወገድ ይፈልጋሉ?`)) return;
             try {
-                await db.collection('staff').doc(id).update(makeOp ? { isPhoneOperator: true, pages: [] } : { isPhoneOperator: false });
+                await db.collection('staff').doc(id).update({ isPhoneOperator: makeOp });
+                if (makeOp && Array.isArray(t.pages) && t.pages.length) await db.collection('staff').doc(id).update({ pages: [] });
                 showToast(makeOp ? '✅ ኦፕሬተር ሆኗል (operator.html)' : '✅ ከኦፕሬተርነት ተወግዷል', 'success');
             } catch (e) { showToast('❌ ' + e.message, 'error'); }
         }
