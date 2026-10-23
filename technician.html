@@ -10464,7 +10464,17 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             // endpoint - the client just calls it and reads back a status. The
             // Worker has no Firestore access, so the client (which is already
             // allowed to write its own staff doc) saves the chatId itself.
-            const pollFn = (payload) => callWorker('telegramConnectPoll', payload);
+            const pollFn = async (payload) => {
+                let r = await callWorker('telegramConnectPoll', payload);
+                // 🔐 "forbidden"/"unauthorized" ከሆነ session ን አድሶ አንድ ጊዜ ይሞክራል
+                if (r && (r.error === 'forbidden' || r.error === 'unauthorized')) {
+                    try {
+                        const sr = await callWorker('session', {});
+                        if (sr && sr.ok) { heSetSession(sr); if (sr.firebaseToken) { try { await firebase.auth().signInWithCustomToken(sr.firebaseToken); } catch (e) {} } r = await callWorker('telegramConnectPoll', payload); }
+                    } catch (e) {}
+                }
+                return r;
+            };
 
             // webhook ካለ (ካለፈ ጊዜ ሙከራ) ይሰርዘው - getUpdates እንዲሰራ
             // ስህተት ካለ (Worker አልተሰማራም / TELEGRAM_BOT_TOKEN_1 የለም / CORS) ወዲያውኑ ይታያል —
@@ -10479,7 +10489,9 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 if (btn) { btn.disabled = false; btn.innerHTML = originalHTML; }
                 showToast(clearRes.error === 'network'
                     ? '❌ ከ Worker ጋር መገናኘት አልተቻለም። ኢንተርኔት ወይም CORS (ALLOWED_ORIGINS) ያረጋግጡ'
-                    : '❌ Worker ስህተት፦ ' + clearRes.error, 'error');
+                    : (clearRes.error === 'forbidden' || clearRes.error === 'unauthorized')
+                        ? '⛔ ፈቃድ የለም — ወጥተው እንደገና በስልክና በይለፍ ቃል ይግቡ። ይህ አካውንት የቴክኒሻን ካልሆነ (ኦፕሬተር/ፋይናንስ ወዘተ) ቴሌግራም በዚህ ገጽ አይገናኝም'
+                        : '❌ Worker ስህተት፦ ' + clearRes.error, 'error');
                 return;
             }
             // Telegram webhook መሰረዙን እንዲያስተናግድ ትንሽ ጊዜ እንስጠው
