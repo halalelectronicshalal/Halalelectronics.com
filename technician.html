@@ -11177,7 +11177,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         j.phone ? `📱 ${tgEsc(j.phone)}` : '',
                         j.address ? `📍 ${tgEsc(j.address)}` : ''
                     ].filter(Boolean).join(' | ');
-                    return cust ? `${head}\n    ${cust}` : head;
+                    return cust ? `${head}\n${cust}` : head;
                 });
                 let jobLines = jobLinesArr.join('\n\n'); // በእያንዳንዱ ስራ መካከል የአንድ መስመር ክፍተት
                 if (jobLines.length > 3300) jobLines = jobLines.slice(0, 3300) + '\n…';
@@ -11189,34 +11189,41 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 const extraLines = [['referral', '🔗 ሪፈራል'], ['correction', '🛠️ እርማት']].filter(([k]) => extraSum[k].count > 0)
                     .map(([k, l]) => `${l}: ${extraSum[k].count} ስራ | ገቢ ${extraSum[k].income} ብር | ወጪ ${extraSum[k].expense} ብር | ለሠራተኛ ${extraSum[k].staffShare} ብር`).join('\n');
                 const wN = warrantyCompressed.length, rN = receiptCompressed.length;
+                // ክፍሎች በአንድ መስመር ክፍተት ተለይተው ይላካሉ (ለማንበብ እንዲመች)
+                const _blk = (...lines) => lines.filter(l => l !== '' && l != null).join('\n');
                 const reportMsg = [
-                    '📋 የሀላል ዕለታዊ የባለሙያ ሪፖርት',
-                    `👷 የባለሙያ ስም: ${tgEsc(technicianName)}`,
-                    `📅 ቀን: ${formatEthDate(_repDate)} ዓ.ም (${tgEsc(reportData.date)})`,
-                    `🕐 ሰዓት: ${techEthTimeStr(_now)}`,
-                    `📆 ዕለት: ${tgEsc(reportData.day)}`,
-                    `1️⃣ የተላኩ ስራዎች ብዛት: ${totalSent}`,
-                    `2️⃣ የተጠናቀቁ ስራዎች ብዛት: ${completedCount}`,
-                    `3️⃣ ያልተጠናቀቁ ስራዎች ብዛት: ${notCompletedCount}`,
-                    '📋 የስራ ዝርዝር',
-                    jobLines || '—',
-                    reasonLines,
-                    extraLines,
-                    `💰 5️⃣ ጠቅላላ ገቢ: ${totalIncome} ብር`,
-                    `🧾 6️⃣ ጠቅላላ ወጪ: ${totalExpense} ብር`,
+                    _blk(
+                        '📋 የሀላል ዕለታዊ የባለሙያ ሪፖርት',
+                        `👷 የባለሙያ ስም: ${tgEsc(technicianName)}`,
+                        `📅 ቀን: ${formatEthDate(_repDate)} ዓ.ም (${tgEsc(reportData.date)})`,
+                        `🕐 ሰዓት: ${techEthTimeStr(_now)}`,
+                        `📆 ዕለት: ${tgEsc(reportData.day)}`
+                    ),
+                    _blk(
+                        `1️⃣ የተላኩ ስራዎች ብዛት: ${totalSent}`,
+                        `2️⃣ የተጠናቀቁ ስራዎች ብዛት: ${completedCount}`,
+                        `3️⃣ ያልተጠናቀቁ ስራዎች ብዛት: ${notCompletedCount}`
+                    ),
+                    _blk('📋 የስራ ዝርዝር', jobLines || '—', reasonLines, extraLines),
+                    _blk(
+                        `💰 5️⃣ ጠቅላላ ገቢ: ${totalIncome} ብር`,
+                        `🧾 6️⃣ ጠቅላላ ወጪ: ${totalExpense} ብር`
+                    ),
                     `የወጪ ዝርዝር: ${expLines}`,
-                    `💵 7️⃣ ጠቅላላ ትርፍ: ${profit} ብር`,
-                    `📊 8️⃣ የባለሙያ ድርሻ (%): ${techSharePercent}%`,
-                    `🏦 9️⃣ ወደ ድርጅቱ የገባ ገንዘብ: ${deposited} ብር`,
-                    '🎤 🔟 ተጨማሪ ማብራሪያ / አስተያየት:',
+                    _blk(
+                        `💵 7️⃣ ጠቅላላ ትርፍ: ${profit} ብር`,
+                        `📊 8️⃣ የባለሙያ ድርሻ (%): ${techSharePercent}%`,
+                        `🏦 9️⃣ ወደ ድርጅቱ የገባ ገንዘብ: ${deposited} ብር`,
+                        '🎤 🔟 ተጨማሪ ማብራሪያ / አስተያየት:'
+                    ),
                     tgEsc([expenseDetails, remarks].filter(Boolean).join(' — ') || '—'),
-                    'የድርጅቱ ጊዜያዊ የገቢ አካውንት',
-                    '1000422578068',
-                    'Fuad Museyd Hassen',
+                    _blk('የድርጅቱ ጊዜያዊ የገቢ አካውንት', '1000422578068', 'Fuad Museyd Hassen'),
                     '📌 ተጨማሪ ማያያዝ ወይም መላክ ያለባቸው',
-                    wN ? `✅ ተያይዟል (${wN} ፎቶ) — የዋራንቲ ካርድ እና ሎጎ ፎቶ` : '❌ አልተያያዘም — የዋራንቲ ካርድ እና ሎጎ ፎቶ',
-                    rN ? `✅ ተያይዟል (${rN} ፎቶ) — የባንክ ደረሰኝ` : '❌ አልተያያዘም — የባንክ ደረሰኝ'
-                ].filter(l => l !== '').join('\n');
+                    _blk(
+                        wN ? `✅ ተያይዟል (${wN} ፎቶ) — የዋራንቲ ካርድ እና ሎጎ ፎቶ` : '❌ አልተያያዘም — የዋራንቲ ካርድ እና ሎጎ ፎቶ',
+                        rN ? `✅ ተያይዟል (${rN} ፎቶ) — የባንክ ደረሰኝ` : '❌ አልተያያዘም — የባንክ ደረሰኝ'
+                    )
+                ].filter(x => x !== '').join('\n\n');
                 let tgOk = await techSendTelegramNotification(reportMsg);
                 if (!tgOk) { // አንድ ጊዜ እንደገና ሞክር
                     await new Promise(r => setTimeout(r, 1500));
