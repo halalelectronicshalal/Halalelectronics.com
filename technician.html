@@ -11179,8 +11179,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     ].filter(Boolean).join(' | ');
                     return cust ? `${head}\n    ${cust}` : head;
                 });
-                let jobLines = jobLinesArr.join('\n');
-                if (jobLines.length > 3000) jobLines = jobLines.slice(0, 3000) + '\n…';
+                let jobLines = jobLinesArr.join('\n\n'); // በእያንዳንዱ ስራ መካከል የአንድ መስመር ክፍተት
+                if (jobLines.length > 3300) jobLines = jobLines.slice(0, 3300) + '\n…';
                 let reasonList = jobStatuses.filter(j => j.status !== 'completed' && j.reason).map(j => j.reason);
                 if (!reasonList.length) reasonList = notCompletedReasons.slice();
                 const reasonLines = reasonList.map(r => `ካልተጠናቀቀ ምክንያቱ: ${tgEsc(r)}`).join('\n');
