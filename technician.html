@@ -2216,6 +2216,14 @@
                                     <input type="text" id="doneRefApplianceOther" placeholder="የመሳሪያውን ስም ይጻፉ" />
                                 </div>
                                 <div class="sub-row">
+                                    <label>📱 የደንበኛ ስልክ <span style="font-weight:400; font-size:0.75rem; color:var(--text-muted);">(አማራጭ)</span></label>
+                                    <input type="tel" id="doneRefPhone" placeholder="09xxxxxxxx" inputmode="tel" maxlength="20" />
+                                </div>
+                                <div class="sub-row">
+                                    <label>📍 የደንበኛ አድራሻ <span style="font-weight:400; font-size:0.75rem; color:var(--text-muted);">(አማራጭ)</span></label>
+                                    <input type="text" id="doneRefAddress" placeholder="አድራሻ ይጻፉ" maxlength="200" />
+                                </div>
+                                <div class="sub-row">
                                     <label>💰 ገቢ</label>
                                     <input type="number" id="doneRefIncome" placeholder="0" inputmode="decimal" min="0" />
                                 </div>
@@ -2248,6 +2256,14 @@
                                 </div>
                                 <div class="sub-row" id="doneCorApplianceOtherRow" style="display:none;">
                                     <input type="text" id="doneCorApplianceOther" placeholder="የመሳሪያውን ስም ይጻፉ" />
+                                </div>
+                                <div class="sub-row">
+                                    <label>📱 የደንበኛ ስልክ <span style="font-weight:400; font-size:0.75rem; color:var(--text-muted);">(አማራጭ)</span></label>
+                                    <input type="tel" id="doneCorPhone" placeholder="09xxxxxxxx" inputmode="tel" maxlength="20" />
+                                </div>
+                                <div class="sub-row">
+                                    <label>📍 የደንበኛ አድራሻ <span style="font-weight:400; font-size:0.75rem; color:var(--text-muted);">(አማራጭ)</span></label>
+                                    <input type="text" id="doneCorAddress" placeholder="አድራሻ ይጻፉ" maxlength="200" />
                                 </div>
                                 <div class="sub-row">
                                     <label>💰 ገቢ</label>
@@ -9739,7 +9755,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (!on) document.getElementById(p + 'ApplianceOther').value = '';
         }
         function techExtraClear(p) {
-            ['Count', 'Appliance', 'ApplianceOther', 'Income', 'Expense'].forEach(k => { const el = document.getElementById(p + k); if (el) el.value = ''; });
+            ['Count', 'Appliance', 'ApplianceOther', 'Phone', 'Address', 'Income', 'Expense'].forEach(k => { const el = document.getElementById(p + k); if (el) el.value = ''; });
             techExtraToggleOther(p);
             techExtraUpdate(p);
         }
@@ -9752,7 +9768,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const otherTxt = g('ApplianceOther').value.trim();
             const incRaw = g('Income').value.trim();
             const expRaw = g('Expense').value.trim();
-            if (!countRaw && !sel && !incRaw && !expRaw) return { active: false };
+            const phoneRaw = (g('Phone') ? g('Phone').value : '').trim(), addrRaw = (g('Address') ? g('Address').value : '').trim();
+            if (!countRaw && !sel && !incRaw && !expRaw && !phoneRaw && !addrRaw) return { active: false };
             const count = parseInt(countRaw, 10);
             if (!(count >= 1)) return { active: true, error: `${d.label}፦ የተሰራ ስራ ብዛት ያስገቡ` };
             if (!sel) return { active: true, error: `${d.label}፦ መሳሪያ ይምረጡ` };
@@ -9760,7 +9777,10 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const income = parseFloat(incRaw) || 0;
             const expense = parseFloat(expRaw) || 0;
             if (income < 0 || expense < 0) return { active: true, error: `${d.label}፦ ገቢ/ወጪ ከ0 በታች መሆን አይችልም` };
-            return { active: true, def: d, count, appliance: sel === 'Other' ? otherTxt : sel, income, expense, staffShare: income - expense };
+            const phone = (g('Phone') ? g('Phone').value : '').trim();
+            const address = (g('Address') ? g('Address').value : '').trim();
+            if (phone && !/^[0-9+\-\s()]{7,20}$/.test(phone)) return { active: true, error: `${d.label}፦ የደንበኛ ስልክ ቁጥር ትክክል አይደለም` };
+            return { active: true, def: d, count, appliance: sel === 'Other' ? otherTxt : sel, phone, address, income, expense, staffShare: income - expense };
         }
         // ሪፖርት ውስጥ በራሱ እንዲገባ እንደ ተጠናቀቀ ስራ (መለያ: ሪፈራል/እርማት) ይመዘገባል
         function techExtraWrites(x, today) {
@@ -9769,8 +9789,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const tagText = `${x.def.icon} ${label} (${x.count} ስራ)`;
             const orderP = db.collection('orders').add({
                 fullName: tagText,
-                phone: '',
-                address: '',
+                phone: x.phone || '',
+                address: x.address || '',
                 appliance: x.appliance,
                 problem: label,
                 status: 'Completed',
@@ -11007,6 +11027,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 jobStatuses.push({
                     orderId: orderId,
                     customer: order ? order.fullName : '—',
+                    phone: order ? (order.phone || '') : '',
+                    address: order ? (order.address || '') : '',
                     appliance: order ? (order.appliance || '') : '',
                     status: select.value,
                     reason: reason,
@@ -11149,10 +11171,16 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 const jobLinesArr = jobStatuses.map((j, i) => {
                     const done = j.status === 'completed';
                     const tagTxt = j.tagLabel ? `[${tgEsc(j.tagLabel)}${j.count > 1 ? ' ×' + j.count : ''}] ` : '';
-                    return `${i + 1}. ${tagTxt}${tgEsc(j.appliance || j.customer || '—')} — ${done ? '✅' : '❌'}`;
+                    const head = `${i + 1}. ${tagTxt}${tgEsc(j.appliance || j.customer || '—')} — ${done ? '✅' : '❌'}`;
+                    const cust = [
+                        j.customer && j.customer !== '—' ? `👤 ${tgEsc(j.customer)}` : '',
+                        j.phone ? `📱 ${tgEsc(j.phone)}` : '',
+                        j.address ? `📍 ${tgEsc(j.address)}` : ''
+                    ].filter(Boolean).join(' | ');
+                    return cust ? `${head}\n    ${cust}` : head;
                 });
                 let jobLines = jobLinesArr.join('\n');
-                if (jobLines.length > 2200) jobLines = jobLines.slice(0, 2200) + '\n…';
+                if (jobLines.length > 3000) jobLines = jobLines.slice(0, 3000) + '\n…';
                 let reasonList = jobStatuses.filter(j => j.status !== 'completed' && j.reason).map(j => j.reason);
                 if (!reasonList.length) reasonList = notCompletedReasons.slice();
                 const reasonLines = reasonList.map(r => `ካልተጠናቀቀ ምክንያቱ: ${tgEsc(r)}`).join('\n');
