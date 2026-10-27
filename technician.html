@@ -1536,6 +1536,9 @@
                     <div class="filters" style="margin-bottom:16px;">
                         <select id="orderFilter">
                             <option value="all">ሁሉም</option>
+                            <option value="__new">🆕 አዲስ</option>
+                            <option value="__referral">🔗 ሪፈራል</option>
+                            <option value="__correction">🛠️ እርማት</option>
                             <option value="Pending">⏳ በመጠባበቅ</option>
                             <option value="Assigned">📋 ተመድቧል</option>
                             <option value="Completed">✅ ተጠናቋል</option>
@@ -4544,10 +4547,21 @@
 
             // ✅ NEW: "ያደሩ ስራዎች" (overdue) - ገና ካልተጠናቀቁ status ውስጥ ካሉ እና ዛሬ ካልተፈጠሩ (ካደሩ) ብቻ
             const finishedStatuses = ['Completed', 'PriceNotAgreed', 'Rescheduled', 'NotToday', 'Other', 'PhoneNoAnswer'];
+            // ✅ «ያደረ» የሚሰላበት ቀን፦ ስራው የተፈጠረበት ቀን፤ ወደ አድሚን የተመለሰ (ረ. ስራ መልስ) ከሆነ ግን የተመለሰበት ቀን።
+                // (ቀድሞ ዛሬ የተመለሰ ሰራ በድሮ የፍጥረት ቀኑ ምክንያት ወዲያውኑ «ያደረ» ይሆን ነበር)
+                function overnightBaseMs(o) {
+                const f = (v) => { if (!v) return 0; if (v.toDate) return v.toDate().getTime(); const n = new Date(v).getTime(); return isNaN(n) ? 0 : n; };
+                // የተቀጠረ ቀን (ለሌላ ቀን የተላለፈ / በኦፕሬተር የተቀጠረ፦ YYYY-MM-DD)፤ ያ ቀን እስኪያልፍ «ያደረ» አይደለም
+                const ap = (o && ((o.rescheduledFrom && o.rescheduledDate) || o.appointmentDate)) || '';
+                const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ap));
+                const apMs = m ? new Date(+m[1], +m[2] - 1, +m[3]).getTime() : 0;
+                return Math.max(f(o && o.createdAt), f(o && o.returnedAt), apMs);
+            }
             const overdueJobs = allOrders.filter(o => {
                 if (finishedStatuses.includes(o.status) || o.workTag) return false; // አጠናቅ የተነካ (ሀ–ሰ) እና ሪፈራል/እርማት አይቆጠርም
-                const d = o.createdAt?.toDate?.() || new Date(0);
-                return d.toDateString() !== todayStr;
+                const ms = overnightBaseMs(o);
+                const _s = new Date(); _s.setHours(0, 0, 0, 0);
+                return ms > 0 && ms < _s.getTime(); // ወደፊት የተቀጠረ አይቆጠርም
             }).length;
 
             // ✅ NEW: "የትላንት ጠቅላላ ገቢ"
@@ -4791,7 +4805,10 @@
             const body = document.getElementById('ordersBody');
 
             let filtered = allOrders;
-            if (filter !== 'all') filtered = filtered.filter(o => o.status === filter);
+            if (filter === '__new') filtered = filtered.filter(o => !o.workTag && (!o.orderType || o.orderType === 'new') && o.status === 'Pending'); // 🆕 አዲስ (ገና ያልተመደበ)
+            else if (filter === '__referral') filtered = filtered.filter(o => (o.workTag || o.orderType) === 'referral');
+            else if (filter === '__correction') filtered = filtered.filter(o => (o.workTag || o.orderType) === 'correction');
+            else if (filter !== 'all') filtered = filtered.filter(o => o.status === filter);
             if (date) {
                 const dateStr = new Date(date).toDateString();
                 filtered = filtered.filter(o => {
@@ -5496,9 +5513,11 @@ ${locationLine}
         const SRC_META = {
             web:   { label: '🌐 ከደንበኛ ገጽ', short: 'ደንበኛ ገጽ' },
             phone: { label: '📞 በስልክ',       short: 'ስልክ' },
-            shop:  { label: '🏪 ከሾፕ',        short: 'ሾፕ' }
+            shop:  { label: '🏪 ከሾፕ',        short: 'ሾፕ' },
+            extra: { label: '🔗 ሪፈራል / 🛠️ እርማት', short: 'ሪፈራል/እርማት' }
         };
         function orderSource(o) {
+            if (o.workTag || o.source === 'technician_extra') return 'extra';
             if (o.source === 'phone_admin') return 'phone';
             if (o.source === 'shop_admin') return 'shop';
             return 'web';
@@ -5506,7 +5525,9 @@ ${locationLine}
         function srcLabel(o) {
             const k = orderSource(o);
             const by = (k !== 'web' && o.createdByName) ? ' · ' + String(o.createdByName).replace(/</g, '&lt;') : '';
-            return SRC_META[k].label + by;
+            const tag = (k === 'extra' && o.workTagLabel) ? ' (' + String(o.workTagLabel).replace(/</g, '&lt;') + ')' : '';
+            const typ = (o.orderType && o.orderTypeLabel) ? '<br><span style="font-size:0.68rem; font-weight:700;">🗂️ ' + String(o.orderTypeLabel).replace(/</g, '&lt;') + '</span>' : '';
+            return SRC_META[k].label + tag + by + typ;
         }
         function reportStart(period) {
             const now = new Date();
@@ -5528,16 +5549,16 @@ ${locationLine}
         function addCnt(c, o) { c.total++; if (o.status === 'Completed') c.done++; else c.notDone++; }
         function computeSourceStats(period) {
             const list = ordersForPeriod(period);
-            const bySource = { web: emptyCnt(), phone: emptyCnt(), shop: emptyCnt() };
+            const bySource = { web: emptyCnt(), phone: emptyCnt(), shop: emptyCnt(), extra: emptyCnt() };
             const byTech = {};      // ስራውን የተቀበለ/የተመደበለት ቴክኒሻን
             const byOperator = {};  // ስራውን ያስገባ ኦፕሬተር
             list.forEach(o => {
                 const k = orderSource(o);
                 addCnt(bySource[k], o);
                 const tn = o.technician || '— ያልተመደበ —';
-                if (!byTech[tn]) byTech[tn] = { web: emptyCnt(), phone: emptyCnt(), shop: emptyCnt() };
+                if (!byTech[tn]) byTech[tn] = { web: emptyCnt(), phone: emptyCnt(), shop: emptyCnt(), extra: emptyCnt() };
                 addCnt(byTech[tn][k], o);
-                if (k !== 'web') {
+                if (k === 'phone' || k === 'shop') {
                     const on = o.createdByName || 'አስተዳዳሪ';
                     if (!byOperator[on]) byOperator[on] = { phone: emptyCnt(), shop: emptyCnt() };
                     addCnt(byOperator[on][k], o);
@@ -5551,11 +5572,11 @@ ${locationLine}
             const st = computeSourceStats(period);
             const rowCells = c => `<td>${c.total}</td><td style="color:var(--success); font-weight:700;">${c.done}</td><td style="color:var(--warning); font-weight:700;">${c.notDone}</td>`;
             const sum = ks => ks.reduce((a, c) => ({ total: a.total + c.total, done: a.done + c.done, notDone: a.notDone + c.notDone }), emptyCnt());
-            const srcRows = ['web', 'phone', 'shop'].map(k => `<tr><td>${SRC_META[k].label}</td>${rowCells(st.bySource[k])}</tr>`).join('');
+            const srcRows = ['web', 'phone', 'shop', 'extra'].map(k => `<tr><td>${SRC_META[k].label}</td>${rowCells(st.bySource[k])}</tr>`).join('');
             const tot = sum(Object.values(st.bySource));
             const techRows = Object.keys(st.byTech).sort().map(n => {
                 const t = st.byTech[n];
-                return `<tr><td>${String(n).replace(/</g, '&lt;')}</td><td>${t.web.total} / ${t.web.done}</td><td>${t.phone.total} / ${t.phone.done}</td><td>${t.shop.total} / ${t.shop.done}</td><td style="font-weight:700;">${t.web.total + t.phone.total + t.shop.total}</td></tr>`;
+                return `<tr><td>${String(n).replace(/</g, '&lt;')}</td><td>${t.web.total} / ${t.web.done}</td><td>${t.phone.total} / ${t.phone.done}</td><td>${t.shop.total} / ${t.shop.done}</td><td>${t.extra.total} / ${t.extra.done}</td><td style="font-weight:700;">${t.web.total + t.phone.total + t.shop.total + t.extra.total}</td></tr>`;
             }).join('');
             const opRows = Object.keys(st.byOperator).sort().map(n => {
                 const o = st.byOperator[n];
@@ -5566,7 +5587,7 @@ ${locationLine}
                 <h4 style="margin:18px 0 8px;">📥 ስራ በመጣበት መንገድ</h4>
                 ${tbl('<th>መንገድ</th><th>ጠቅላላ</th><th>✅ ተጠናቋል</th><th>⏳ ያልተጠናቀቀ</th>', srcRows + `<tr style="font-weight:800;"><td>ድምር</td>${rowCells(tot)}</tr>`)}
                 <h4 style="margin:18px 0 8px;">🔧 በቴክኒሻን <span style="font-size:0.75rem; color:var(--text-muted); font-weight:400;">(ጠቅላላ / የተጠናቀቀ)</span></h4>
-                ${tbl('<th>ቴክኒሻን</th><th>🌐 ደንበኛ ገጽ</th><th>📞 ስልክ</th><th>🏪 ሾፕ</th><th>ድምር</th>', techRows || '<tr><td colspan="5" class="text-center text-muted">ምንም የለም</td></tr>')}
+                ${tbl('<th>ቴክኒሻን</th><th>🌐 ደንበኛ ገጽ</th><th>📞 ስልክ</th><th>🏪 ሾፕ</th><th>🔗 ሪፈራል/እርማት</th><th>ድምር</th>', techRows || '<tr><td colspan="6" class="text-center text-muted">ምንም የለም</td></tr>')}
                 <h4 style="margin:18px 0 8px;">🎧 በኦፕሬተር <span style="font-size:0.75rem; color:var(--text-muted); font-weight:400;">(ያስገባቸው ስራዎች: ጠቅላላ / የተጠናቀቀ)</span></h4>
                 ${tbl('<th>ኦፕሬተር</th><th>📞 ስልክ</th><th>🏪 ሾፕ</th><th>ድምር</th>', opRows || '<tr><td colspan="4" class="text-center text-muted">በዚህ ጊዜ ኦፕሬተር ያስገባው ስራ የለም</td></tr>')}
                 <p class="text-muted" style="font-size:0.75rem; margin-top:8px;">ℹ️ ለሌላ ቀን የተላለፉ ስራዎች እንደ አንድ ስራ ብቻ ነው የሚቆጠሩት።</p>`;
@@ -5585,17 +5606,17 @@ ${locationLine}
             // 1) በምንጭ
             const r1 = [['መንገድ', 'ጠቅላላ', 'የተጠናቀቀ', 'ያልተጠናቀቀ']];
             let T = emptyCnt();
-            ['web', 'phone', 'shop'].forEach(k => { const c = st.bySource[k]; r1.push([SRC_META[k].short, c.total, c.done, c.notDone]); T.total += c.total; T.done += c.done; T.notDone += c.notDone; });
+            ['web', 'phone', 'shop', 'extra'].forEach(k => { const c = st.bySource[k]; r1.push([SRC_META[k].short, c.total, c.done, c.notDone]); T.total += c.total; T.done += c.done; T.notDone += c.notDone; });
             r1.push(['ድምር', T.total, T.done, T.notDone]);
             add('በምንጭ', r1, [18, 10, 12, 14]);
             // 2) በቴክኒሻን
-            const r2 = [['ቴክኒሻን', 'ደንበኛ ገጽ - ጠቅላላ', 'ደንበኛ ገጽ - የተጠናቀቀ', 'ደንበኛ ገጽ - ያልተጠናቀቀ', 'ስልክ - ጠቅላላ', 'ስልክ - የተጠናቀቀ', 'ስልክ - ያልተጠናቀቀ', 'ሾፕ - ጠቅላላ', 'ሾፕ - የተጠናቀቀ', 'ሾፕ - ያልተጠናቀቀ', 'ድምር ጠቅላላ', 'ድምር የተጠናቀቀ', 'ድምር ያልተጠናቀቀ']];
+            const r2 = [['ቴክኒሻን', 'ደንበኛ ገጽ - ጠቅላላ', 'ደንበኛ ገጽ - የተጠናቀቀ', 'ደንበኛ ገጽ - ያልተጠናቀቀ', 'ስልክ - ጠቅላላ', 'ስልክ - የተጠናቀቀ', 'ስልክ - ያልተጠናቀቀ', 'ሾፕ - ጠቅላላ', 'ሾፕ - የተጠናቀቀ', 'ሾፕ - ያልተጠናቀቀ', 'ሪፈራል/እርማት - ጠቅላላ', 'ሪፈራል/እርማት - የተጠናቀቀ', 'ሪፈራል/እርማት - ያልተጠናቀቀ', 'ድምር ጠቅላላ', 'ድምር የተጠናቀቀ', 'ድምር ያልተጠናቀቀ']];
             Object.keys(st.byTech).sort().forEach(n => {
                 const t = st.byTech[n];
-                const a = t.web, b = t.phone, c = t.shop;
-                r2.push([n, a.total, a.done, a.notDone, b.total, b.done, b.notDone, c.total, c.done, c.notDone, a.total + b.total + c.total, a.done + b.done + c.done, a.notDone + b.notDone + c.notDone]);
+                const a = t.web, b = t.phone, c = t.shop, e = t.extra;
+                r2.push([n, a.total, a.done, a.notDone, b.total, b.done, b.notDone, c.total, c.done, c.notDone, e.total, e.done, e.notDone, a.total + b.total + c.total + e.total, a.done + b.done + c.done + e.done, a.notDone + b.notDone + c.notDone + e.notDone]);
             });
-            add('በቴክኒሻን', r2, [22, 14, 14, 14, 12, 12, 12, 12, 12, 12, 12, 12, 12]);
+            add('በቴክኒሻን', r2, [22, 14, 14, 14, 12, 12, 12, 12, 12, 12, 14, 14, 14, 12, 12, 12]);
             // 3) በኦፕሬተር
             const r3 = [['ኦፕሬተር', 'ስልክ - ጠቅላላ', 'ስልክ - የተጠናቀቀ', 'ስልክ - ያልተጠናቀቀ', 'ሾፕ - ጠቅላላ', 'ሾፕ - የተጠናቀቀ', 'ሾፕ - ያልተጠናቀቀ', 'ድምር ጠቅላላ', 'ድምር የተጠናቀቀ', 'ድምር ያልተጠናቀቀ']];
             Object.keys(st.byOperator).sort().forEach(n => {
@@ -6739,6 +6760,14 @@ ${locationLine}
                     <label>አድራሻ (ክፍለ ከተማ እና ሰፈር) *</label>
                     <input type="text" id="phoneOrderAddress" placeholder="አድራሻ" />
                 </div>
+                <div class="form-group">
+                    <label>🗂️ የስራ አይነት</label>
+                    <select id="phoneOrderWorkType">
+                        <option value="new" selected>🆕 አዲስ</option>
+                        <option value="correction">🛠️ እርማት</option>
+                        <option value="referral">🔗 ሪፈራል</option>
+                    </select>
+                </div>
                 <div class="form-row">
                     <div class="form-group">
                         <label>መሳሪያ *</label>
@@ -6796,6 +6825,8 @@ ${locationLine}
             const preferredDay = document.getElementById('phoneOrderPreferredDay').value;
             const problem = document.getElementById('phoneOrderProblem').value.trim();
             const technician = document.getElementById('phoneOrderTechnician').value;
+            const workType = (document.getElementById('phoneOrderWorkType') || {}).value || 'new';
+            const WORK_TYPE_LABELS = { new: '🆕 አዲስ', correction: '🛠️ እርማት', referral: '🔗 ሪፈራል' };
 
             if (!fullName || !phone || !address || !appliance) {
                 showToast('እባክዎ ስም፣ ስልክ፣ አድራሻ እና መሳሪያ ይሙሉ', 'error');
@@ -6808,6 +6839,8 @@ ${locationLine}
                     phone: phone,
                     address: address,
                     appliance: appliance,
+                    orderType: workType,
+                    orderTypeLabel: WORK_TYPE_LABELS[workType] || WORK_TYPE_LABELS.new,
                     preferredDay: preferredDay,
                     problem: problem || 'በስልክ የተደወለ ስራ',
                     status: 'Pending',
