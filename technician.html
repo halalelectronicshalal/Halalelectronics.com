@@ -4545,7 +4545,7 @@
             // ✅ NEW: "ያደሩ ስራዎች" (overdue) - ገና ካልተጠናቀቁ status ውስጥ ካሉ እና ዛሬ ካልተፈጠሩ (ካደሩ) ብቻ
             const finishedStatuses = ['Completed', 'PriceNotAgreed', 'Rescheduled', 'NotToday', 'Other', 'PhoneNoAnswer'];
             const overdueJobs = allOrders.filter(o => {
-                if (finishedStatuses.includes(o.status)) return false;
+                if (finishedStatuses.includes(o.status) || o.workTag) return false; // አጠናቅ የተነካ (ሀ–ሰ) እና ሪፈራል/እርማት አይቆጠርም
                 const d = o.createdAt?.toDate?.() || new Date(0);
                 return d.toDateString() !== todayStr;
             }).length;
