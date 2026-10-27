@@ -4545,7 +4545,11 @@
         // (ቀድሞ ዛሬ የተመለሰ ሰራ በድሮ የፍጥረት ቀኑ ምክንያት ወዲያውኑ «ያደረ» ይሆን ነበር)
         function overnightBaseMs(o) {
             const f = (v) => { if (!v) return 0; if (v.toDate) return v.toDate().getTime(); const n = new Date(v).getTime(); return isNaN(n) ? 0 : n; };
-            return Math.max(f(o && o.createdAt), f(o && o.returnedAt));
+            // የተቀጠረ ቀን (ለሌላ ቀን የተላለፈ / በኦፕሬተር የተቀጠረ፦ YYYY-MM-DD)፤ ያ ቀን እስኪያልፍ «ያደረ» አይደለም
+            const ap = (o && ((o.rescheduledFrom && o.rescheduledDate) || o.appointmentDate)) || '';
+            const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ap));
+            const apMs = m ? new Date(+m[1], +m[2] - 1, +m[3]).getTime() : 0;
+            return Math.max(f(o && o.createdAt), f(o && o.returnedAt), apMs);
         }
         const isAdmOvernightJob = (o) => !!o && !o.workTag && !ADM_FINISHED_STATUSES.includes(o.status);
         function orderReasonText(o) {
@@ -4628,7 +4632,7 @@
                 summary = `ጠቅላላ ${list.length} • ✅ ተጠናቋል ${done} • ❌ አልተጠናቀቀም ${list.length - done}`;
                 rows = list.map(o => orderDetailRowHTML(o));
             } else if (kind === 'overdue') {
-                const list = allOrders.filter(o => isAdmOvernightJob(o) && overnightBaseMs(o) > 0 && new Date(overnightBaseMs(o)).toDateString() !== todayStr)
+                const list = allOrders.filter(o => isAdmOvernightJob(o) && overnightBaseMs(o) > 0 && overnightBaseMs(o) < new Date().setHours(0, 0, 0, 0))
                     .sort((a, b) => overnightBaseMs(a) - overnightBaseMs(b));
                 title = '⏰ ያደሩ ስራዎች';
                 summary = `${list.length} ያልተጠናቀቁ ስራዎች ከትናንት እና ከዚያ በፊት የቆዩ (ከአሮጌው ይጀምራል)`;
@@ -4681,7 +4685,8 @@
             const overdueJobs = allOrders.filter(o => {
                 if (!isAdmOvernightJob(o)) return false; // አጠናቅ የተነካ (ሀ–ሰ) እና ሪፈራል/እርማት አይቆጠርም
                 const ms = overnightBaseMs(o);
-                return ms > 0 && new Date(ms).toDateString() !== todayStr; // ከዝርዝሩ ጋር አንድ ደንብ (ቀን የሌለው አይቆጠርም)
+                const _s = new Date(); _s.setHours(0, 0, 0, 0);
+                return ms > 0 && ms < _s.getTime(); // ከዛሬ በፊት ያለፈ ብቻ (ወደፊት የተቀጠረ አይቆጠርም)፤ ከዝርዝሩ ጋር አንድ ደንብ
             }).length;
 
             // ✅ NEW: "የትላንት ጠቅላላ ገቢ"
