@@ -128,6 +128,12 @@ h3.phone{color:var(--phone)}h3.shop{color:var(--shop)}
       <div class="field"><label>ስም</label><input id="phName" placeholder="ሙሉ ስም" /></div>
       <div class="field"><label>አድራሻ</label><input id="phAddress" placeholder="አድራሻ" /></div>
       <div class="field"><label>ስልክ</label><input id="phPhone" type="tel" inputmode="tel" placeholder="09XXXXXXXX" /></div>
+      <div class="field"><label>🗂️ የስራ አይነት</label>
+        <select id="phWorkType">
+          <option value="new" selected>🆕 አዲስ</option>
+          <option value="correction">🛠️ እርማት</option>
+          <option value="referral">🔗 ሪፈራል</option>
+        </select></div>
       <div class="field"><label>መሳሪያ</label>
         <select id="phAppliance" onchange="toggleApplianceOther('ph')">
           <option value="">መሳሪያ ይምረጡ</option>
@@ -158,6 +164,12 @@ h3.phone{color:var(--phone)}h3.shop{color:var(--shop)}
       <div class="field"><label>ስም</label><input id="shName" placeholder="ሙሉ ስም" /></div>
       <div class="field"><label>አድራሻ</label><input id="shAddress" placeholder="አድራሻ" /></div>
       <div class="field"><label>ስልክ</label><input id="shPhone" type="tel" inputmode="tel" placeholder="09XXXXXXXX" /></div>
+      <div class="field"><label>🗂️ የስራ አይነት</label>
+        <select id="shWorkType">
+          <option value="new" selected>🆕 አዲስ</option>
+          <option value="correction">🛠️ እርማት</option>
+          <option value="referral">🔗 ሪፈራል</option>
+        </select></div>
       <div class="field"><label>መሳሪያ</label>
         <select id="shAppliance" onchange="toggleApplianceOther('sh')">
           <option value="">መሳሪያ ይምረጡ</option>
@@ -407,6 +419,9 @@ async function submitOrder(pfx) {
   const applianceOtherVal = $(pfx + 'ApplianceOther').value.trim();
   const appliance = applianceSel === 'Other' ? (applianceOtherVal || 'Other') : applianceSel;
   const problem = $(pfx + 'Problem').value.trim();
+  const workType = ($(pfx + 'WorkType').value || 'new');
+  const WORK_TYPE_LABELS = { new: '🆕 አዲስ', correction: '🛠️ እርማት', referral: '🔗 ሪፈራል' };
+  const workTypeLabel = WORK_TYPE_LABELS[workType] || WORK_TYPE_LABELS.new;
   if (!fullName || !address || !phone || !appliance) { toast('ስም፣ አድራሻ፣ ስልክ እና መሳሪያ ይሙሉ'); return; }
   if (applianceSel === 'Other' && !applianceOtherVal) { toast('የመሳሪያውን ስም ይጻፉ'); $(pfx + 'ApplianceOther').focus(); return; }
   const foundUsSel = $(pfx + 'FoundUs').value;
@@ -421,6 +436,8 @@ async function submitOrder(pfx) {
     const order = {
       fullName, phone, address,
       appliance,
+      orderType: workType,
+      orderTypeLabel: workTypeLabel,
       foundUs: foundUsSel,
       foundUsText: foundUsText,
       preferredDay: ethText(appt),          // አድሚን ገጽ ላይ "መች ይመቻቻል" ስር ይታያል
@@ -444,10 +461,11 @@ async function submitOrder(pfx) {
     try {
       await callWorker('sendTelegramMessage', {
         bot: 'admin',
-        text: `🆕 *አዲስ ትዕዛዝ* ${isPhone ? '📞 (በስልክ)' : '🏪 (ከሾፕ)'}\n🎧 ኦፕሬተር: ${me.name}\n🆔 #${ref.id.substring(0, 8)}\n👤 ${fullName}\n📞 ${phone}\n📍 ${address}\n🔌 ${appliance}\n🛠️ ${order.problem}\n📅 ቀጠሮ: ${order.preferredDay}\n📣 ከየት አገኙን: ${order.foundUsText || '—'}`
+        text: `🆕 *አዲስ ትዕዛዝ* ${isPhone ? '📞 (በስልክ)' : '🏪 (ከሾፕ)'}\n🎧 ኦፕሬተር: ${me.name}\n🆔 #${ref.id.substring(0, 8)}\n👤 ${fullName}\n📞 ${phone}\n📍 ${address}\n🗂️ የስራ አይነት: ${workTypeLabel}\n🔌 ${appliance}\n🛠️ ${order.problem}\n📅 ቀጠሮ: ${order.preferredDay}\n📣 ከየት አገኙን: ${order.foundUsText || '—'}`
       });
     } catch (e) { console.warn('telegram failed', e); }
     [pfx + 'Name', pfx + 'Address', pfx + 'Phone', pfx + 'Problem', pfx + 'Appliance', pfx + 'ApplianceOther', pfx + 'FoundUs', pfx + 'FoundUsOther'].forEach(id => $(id).value = '');
+    $(pfx + 'WorkType').value = 'new';
     toggleApplianceOther(pfx);
     toggleFoundOther(pfx);
     resetPicker(pfx);
