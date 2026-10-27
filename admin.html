@@ -4541,6 +4541,12 @@
         // ✅ «አጠናቅ» ትር ላይ ከተነካ (ሀ–ሰ፦ ተጠናቋል፣ ዋጋ አልተስማሙም፣ ለሌላ ቀን፣ ዛሬ አይመቻቸውም፣ ስልክ አይነሳም፣ ሌላ) ያደረ ስራ ውስጥ አይገባም።
         // «ያደረ ስራ» = አጠናቅ ያልተነካ (ተመድቦ ያደረ) ወይም ሳይመደብ ያደረ (Pending) ብቻ።
         const ADM_FINISHED_STATUSES = ['Completed', 'PriceNotAgreed', 'Rescheduled', 'NotToday', 'PhoneNoAnswer', 'Other'];
+        // ✅ «ያደረ» የሚሰላበት ቀን፦ ስራው የተፈጠረበት ቀን፤ ወደ አድሚን የተመለሰ (ረ. ስራ መልስ) ከሆነ ግን የተመለሰበት ቀን።
+        // (ቀድሞ ዛሬ የተመለሰ ሰራ በድሮ የፍጥረት ቀኑ ምክንያት ወዲያውኑ «ያደረ» ይሆን ነበር)
+        function overnightBaseMs(o) {
+            const f = (v) => { if (!v) return 0; if (v.toDate) return v.toDate().getTime(); const n = new Date(v).getTime(); return isNaN(n) ? 0 : n; };
+            return Math.max(f(o && o.createdAt), f(o && o.returnedAt));
+        }
         const isAdmOvernightJob = (o) => !!o && !o.workTag && !ADM_FINISHED_STATUSES.includes(o.status);
         function orderReasonText(o) {
             return o.notTodayReason || o.returnReason || o.otherReason || o.priceNotAgreedReason || o.phoneNoAnswerNote || o.reason || '';
@@ -4552,7 +4558,7 @@
                 : '<span class="status-badge" style="background:#FEE2E2; color:#B91C1C;">❌ አልተጠናቀቀም</span>';
         }
         function orderDaysOld(o) {
-            const ms = toMs(o.createdAt);
+            const ms = overnightBaseMs(o);
             if (!ms) return 0;
             const a = new Date(ms); a.setHours(0, 0, 0, 0);
             const b = new Date(); b.setHours(0, 0, 0, 0);
@@ -4622,8 +4628,8 @@
                 summary = `ጠቅላላ ${list.length} • ✅ ተጠናቋል ${done} • ❌ አልተጠናቀቀም ${list.length - done}`;
                 rows = list.map(o => orderDetailRowHTML(o));
             } else if (kind === 'overdue') {
-                const list = allOrders.filter(o => isAdmOvernightJob(o) && !isToday(o) && toMs(o.createdAt) > 0)
-                    .sort((a, b) => toMs(a.createdAt) - toMs(b.createdAt));
+                const list = allOrders.filter(o => isAdmOvernightJob(o) && overnightBaseMs(o) > 0 && new Date(overnightBaseMs(o)).toDateString() !== todayStr)
+                    .sort((a, b) => overnightBaseMs(a) - overnightBaseMs(b));
                 title = '⏰ ያደሩ ስራዎች';
                 summary = `${list.length} ያልተጠናቀቁ ስራዎች ከትናንት እና ከዚያ በፊት የቆዩ (ከአሮጌው ይጀምራል)`;
                 rows = list.map(o => orderDetailRowHTML(o, { overdue: true, showAge: true }));
@@ -4674,8 +4680,8 @@
             // ✅ NEW: "ያደሩ ስራዎች" (overdue) - ገና ካልተጠናቀቁ status ውስጥ ካሉ እና ዛሬ ካልተፈጠሩ (ካደሩ) ብቻ
             const overdueJobs = allOrders.filter(o => {
                 if (!isAdmOvernightJob(o)) return false; // አጠናቅ የተነካ (ሀ–ሰ) እና ሪፈራል/እርማት አይቆጠርም
-                const d = o.createdAt?.toDate?.() || new Date(0);
-                return d.toDateString() !== todayStr;
+                const ms = overnightBaseMs(o);
+                return ms > 0 && new Date(ms).toDateString() !== todayStr; // ከዝርዝሩ ጋር አንድ ደንብ (ቀን የሌለው አይቆጠርም)
             }).length;
 
             // ✅ NEW: "የትላንት ጠቅላላ ገቢ"
