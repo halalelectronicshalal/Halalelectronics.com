@@ -26,6 +26,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<style>.stat-click{cursor:pointer;transition:transform .12s}.stat-click:active{transform:scale(.97)}.op-note{background:#EEF2FF;border-radius:8px;padding:6px 10px;margin-top:6px;font-size:.8rem;color:#1e293b}.op-note div{margin-top:3px;white-space:pre-wrap}.op-note small{color:#64748B}.sd-item{padding:10px 0;border-bottom:1px solid #E2E8F0;font-size:.88rem}.sd-item:last-child{border-bottom:0}</style>
 <script>window.APP_ROLE = "newOrders"; // 🔐 እያንዳንዱ ገጽ የራሱ ለብቻ session አለው (እንደ ኦፕሬተር)</script>
 <script src="he-common.js"></script>
     <script src="he-eye.js" defer></script>
@@ -41,9 +42,9 @@
 </header>
 <main class="he-wrap">
     <div class="stats-grid">
-        <div class="stat-card"><div class="icon"><i class="fas fa-clock" style="color:var(--warning);"></i></div><div class="number" id="statPending" style="color:var(--warning);">0</div><div class="label">ገና ያልተመደቡ</div></div>
-        <div class="stat-card"><div class="icon"><i class="fas fa-user-check" style="color:var(--primary);"></i></div><div class="number" id="statAssigned">0</div><div class="label">የተመደቡ (ክፍት ስራ)</div></div>
-        <div class="stat-card"><div class="icon"><i class="fas fa-circle" style="color:var(--success);"></i></div><div class="number" id="statFree" style="color:var(--success);">0</div><div class="label">ነጻ ቴክኒሻኖች</div></div>
+        <div class="stat-card stat-click" onclick="showStatDetail('pending')" role="button" tabindex="0"><div class="icon"><i class="fas fa-clock" style="color:var(--warning);"></i></div><div class="number" id="statPending" style="color:var(--warning);">0</div><div class="label">ገና ያልተመደቡ</div></div>
+        <div class="stat-card stat-click" onclick="showStatDetail('assigned')" role="button" tabindex="0"><div class="icon"><i class="fas fa-user-check" style="color:var(--primary);"></i></div><div class="number" id="statAssigned">0</div><div class="label">የተመደቡ (ክፍት ስራ)</div></div>
+        <div class="stat-card stat-click" onclick="showStatDetail('free')" role="button" tabindex="0"><div class="icon"><i class="fas fa-circle" style="color:var(--success);"></i></div><div class="number" id="statFree" style="color:var(--success);">0</div><div class="label">ነጻ ቴክኒሻኖች</div></div>
     </div>
 
 
@@ -461,8 +462,48 @@ function viewOrder(orderId) {
         ${o.returnReason ? row('↩️ የመመለሻ ምክንያት', escHtml(o.returnReason) + (o.returnedFrom ? ' <span class="text-muted">(' + escHtml(o.returnedFrom) + ')</span>' : '')) : ''}
         ${o.foundUs ? row('📣 እኛን ያገኙት', escHtml(o.foundUs + (o.foundUsText ? ' - ' + o.foundUsText : ''))) : ''}
         ${mapUrl ? row('🗺️ ካርታ', `<a href="${escHtml(mapUrl)}" target="_blank" rel="noopener">በካርታ ላይ ክፈት</a>`) : ''}
-    </table></div>`;
+    </table></div>${operatorNotesHtml(o)}`;
     openModal('🧾 የትዕዛዝ ዝርዝር', html);
+}
+
+
+/* ✍️ ከኦፕሬተር የተጻፈ መልእክት */
+function operatorNotesHtml(o) {
+    const notes = Array.isArray(o.operatorNotes) ? o.operatorNotes : [];
+    if (!notes.length) return '';
+    return `<div class="op-note"><strong>✍️ ከኦፕሬተር መልእክት:</strong>${notes.map(n => `<div>💬 ${escHtml(n.text || '')} <small>— ${escHtml(n.by || '')}</small></div>`).join('')}</div>`;
+}
+
+/* ============================================================
+   📊 የካርዶች ዝርዝር (ገና ያልተመደቡ / የተመደቡ ክፍት ስራዎች / ነጻ ቴክኒሻኖች)
+   ============================================================ */
+function showStatDetail(kind) {
+    let title = '', body = '';
+    const orderItem = o => {
+        const d = o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : null;
+        return `<div class="sd-item">
+            <div style="font-weight:600;">${escHtml(o.fullName || '—')} <span class="text-muted" style="font-weight:400;">• ${escHtml(o.appliance || '—')}</span></div>
+            <div class="text-muted" style="font-size:.78rem;">📱 ${o.phone ? `<a href="tel:${escHtml(o.phone)}">${escHtml(o.phone)}</a>` : '—'} &nbsp; 📍 ${escHtml(o.address || '—')}${d ? ' &nbsp; 🕒 ' + formatEthDateTime(d) : ''}</div>
+            ${o.technician ? `<div style="font-size:.8rem;margin-top:2px;">👨‍🔧 <b>${escHtml(o.technician)}</b></div>` : ''}
+            ${o.preferredDay ? `<div style="font-size:.78rem;color:var(--primary);">📅 ${escHtml(o.preferredDay)}</div>` : ''}
+            ${operatorNotesHtml(o)}
+        </div>`;
+    };
+    if (kind === 'pending') {
+        title = '⏳ ገና ያልተመደቡ';
+        const l = allOrders.filter(o => o.status === 'Pending').sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
+        body = l.length ? l.map(orderItem).join('') : '<p class="text-muted text-center">ምንም የለም</p>';
+    } else if (kind === 'assigned') {
+        title = '📋 የተመደቡ ክፍት ስራዎች';
+        const l = allOrders.filter(o => o.status === 'Assigned').sort((a, b) => toMs(b.assignedAt || b.createdAt) - toMs(a.assignedAt || a.createdAt));
+        body = l.length ? l.map(orderItem).join('') : '<p class="text-muted text-center">ምንም የለም</p>';
+    } else {
+        title = '🟢 ነጻ ቴክኒሻኖች';
+        const l = fieldTechs().filter(t => techWorkState(t) === 'free');
+        body = l.length ? l.map(t => `<div class="sd-item"><div style="font-weight:600;">👨‍🔧 ${escHtml(t.name || '—')}</div>
+            <div class="text-muted" style="font-size:.78rem;">${t.phone ? '📱 <a href="tel:' + escHtml(t.phone) + '">' + escHtml(t.phone) + '</a>' : ''}${techIsOffline(t) ? ' &nbsp; ⚪ ከመስመር ውጪ' : ' &nbsp; 🟢 መስመር ላይ'}</div></div>`).join('') : '<p class="text-muted text-center">ነጻ ቴክኒሻን የለም</p>';
+    }
+    openModal(title, body);
 }
 
 /* ============================================================
@@ -507,6 +548,7 @@ function renderDashNewOrders() {
                     ${order.preferredDay ? `<span class="tag" style="color:var(--primary);">📅 ${escHtml(order.preferredDay)}</span>` : ''}
                     ${order.suggestedWorkerName ? `<span class="tag" style="color:#B45309;">⭐ ${escHtml(order.suggestedWorkerName)}</span>` : ''}</div>
                 ${order.returnReason ? `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#FEF3C7; color:#92400E; font-size:0.78rem;">↩️ <strong>ተመለሰ${order.returnedFrom ? ' ከ ' + escHtml(order.returnedFrom) : ''}</strong> — ምክንያት: ${escHtml(order.returnReason)}</div>` : ''}
+                ${operatorNotesHtml(order)}
             </div>
             <div class="order-actions">
                 <select class="dashAssignSelect" data-id="${order.id}"><option value="">ቴክኒሻን ምረጥ</option>${techOptions}</select>
