@@ -90,6 +90,24 @@ h3.phone{color:var(--phone)}h3.shop{color:var(--shop)}
 .cnt.phone{background:var(--phone)}.cnt.shop{background:var(--shop)}
 .cnt b{display:block;font-size:2.4rem;line-height:1.1}
 .cnt span{font-size:.9rem;opacity:.95}
+/* የስራዎቼ ሁኔታ */
+.jf{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:6px}
+.jf button{flex:0 0 auto;border:1.5px solid var(--border);background:#fff;color:var(--muted);border-radius:20px;padding:7px 12px;font-weight:700;font-size:.8rem;cursor:pointer}
+.jf button.on{background:var(--primary);border-color:var(--primary);color:#fff}
+.job{border:1.5px solid var(--border);border-radius:12px;padding:11px;margin-bottom:10px;background:#fff}
+.job.bad{border-color:#FCA5A5;background:#FFF7F7}
+.job .h{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.job .nm{font-weight:800}
+.job .meta{font-size:.8rem;color:var(--muted);margin-top:4px;line-height:1.7}
+.job .why{margin-top:6px;background:#FEF3C7;border-radius:8px;padding:6px 9px;font-size:.82rem;color:#92400E}
+.job .notes{margin-top:8px}
+.job .note{background:#EEF2FF;border-radius:8px;padding:6px 9px;font-size:.82rem;margin-top:4px;white-space:pre-wrap}
+.job .note small{display:block;color:var(--muted);font-size:.7rem}
+.job .nbox{margin-top:8px}
+.job .nbox textarea{min-height:64px}
+.job .nbtn{margin-top:8px;border:1.5px solid var(--primary);color:var(--primary);background:#fff;border-radius:10px;padding:8px 12px;font-weight:700;cursor:pointer;width:100%}
+.st.pur{background:#EDE9FE;color:#5B21B6}
+
 </style>
     <script src="he-eye.js" defer></script>
 </head>
@@ -128,6 +146,7 @@ h3.phone{color:var(--phone)}h3.shop{color:var(--shop)}
       <div class="field"><label>ስም</label><input id="phName" placeholder="ሙሉ ስም" /></div>
       <div class="field"><label>አድራሻ</label><input id="phAddress" placeholder="አድራሻ" /></div>
       <div class="field"><label>ስልክ</label><input id="phPhone" type="tel" inputmode="tel" placeholder="09XXXXXXXX" /></div>
+      <div class="field"><label>☎️ ተለዋጭ ስልክ <span class="muted">(አማራጭ)</span></label><input id="phAltPhone" type="tel" inputmode="tel" placeholder="09XXXXXXXX" /></div>
       <div class="field"><label>🗂️ የስራ አይነት</label>
         <select id="phWorkType">
           <option value="new" selected>🆕 አዲስ</option>
@@ -164,6 +183,7 @@ h3.phone{color:var(--phone)}h3.shop{color:var(--shop)}
       <div class="field"><label>ስም</label><input id="shName" placeholder="ሙሉ ስም" /></div>
       <div class="field"><label>አድራሻ</label><input id="shAddress" placeholder="አድራሻ" /></div>
       <div class="field"><label>ስልክ</label><input id="shPhone" type="tel" inputmode="tel" placeholder="09XXXXXXXX" /></div>
+      <div class="field"><label>☎️ ተለዋጭ ስልክ <span class="muted">(አማራጭ)</span></label><input id="shAltPhone" type="tel" inputmode="tel" placeholder="09XXXXXXXX" /></div>
       <div class="field"><label>🗂️ የስራ አይነት</label>
         <select id="shWorkType">
           <option value="new" selected>🆕 አዲስ</option>
@@ -195,6 +215,17 @@ h3.phone{color:var(--phone)}h3.shop{color:var(--shop)}
         <div class="eth" id="shDateBox"></div></div>
       <button class="btn shop" id="shBtn" onclick="submitOrder('sh')"><i class="fas fa-paper-plane"></i> ላክ</button>
     </div>
+  </div>
+
+  <div class="card" id="jobsCard">
+    <h3><i class="fas fa-list-check"></i> 📋 የስራዎቼ ሁኔታ</h3>
+    <div class="jf" id="jobFilters">
+      <button data-f="open" class="on">⏳ በሂደት</button>
+      <button data-f="bad">⚠️ ያልተጠናቀቁ</button>
+      <button data-f="done">✅ ተጠናቀቁ</button>
+      <button data-f="all">ሁሉም</button>
+    </div>
+    <div id="jobsList"><p class="muted">እየጫነ ነው...</p></div>
   </div>
 
   <div class="card">
@@ -415,6 +446,7 @@ async function submitOrder(pfx) {
   const fullName = $(pfx + 'Name').value.trim();
   const address = $(pfx + 'Address').value.trim();
   const phone = $(pfx + 'Phone').value.trim();
+  const altPhone = ($(pfx + 'AltPhone').value || '').trim();   // ☎️ አማራጭ
   const applianceSel = $(pfx + 'Appliance').value;
   const applianceOtherVal = $(pfx + 'ApplianceOther').value.trim();
   const appliance = applianceSel === 'Other' ? (applianceOtherVal || 'Other') : applianceSel;
@@ -423,6 +455,7 @@ async function submitOrder(pfx) {
   const WORK_TYPE_LABELS = { new: '🆕 አዲስ', correction: '🛠️ እርማት', referral: '🔗 ሪፈራል' };
   const workTypeLabel = WORK_TYPE_LABELS[workType] || WORK_TYPE_LABELS.new;
   if (!fullName || !address || !phone || !appliance) { toast('ስም፣ አድራሻ፣ ስልክ እና መሳሪያ ይሙሉ'); return; }
+  if (altPhone && altPhone === phone) { toast('ተለዋጭ ስልክ ከዋናው ስልክ የተለየ መሆን አለበት'); $(pfx + 'AltPhone').focus(); return; }
   if (applianceSel === 'Other' && !applianceOtherVal) { toast('የመሳሪያውን ስም ይጻፉ'); $(pfx + 'ApplianceOther').focus(); return; }
   const foundUsSel = $(pfx + 'FoundUs').value;
   const foundUsOtherVal = $(pfx + 'FoundUsOther').value.trim();
@@ -435,6 +468,7 @@ async function submitOrder(pfx) {
     await authReady;
     const order = {
       fullName, phone, address,
+      altPhone: altPhone,
       appliance,
       orderType: workType,
       orderTypeLabel: workTypeLabel,
@@ -461,10 +495,10 @@ async function submitOrder(pfx) {
     try {
       await callWorker('sendTelegramMessage', {
         bot: 'admin',
-        text: `🆕 *አዲስ ትዕዛዝ* ${isPhone ? '📞 (በስልክ)' : '🏪 (ከሾፕ)'}\n🎧 ኦፕሬተር: ${me.name}\n🆔 #${ref.id.substring(0, 8)}\n👤 ${fullName}\n📞 ${phone}\n📍 ${address}\n🗂️ የስራ አይነት: ${workTypeLabel}\n🔌 ${appliance}\n🛠️ ${order.problem}\n📅 ቀጠሮ: ${order.preferredDay}\n📣 ከየት አገኙን: ${order.foundUsText || '—'}`
+        text: `🆕 *አዲስ ትዕዛዝ* ${isPhone ? '📞 (በስልክ)' : '🏪 (ከሾፕ)'}\n🎧 ኦፕሬተር: ${me.name}\n🆔 #${ref.id.substring(0, 8)}\n👤 ${fullName}\n📞 ${phone}${altPhone ? '\n☎️ ተለዋጭ: ' + altPhone : ''}\n📍 ${address}\n🗂️ የስራ አይነት: ${workTypeLabel}\n🔌 ${appliance}\n🛠️ ${order.problem}\n📅 ቀጠሮ: ${order.preferredDay}\n📣 ከየት አገኙን: ${order.foundUsText || '—'}`
       });
     } catch (e) { console.warn('telegram failed', e); }
-    [pfx + 'Name', pfx + 'Address', pfx + 'Phone', pfx + 'Problem', pfx + 'Appliance', pfx + 'ApplianceOther', pfx + 'FoundUs', pfx + 'FoundUsOther'].forEach(id => $(id).value = '');
+    [pfx + 'Name', pfx + 'Address', pfx + 'Phone', pfx + 'AltPhone', pfx + 'Problem', pfx + 'Appliance', pfx + 'ApplianceOther', pfx + 'FoundUs', pfx + 'FoundUsOther'].forEach(id => $(id).value = '');
     $(pfx + 'WorkType').value = 'new';
     toggleApplianceOther(pfx);
     toggleFoundOther(pfx);
@@ -480,11 +514,94 @@ function startListening() {
   // አንድ where ብቻ → composite index አያስፈልግም፤ የዛሬን ማጣራት በ JS ነው
   unsub = db.collection('orders').where('createdById', '==', me.id).onSnapshot(snap => {
     myOrders = [];
-    snap.forEach(d => myOrders.push(d.data()));
+    snap.forEach(d => myOrders.push({ id: d.id, ...d.data() }));
     render();
   }, err => { console.warn(err); toast('❌ ቆጠራውን መጫን አልተቻለም'); });
 }
+// ================= የስራዎቼ ሁኔታ =================
+const ST_AM = {
+  Pending: ['⏳ ቴክኒሻን አልተመደበም', 'wait'], Assigned: ['📋 ተመድቧል — በሂደት', 'as'], Completed: ['✅ ተጠናቋል', 'ok'],
+  PriceNotAgreed: ['💰 ዋጋ አልተስማሙም', 'no'], NotToday: ['📝 ዛሬ አይመቻቸውም', 'no'], PhoneNoAnswer: ['📵 ስልክ አይነሳም', 'no'],
+  Other: ['📌 ሌላ ምክንያት', 'no'], Cancelled: ['🚫 ተሰርዟል', 'no'], Canceled: ['🚫 ተሰርዟል', 'no'], Rescheduled: ['📅 ለሌላ ቀን ተላልፏል', 'pur']
+};
+// ስራው ከተቋረጠ / ከተሰረዘ ብቻ ኦፕሬተሩ መልእክት መጻፍ ይችላል
+const NOTE_STATUSES = ['PriceNotAgreed', 'NotToday', 'PhoneNoAnswer', 'Other', 'Cancelled', 'Canceled'];
+const OPEN_STATUSES = ['Pending', 'Assigned'];
+let jobFilter = 'open';
+let openNoteId = null;
+function jobReason(o) { return o.cancelReason || o.notTodayReason || o.otherReason || o.returnReason || ''; }
+function jobTime(o) { const d = toDate(o.createdAt); return d ? d.getTime() : 0; }
+function renderJobs() {
+  const box = $('jobsList'); if (!box) return;
+  const _t = openNoteId && $('noteTxt_' + openNoteId); const _keep = _t ? _t.value : ''; // እየተጻፈ ያለ መልእክት እንዳይጠፋ
+  let list = myOrders.slice().sort((a, b) => jobTime(b) - jobTime(a));
+  const f = jobFilter;
+  list = list.filter(o => f === 'all' ? true : f === 'open' ? OPEN_STATUSES.includes(o.status || 'Pending') : f === 'done' ? o.status === 'Completed' : (o.status && !OPEN_STATUSES.includes(o.status) && o.status !== 'Completed'));
+  document.querySelectorAll('#jobFilters button').forEach(b => b.classList.toggle('on', b.dataset.f === f));
+  if (!list.length) { box.innerHTML = '<p class="muted" style="text-align:center;margin:10px 0">ምንም ስራ የለም</p>'; return; }
+  box.innerHTML = list.slice(0, 60).map(o => {
+    const st = o.status || 'Pending';
+    const [lab, cls] = ST_AM[st] || [st, 'wait'];
+    const canNote = st !== 'Completed' && st !== 'Rescheduled';   // ሁሉም ያልተጠናቀቀ ስራ ላይ መልእክት ይቻላል
+    const isBad = NOTE_STATUSES.includes(st);
+    const d = toDate(o.createdAt);
+    const reason = jobReason(o);
+    const notes = Array.isArray(o.operatorNotes) ? o.operatorNotes : [];
+    const src = o.source === 'shop_admin' ? '<span class="tag shop">🏪 ሾፕ</span>' : '<span class="tag phone">📞 ስልክ</span>';
+    return `<div class="job ${isBad ? 'bad' : ''}">
+      <div class="h"><div><span class="nm">${esc(o.fullName || '—')}</span> ${src}</div><span class="st ${cls}">${esc(lab)}</span></div>
+      <div class="meta">
+        📞 <a href="tel:${esc(o.phone)}">${esc(o.phone || '—')}</a>${o.altPhone ? ' · ☎️ <a href="tel:' + esc(o.altPhone) + '">' + esc(o.altPhone) + '</a>' : ''}<br>
+        🔌 ${esc(o.appliance || '—')} · 📍 ${esc(o.address || '—')}<br>
+        👨‍🔧 ቴክኒሻን: <b>${esc(o.technician || 'ገና አልተመደበም')}</b><br>
+        🕒 ${d ? esc(ethText(d)) + ' ' + esc(fmtTime(d)) : '—'}
+      </div>
+      ${isBad && reason ? `<div class="why">ምክንያት (ከቴክኒሻን)፦ ${esc(reason)}</div>` : ''}
+      ${notes.length ? `<div class="notes">${notes.map(n => { const nd = toDate(n.at); return `<div class="note">${esc(n.text)}<small>✍️ ${esc(n.by || '')} ${nd ? '· ' + esc(ethText(nd)) + ' ' + esc(fmtTime(nd)) : ''}</small></div>`; }).join('')}</div>` : ''}
+      ${canNote ? (openNoteId === o.id
+        ? `<div class="nbox"><textarea id="noteTxt_${o.id}" placeholder="${o.technician ? 'ለተመደበው ቴክኒሻን' : 'ለአድሚን'} መልእክት ይጻፉ (ለምሳሌ፦ ደንበኛው ደውሎ ነበር፣ ዛሬ ይሂዱ...)"></textarea>
+             <div class="row" style="margin-top:8px"><button class="btn btn-ghost" onclick="closeNote()">ተው</button><button class="btn btn-primary" id="noteBtn_${o.id}" onclick="saveNote('${o.id}')"><i class="fas fa-paper-plane"></i> ላክ</button></div></div>`
+        : `<button class="nbtn" onclick="openNote('${o.id}')"><i class="fas fa-pen"></i> ${o.technician ? '✍️ ለ' + esc(o.technician) + ' መልእክት ጻፍ' : '✍️ መልእክት ጻፍ'}</button>`) : ''}
+    </div>`;
+  }).join('');
+  if (_keep) { const t2 = $('noteTxt_' + openNoteId); if (t2) t2.value = _keep; }
+}
+function openNote(id) { openNoteId = id; renderJobs(); const t = $('noteTxt_' + id); if (t) t.focus(); }
+function closeNote() { openNoteId = null; renderJobs(); }
+async function saveNote(id) {
+  const t = $('noteTxt_' + id); const text = t ? t.value.trim() : '';
+  if (!text) { toast('መልእክት ይጻፉ'); return; }
+  const o = myOrders.find(x => x.id === id); if (!o) return;
+  const btn = $('noteBtn_' + id); if (btn) btn.disabled = true;
+  try {
+    await authReady;
+    const note = { text, by: me.name, byId: me.id, at: new Date() };
+    await db.collection('orders').doc(id).update({
+      operatorNotes: firebase.firestore.FieldValue.arrayUnion(note),
+      operatorNote: text, operatorNoteAt: new Date(), operatorNoteBy: me.name, hasOperatorNote: true
+    });
+    try { await db.collection('activity').add({ user: me.name, action: 'operator_note', details: `✍️ ኦፕሬተር መልእክት ጻፈ — ስራ #${id.substring(0, 8)} (${o.fullName || ''}): ${text}`, timestamp: new Date() }); } catch (e) {}
+    // ለተመደበው ቴክኒሻን በቴሌግራም (chatId ካለው)
+    if (o.technician) {
+      try {
+        const q = await db.collection('staff').where('name', '==', o.technician).get();
+        let chat = ''; q.forEach(d => { if (!chat && d.data().chatId) chat = d.data().chatId; });
+        if (chat) await callWorker('sendTelegramMessage', { bot: 'tech', targetChatId: chat,
+          text: `✍️ *ከኦፕሬተር መልእክት*\n🎧 ${me.name}\n🆔 #${id.substring(0, 8)}\n👤 ${o.fullName || '—'}\n📞 ${o.phone || '—'}${o.altPhone ? '\n☎️ ተለዋጭ: ' + o.altPhone : ''}\n💬 ${text}` });
+      } catch (e) { console.warn('tech telegram failed', e); }
+    }
+    try {
+      await callWorker('sendTelegramMessage', { bot: 'admin',
+        text: `✍️ *ከኦፕሬተር መልእክት*\n🎧 ${me.name}\n🆔 #${id.substring(0, 8)}\n👤 ${o.fullName || '—'}\n📞 ${o.phone || '—'}${o.altPhone ? '\n☎️ ተለዋጭ: ' + o.altPhone : ''}\n📌 ሁኔታ: ${(ST_AM[o.status] || [o.status])[0]}\n💬 ${text}` });
+    } catch (e) { console.warn('telegram failed', e); }
+    openNoteId = null;
+    toast(o.technician ? '✅ መልእክቱ ለ' + o.technician + ' እና ለአድሚን ተልኳል' : '✅ መልእክቱ ወደ አድሚን ተልኳል');
+  } catch (ex) { toast('❌ ' + (ex.code === 'permission-denied' ? 'ፈቃድ የለም (Firestore rules ይመልከቱ)' : ex.message)); if (btn) btn.disabled = false; }
+}
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#jobFilters button'); if (b) { jobFilter = b.dataset.f; renderJobs(); } });
+
 function render() {
+  renderJobs();
   const key = dateKey(new Date());
   const today = myOrders.filter(o => { const d = toDate(o.createdAt); return d && dateKey(d) === key; });
   $('cPhone').textContent = today.filter(o => o.source === 'phone_admin').length;
