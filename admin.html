@@ -5257,7 +5257,7 @@
 
 🆔 *ትዕዛዝ:* #${orderId.substring(0,8)}
 👤 *ደንበኛ:* ${order.fullName || '—'}
-📱 *ስልክ:* ${order.phone || '—'}
+📱 *ስልክ:* ${order.phone || '—'}${order.altPhone ? '\n☎️ *ተለዋጭ ስልክ:* ' + order.altPhone : ''}
 🔧 *መሳሪያ:* ${order.appliance || '—'}
 📍 *አድራሻ:* ${order.address || '—'}
 ${locationLine}
@@ -5439,6 +5439,8 @@ ${locationLine}
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
                     <div><strong>👤 ደንበኛ:</strong> ${order.fullName || '—'}</div>
                     <div><strong>📱 ስልክ:</strong> ${order.phone || '—'}</div>
+                    ${order.altPhone ? `<div><strong>☎️ ተለዋጭ ስልክ:</strong> <a href="tel:${escHtml(order.altPhone)}">${escHtml(order.altPhone)}</a></div>` : ''}
+                    ${(Array.isArray(order.operatorNotes) && order.operatorNotes.length) ? `<div style="grid-column:span 2; background:#EEF2FF; border-radius:8px; padding:8px 10px;"><strong>✍️ ከኦፕሬተር የተጻፈ መልእክት:</strong>${order.operatorNotes.map(n => `<div style="margin-top:4px; white-space:pre-wrap;">💬 ${escHtml(n.text)} <small style="color:#64748B;">— ${escHtml(n.by || '')}</small></div>`).join('')}</div>` : ''}
                     <div><strong>📍 አድራሻ:</strong> ${order.address || '—'}</div>
                     <div><strong>🔧 መሳሪያ:</strong> ${order.appliance || '—'}</div>
                     <div><strong>📅 መች ይመቻቸዋል:</strong> <span style="color:var(--primary); font-weight:700;">${order.preferredDay || '—'}</span></div>
@@ -7008,6 +7010,10 @@ ${locationLine}
                     </div>
                 </div>
                 <div class="form-group">
+                    <label>☎️ ተለዋጭ ስልክ <span style="font-weight:400; color:var(--text-muted,#64748B);">(አማራጭ)</span></label>
+                    <input type="tel" id="phoneOrderAltPhone" placeholder="ተለዋጭ ስልክ ቁጥር" />
+                </div>
+                <div class="form-group">
                     <label>አድራሻ (ክፍለ ከተማ እና ሰፈር) *</label>
                     <input type="text" id="phoneOrderAddress" placeholder="አድራሻ" />
                 </div>
@@ -7071,6 +7077,7 @@ ${locationLine}
         async function submitPhoneOrder() {
             const fullName = document.getElementById('phoneOrderName').value.trim();
             const phone = document.getElementById('phoneOrderPhone').value.trim();
+            const altPhone = ((document.getElementById('phoneOrderAltPhone') || {}).value || '').trim();
             const address = document.getElementById('phoneOrderAddress').value.trim();
             const appliance = document.getElementById('phoneOrderAppliance').value;
             const preferredDay = document.getElementById('phoneOrderPreferredDay').value;
@@ -7083,11 +7090,13 @@ ${locationLine}
                 showToast('እባክዎ ስም፣ ስልክ፣ አድራሻ እና መሳሪያ ይሙሉ', 'error');
                 return;
             }
+            if (altPhone && altPhone === phone) { showToast('ተለዋጭ ስልክ ከዋናው የተለየ መሆን አለበት', 'error'); return; }
 
             try {
                 const orderData = {
                     fullName: fullName,
                     phone: phone,
+                    altPhone: altPhone,
                     address: address,
                     appliance: appliance,
                     orderType: workType,                                   // operator.html ጋር አንድ አይነት መስክ
@@ -9940,13 +9949,14 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                             <span class="id">🆔 #${order.id.substring(0,8)}</span>
                             <span class="status-badge ${order.status === 'Assigned' ? 'status-assigned' : 'status-pending'}">${order.status || 'Pending'}</span>
                         </div>
-                        <div class="customer">👤 ${order.fullName || '—'} <span>📱 ${order.phone || '—'}</span></div>
+                        <div class="customer">👤 ${order.fullName || '—'} <span>📱 ${order.phone || '—'}${order.altPhone ? ' · ☎️ ' + order.altPhone : ''}</span></div>
                         <div class="details">
                             <div><span class="label">🔧 መሳሪያ:</span> <span class="value">${order.appliance || '—'}</span></div>
                             <div><span class="label">📅 መች ይመቻቸዋል:</span> <span class="value" style="font-weight:700; color:#1e40af;">${order.preferredDay || 'ዛሬውኑ (በፍጥነት)'}</span></div>
                             <div><span class="label">📍 አድራሻ:</span> <span class="value">${order.address || '—'}</span></div>
                             <div style="grid-column: span 2;"><span class="label">📝 ችግር:</span> <span class="value">${order.problem || '—'}</span></div>
                         </div>
+                        ${(Array.isArray(order.operatorNotes) && order.operatorNotes.length) ? `<div style="background:#EEF2FF; border-radius:8px; padding:8px 10px; margin:6px 0; font-size:0.85rem;"><strong>✍️ ከኦፕሬተር መልእክት:</strong>${order.operatorNotes.map(n => `<div style="margin-top:4px; white-space:pre-wrap;">💬 ${String(n.text || '').replace(/</g, '&lt;')} <small style="color:#64748B;">— ${String(n.by || '').replace(/</g, '&lt;')}</small></div>`).join('')}</div>` : ''}
                         <div class="location-box">
                             <span>📍 ደንበኛ ቦታ</span>
                             <span class="coords">${coords}${accuracyBadge}</span>
@@ -9955,6 +9965,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         <div class="actions">
                             ${hasLocation ? `<a href="https://www.google.com/maps/dir/?api=1&destination=${order.customerLat},${order.customerLng}" target="_blank" class="btn btn-secondary btn-sm"><i class="fas fa-diamond-turn-right"></i> 🧭 Navigate</a>` : ''}
                             <a href="tel:${order.phone}" class="btn btn-primary btn-sm"><i class="fas fa-phone"></i> ደውል</a>
+                            ${order.altPhone ? `<a href="tel:${order.altPhone}" class="btn btn-secondary btn-sm"><i class="fas fa-phone"></i> ተለዋጭ</a>` : ''}
                             <button class="btn btn-success btn-sm" onclick="startCompletion('${order.id}')"><i class="fas fa-check-circle"></i> አጠናቅ</button>
                         </div>
                     </div>
@@ -9985,7 +9996,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                             <span class="id">🆔 #${order.id.substring(0,8)}</span>
                             <span class="status-badge ${statusClass}">${order.status || 'Pending'}</span>
                         </div>
-                        <div class="customer">👤 ${order.fullName || '—'} <span>📱 ${order.phone || '—'}</span></div>
+                        <div class="customer">👤 ${order.fullName || '—'} <span>📱 ${order.phone || '—'}${order.altPhone ? ' · ☎️ ' + order.altPhone : ''}</span></div>
                         <div class="details">
                             <div><span class="label">🔧 መሳሪያ:</span> <span class="value">${order.appliance || '—'}</span></div>
                             <div><span class="label">📍 አድራሻ:</span> <span class="value">${order.address || '—'}</span></div>
