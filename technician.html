@@ -12816,6 +12816,7 @@ document.addEventListener('visibilitychange', function () {
                 else if (e === 'too-many-attempts' || e === 'too many') m = '⏳ ብዙ ጥያቄ ልከዋል፤ ጥቂት ቆይተው ይሞክሩ።';
                 else if (e === 'unauthorized') m = '🔒 እባክዎ እንደገና ይግቡ።';
                 else if (e === 'invalid-image') m = '🖼️ ፎቶው ተቀባይነት አላገኘም (JPG/PNG/WEBP ብቻ)።';
+                if (r && r.detail) m += '\n(' + r.detail + ')';
                 bubble('err', m); save();
             }
         } catch (ex) {
