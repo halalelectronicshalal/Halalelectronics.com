@@ -12660,5 +12660,207 @@ document.addEventListener('visibilitychange', function () {
 });
 </script>
 
+
+<!-- ============================================================
+     🤖 AI ቴክኒክ ረዳት — ቴክኒሻኑ በጽሁፍ እና በፎቶ ከሙያው እና ከዌብሳይቱ ጋር የተያያዘ ጥያቄ የሚጠይቅበት
+     (Worker: /aiChat) — ነባር ኮድ አልተነካም፤ ይህ ራሱን የቻለ ክፍል ነው
+     ============================================================ -->
+<style>
+    #aiFab { position: fixed; bottom: calc(var(--bottom-nav-height, 0px) + 72px); right: 16px; z-index: 9998; width: 48px; height: 48px; border-radius: 50%; border: none; cursor: pointer; display: none; align-items: center; justify-content: center; font-size: 1.35rem; color: #fff; background: linear-gradient(135deg, #7C3AED, #4F46E5); box-shadow: 0 6px 18px rgba(79,70,229,.45); }
+    #aiFab:active { transform: scale(.94); }
+    #aiPanel { position: fixed; inset: 0; z-index: 10001; display: none; flex-direction: column; background: var(--bg, #F1F5F9); color: var(--text, #1F2937); }
+    #aiPanel.show { display: flex; }
+    .ai-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; color: #fff; background: linear-gradient(135deg, #4F46E5, #7C3AED); }
+    .ai-head .t { flex: 1; font-weight: 700; font-size: 1rem; line-height: 1.2; }
+    .ai-head .t small { display: block; font-weight: 400; font-size: .7rem; opacity: .85; }
+    .ai-head button { background: rgba(255,255,255,.18); color: #fff; border: none; border-radius: 10px; padding: 8px 11px; font-size: .85rem; cursor: pointer; }
+    #aiMsgs { flex: 1; overflow-y: auto; padding: 14px 12px; display: flex; flex-direction: column; gap: 10px; -webkit-overflow-scrolling: touch; }
+    .ai-m { max-width: 88%; padding: 10px 12px; border-radius: 14px; font-size: .92rem; line-height: 1.55; word-wrap: break-word; overflow-wrap: anywhere; }
+    .ai-m.bot { align-self: flex-start; background: var(--card, #fff); border: 1px solid var(--border, #E2E8F0); border-bottom-left-radius: 4px; }
+    .ai-m.me { align-self: flex-end; background: #4F46E5; color: #fff; border-bottom-right-radius: 4px; }
+    .ai-m.err { align-self: center; background: #FEE2E2; color: #991B1B; font-size: .85rem; }
+    .ai-m ul { margin: 6px 0 6px 18px; padding: 0; list-style: disc outside; }
+    .ai-m li { display: list-item; list-style: disc outside; margin: 2px 0; }
+    .ai-m p { margin: 0 0 6px; } .ai-m p:last-child { margin-bottom: 0; }
+    .ai-m img { display: block; max-width: 100%; max-height: 180px; border-radius: 8px; margin-bottom: 6px; }
+    .ai-typing span { display: inline-block; width: 7px; height: 7px; margin: 0 2px; border-radius: 50%; background: #94A3B8; animation: aiDot 1s infinite; }
+    .ai-typing span:nth-child(2) { animation-delay: .15s; } .ai-typing span:nth-child(3) { animation-delay: .3s; }
+    @keyframes aiDot { 0%, 80%, 100% { opacity: .3; transform: scale(.8); } 40% { opacity: 1; transform: scale(1.1); } }
+    #aiChips { display: flex; gap: 6px; overflow-x: auto; padding: 0 12px 8px; }
+    #aiChips button { flex: 0 0 auto; border: 1px solid var(--border, #E2E8F0); background: var(--card, #fff); color: var(--text, #1F2937); border-radius: 50px; padding: 6px 12px; font-size: .78rem; cursor: pointer; white-space: nowrap; }
+    #aiPrev { display: none; gap: 8px; padding: 0 12px 6px; overflow-x: auto; }
+    #aiPrev .pv { position: relative; flex: 0 0 auto; }
+    #aiPrev img { width: 58px; height: 58px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border, #E2E8F0); }
+    #aiPrev .pv b { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; background: #EF4444; color: #fff; font-size: .75rem; line-height: 20px; text-align: center; cursor: pointer; }
+    .ai-in { display: flex; align-items: flex-end; gap: 8px; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border, #E2E8F0); background: var(--card, #fff); }
+    .ai-in textarea { flex: 1; resize: none; max-height: 110px; min-height: 42px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border, #E2E8F0); background: var(--bg, #F8FAFC); color: var(--text, #1F2937); font: inherit; font-size: .92rem; }
+    .ai-in button { flex: 0 0 auto; width: 42px; height: 42px; border: none; border-radius: 50%; cursor: pointer; font-size: 1.05rem; color: #fff; background: #4F46E5; }
+    .ai-in button.cam { background: var(--card, #fff); color: #4F46E5; border: 1px solid var(--border, #E2E8F0); }
+    .ai-in button:disabled { opacity: .5; }
+    #aiNote { text-align: center; font-size: .68rem; color: var(--text-muted, #64748B); padding: 4px 10px 0; }
+</style>
+
+<button type="button" id="aiFab" aria-label="AI ቴክኒክ ረዳት" title="AI ቴክኒክ ረዳት">🤖</button>
+<div id="aiPanel" role="dialog" aria-label="AI ቴክኒክ ረዳት">
+    <div class="ai-head">
+        <div class="t">🤖 AI ቴክኒክ ረዳት<small>ሀላል ኤሌክትሮኒክስ</small></div>
+        <button type="button" id="aiNew" title="አዲስ ውይይት">🗑️ አዲስ</button>
+        <button type="button" id="aiClose" title="ዝጋ">✕</button>
+    </div>
+    <div id="aiMsgs"></div>
+    <div id="aiChips"></div>
+    <div id="aiNote">AI ሊሳሳት ይችላል — ከፍተኛ ቮልቴጅ ሲነኩ ሁልጊዜ ደህንነትዎን ያረጋግጡ።</div>
+    <div id="aiPrev"></div>
+    <div class="ai-in">
+        <input type="file" id="aiFile" accept="image/*" multiple style="display:none">
+        <button type="button" class="cam" id="aiCam" title="ፎቶ አያይዝ">📷</button>
+        <textarea id="aiText" rows="1" placeholder="ጥያቄዎን ይጻፉ ወይም ፎቶ ያያይዙ..."></textarea>
+        <button type="button" id="aiSend" title="ላክ">➤</button>
+    </div>
+</div>
+
+<script>
+(function () {
+    var GREETING = 'ሰላም! እኔ የ ሀላል ኤሌክትሮኒክስ (Halal Electronics) የ AI ቴክኒክ ረዳት ነኝ። 🛠️\n\n• የፎቶ ምርመራ፦ የተበላሸ እቃ/ካርድ በመያዝ ጥያቄ መጠየቅ ይችላሉ።\n• የቴክኒክ ድጋፍ፦ ፍሪጅ፣ ቴሌቪዥን፣ ማጠቢያ ማሽን እና ኤሌክትሮኒክስ መፍትሄዎች።\n• የዌብሳይት መረጃ፦ ስለ አገልግሎቶቻችን እና ህጎች መጠየቅ ይችላሉ።\n\nጥያቄዎን ወይም የችግሩን ሁኔታ እዚህ ጋር ይጻፉ!';
+    var CHIPS = ['ፍሪጅ አይቀዘቅዝም', 'ማጠቢያ ማሽን አይሽከረከርም', 'ቴሌቪዥን አይበራም', 'ስራ እንዴት አጠናቃለሁ?', 'ዕለታዊ ሪፖርት እንዴት እሞላለሁ?'];
+    var MAX_IMGS = 3, hist = [], pending = [], busy = false;
+    var $ = function (id) { return document.getElementById(id); };
+    var KEY = function () { try { var s = heGetSession(); return 'heAiChat:' + (s && s.staff && s.staff.id || 'x'); } catch (e) { return 'heAiChat:x'; } };
+
+    function esc(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+    // ደህንነቱ የተጠበቀ ቀላል markdown (ሁሉንም አስቀድሞ escape ያደርጋል)
+    function md(t) {
+        var lines = esc(t).split('\n'), out = '', inUl = false;
+        function inline(s) { return s.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>'); }
+        lines.forEach(function (ln) {
+            var m = ln.match(/^\s*(?:[-*•]|\d+[.)])\s+(.*)$/);
+            if (m) { if (!inUl) { out += '<ul>'; inUl = true; } out += '<li>' + inline(m[1]) + '</li>'; return; }
+            if (inUl) { out += '</ul>'; inUl = false; }
+            ln = ln.replace(/^#{1,6}\s*/, '');
+            out += ln.trim() ? '<p>' + inline(ln) + '</p>' : '';
+        });
+        if (inUl) out += '</ul>';
+        return out;
+    }
+    function save() { try { localStorage.setItem(KEY(), JSON.stringify(hist.slice(-20).map(function (m) { return { role: m.role, text: m.text, hadImages: (m.images && m.images.length) || m.hadImages || 0 }; }))); } catch (e) {} }
+    function load() { try { var a = JSON.parse(localStorage.getItem(KEY()) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+    function scroll() { var b = $('aiMsgs'); b.scrollTop = b.scrollHeight; }
+    function bubble(role, text, imgs, hadImages) {
+        var d = document.createElement('div'); d.className = 'ai-m ' + (role === 'user' ? 'me' : role === 'err' ? 'err' : 'bot');
+        var h = '';
+        (imgs || []).forEach(function (u) { h += '<img alt="" src="' + u + '">'; });
+        if (!imgs || !imgs.length) { if (hadImages) h += '<p>📷 (ፎቶ ተልኳል)</p>'; }
+        h += role === 'user' ? '<p>' + esc(text).replace(/\n/g, '<br>') + '</p>' : md(text);
+        d.innerHTML = h; $('aiMsgs').appendChild(d); scroll(); return d;
+    }
+    function render() {
+        $('aiMsgs').innerHTML = '';
+        bubble('assistant', GREETING);
+        hist.forEach(function (m) { bubble(m.role, m.text, m.images, m.hadImages); });
+        $('aiChips').style.display = hist.length ? 'none' : 'flex';
+    }
+    function renderPrev() {
+        var p = $('aiPrev'); p.innerHTML = '';
+        pending.forEach(function (u, i) {
+            var w = document.createElement('div'); w.className = 'pv';
+            w.innerHTML = '<img alt="" src="' + u + '"><b data-i="' + i + '">×</b>'; p.appendChild(w);
+        });
+        p.style.display = pending.length ? 'flex' : 'none';
+    }
+    // ፎቶውን አሳንሶ (ከፍተኛ 1280px JPEG) ይመልሳል — ፈጣን እና ርካሽ
+    function shrink(file) {
+        return new Promise(function (res, rej) {
+            var fr = new FileReader();
+            fr.onerror = function () { rej(new Error('read')); };
+            fr.onload = function () {
+                var img = new Image();
+                img.onerror = function () { rej(new Error('img')); };
+                img.onload = function () {
+                    var M = 1280, w = img.width, h = img.height, k = Math.min(1, M / Math.max(w, h));
+                    var c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
+                    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+                    res(c.toDataURL('image/jpeg', 0.8));
+                };
+                img.src = fr.result;
+            };
+            fr.readAsDataURL(file);
+        });
+    }
+    function setBusy(b) { busy = b; $('aiSend').disabled = b; $('aiCam').disabled = b; }
+
+    async function send(textOverride) {
+        if (busy) return;
+        var text = (typeof textOverride === 'string' ? textOverride : $('aiText').value).trim();
+        if (!text && !pending.length) return;
+        var imgs = pending.slice(); pending = []; renderPrev(); $('aiText').value = ''; $('aiText').style.height = 'auto';
+        var msg = { role: 'user', text: text, images: imgs };
+        hist.push(msg); $('aiChips').style.display = 'none';
+        bubble('user', text, imgs);
+        save(); setBusy(true);
+        var t = document.createElement('div'); t.className = 'ai-m bot ai-typing'; t.innerHTML = '<span></span><span></span><span></span>';
+        $('aiMsgs').appendChild(t); scroll();
+        try {
+            // ምስሎች ለመጨረሻዎቹ ተጠቃሚ መልእክቶች ብቻ ይላካሉ (መጠን ለመቀነስ)
+            var lastWithImg = -1; hist.forEach(function (m, i) { if (m.images && m.images.length) lastWithImg = i; });
+            var payload = hist.slice(-12).map(function (m, i, arr) {
+                var abs = hist.length - arr.length + i;
+                return { role: m.role, text: m.text, images: abs === lastWithImg ? (m.images || []) : [] };
+            });
+            var r = await callWorker('aiChat', { messages: payload });
+            t.remove();
+            if (r && r.ok && r.reply) { hist.push({ role: 'assistant', text: r.reply }); bubble('assistant', r.reply); save(); }
+            else {
+                hist.pop(); // ያልተመለሰ ጥያቄ ከታሪክ ይውጣ
+                var e = r && r.error, m = '❌ መልስ ማግኘት አልተቻለም። እባክዎ ደግመው ይሞክሩ።';
+                if (e === 'ai-not-configured') m = '⚙️ AI ረዳቱ ገና አልተዘጋጀም። አድሚኑን ያነጋግሩ።';
+                else if (e === 'too-many-attempts' || e === 'too many') m = '⏳ ብዙ ጥያቄ ልከዋል፤ ጥቂት ቆይተው ይሞክሩ።';
+                else if (e === 'unauthorized') m = '🔒 እባክዎ እንደገና ይግቡ።';
+                else if (e === 'invalid-image') m = '🖼️ ፎቶው ተቀባይነት አላገኘም (JPG/PNG/WEBP ብቻ)።';
+                bubble('err', m); save();
+            }
+        } catch (ex) {
+            t.remove(); hist.pop(); bubble('err', '📡 ኢንተርኔት ወይም አገልጋይ ችግር። ደግመው ይሞክሩ።'); save();
+        }
+        setBusy(false);
+    }
+
+    function open() { $('aiPanel').classList.add('show'); if (!$('aiMsgs').children.length) render(); setTimeout(function () { $('aiText').focus(); }, 150); }
+    function close() { $('aiPanel').classList.remove('show'); }
+
+    document.addEventListener('DOMContentLoaded', init);
+    if (document.readyState !== 'loading') init();
+    var inited = false;
+    function init() {
+        if (inited) return; inited = true;
+        hist = load().map(function (m) { return { role: m.role, text: m.text, hadImages: m.hadImages || 0 }; });
+        $('aiChips').innerHTML = CHIPS.map(function (c) { return '<button type="button">' + esc(c) + '</button>'; }).join('');
+        $('aiChips').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) send(b.textContent); });
+        $('aiFab').addEventListener('click', open);
+        $('aiClose').addEventListener('click', close);
+        $('aiNew').addEventListener('click', function () { if (busy) return; hist = []; pending = []; renderPrev(); try { localStorage.removeItem(KEY()); } catch (e) {} render(); });
+        $('aiSend').addEventListener('click', function () { send(); });
+        $('aiCam').addEventListener('click', function () { $('aiFile').click(); });
+        $('aiText').addEventListener('input', function () { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 110) + 'px'; });
+        $('aiText').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 700) { e.preventDefault(); send(); } });
+        $('aiPrev').addEventListener('click', function (e) { var b = e.target.closest('b[data-i]'); if (b) { pending.splice(+b.dataset.i, 1); renderPrev(); } });
+        $('aiFile').addEventListener('change', async function () {
+            var files = Array.prototype.slice.call(this.files || []); this.value = '';
+            for (var i = 0; i < files.length; i++) {
+                if (pending.length >= MAX_IMGS) { bubble('err', '🖼️ በአንድ መልእክት እስከ ' + MAX_IMGS + ' ፎቶ ብቻ።'); break; }
+                try { pending.push(await shrink(files[i])); } catch (e) { bubble('err', '🖼️ ፎቶውን ማንበብ አልተቻለም።'); }
+            }
+            renderPrev();
+        });
+        // 🤖 ቁልፉ የሚታየው ቴክኒሻኑ ገብቶ አፑ ሲከፈት ብቻ ነው (ሎግ-ኢን ገጽ ላይ አይታይም)
+        setInterval(function () {
+            var app = document.getElementById('appContainer'), on = false;
+            try { on = !!app && getComputedStyle(app).display !== 'none' && !!heGetSession(); } catch (e) {}
+            $('aiFab').style.display = on ? 'flex' : 'none';
+            if (!on && $('aiPanel').classList.contains('show')) close();
+        }, 1200);
+    }
+})();
+</script>
+
 </body>
 </html>
