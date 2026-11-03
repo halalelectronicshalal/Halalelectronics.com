@@ -12781,7 +12781,7 @@ document.addEventListener('visibilitychange', function () {
         if (e === 'too-many-attempts') return '⏳ ብዙ መልእክት ልከዋል። ጥቂት ቆይተው ይሞክሩ።';
         if (e === 'unauthorized') return '🔒 ክፍለ ጊዜዎ አብቅቷል። እንደገና ይግቡ።';
         if (e === 'invalid-image') return '🖼️ ፎቶው ልክ አይደለም ወይም በጣም ትልቅ ነው። ሌላ ፎቶ ይሞክሩ።';
-        if (e === 'ai-unavailable') { try { console.warn('AI detail:', res.detail); } catch (x) {} return '⚠️ AI ለጊዜው ተጨናንቋል። ጥቂት ሰከንድ ቆይተው ጥያቄውን እንደገና ይላኩ።'; }
+        if (e === 'ai-unavailable') { try { console.warn('AI detail:', res.detail); } catch (x) {} return '⚠️ AI ለጊዜው ተጨናንቋል። ጥቂት ሰከንድ ቆይተው ጥያቄውን እንደገና ይላኩ።' + (res.detail ? '\n\n🔧 ' + String(res.detail).slice(0, 220) : ''); }
         return '⚠️ ስህተት ተከስቷል። እንደገና ይሞክሩ።';
     }
 
