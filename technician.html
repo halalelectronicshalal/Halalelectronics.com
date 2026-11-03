@@ -12781,7 +12781,7 @@ document.addEventListener('visibilitychange', function () {
         if (e === 'too-many-attempts') return '⏳ ብዙ መልእክት ልከዋል። ጥቂት ቆይተው ይሞክሩ።';
         if (e === 'unauthorized') return '🔒 ክፍለ ጊዜዎ አብቅቷል። እንደገና ይግቡ።';
         if (e === 'invalid-image') return '🖼️ ፎቶው ልክ አይደለም ወይም በጣም ትልቅ ነው። ሌላ ፎቶ ይሞክሩ።';
-        if (e === 'ai-unavailable') return '⚠️ AI ለጊዜው አልሰራም። ትንሽ ቆይተው ይሞክሩ።' + (res.detail ? '\n(' + res.detail + ')' : '');
+        if (e === 'ai-unavailable') { try { console.warn('AI detail:', res.detail); } catch (x) {} return '⚠️ AI ለጊዜው ተጨናንቋል። ጥቂት ሰከንድ ቆይተው ጥያቄውን እንደገና ይላኩ።'; }
         return '⚠️ ስህተት ተከስቷል። እንደገና ይሞክሩ።';
     }
 
@@ -12809,6 +12809,11 @@ document.addEventListener('visibilitychange', function () {
 
         try {
             var res = await callWorker('aiChat', { messages: payload });
+            // ጊዜያዊ መጨናነቅ → በራሱ አንዴ ደግሞ ይሞክራል (ተጠቃሚው ምንም ሳይነካ)
+            if (res && res.error === 'ai-unavailable') {
+                await new Promise(function (r) { setTimeout(r, 2500); });
+                res = await callWorker('aiChat', { messages: payload });
+            }
             AI_HISTORY.splice(AI_HISTORY.indexOf(typing), 1);
             if (res && res.ok && res.reply) AI_HISTORY.push({ role: 'assistant', text: res.reply });
             else AI_HISTORY.push({ role: 'assistant', text: errText(res), error: true });
