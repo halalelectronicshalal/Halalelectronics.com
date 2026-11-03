@@ -293,6 +293,23 @@
         .chat-input-row textarea { flex: 1; min-height: 44px; max-height: 120px; resize: none; }
         .chat-input-row .btn { height: 44px; flex: 0 0 auto; }
 
+        /* 🤖 AI ቴክኒክ ረዳት */
+        .bottom-nav a { padding-left: 2px; padding-right: 2px; }
+        .ai-note { font-size: 0.72rem; color: var(--text-muted); margin: 6px 0 0; line-height: 1.4; }
+        .ai-box { height: 56vh; max-height: 62vh; }
+        .ai-box .chat-msg.theirs strong { font-weight: 700; }
+        .ai-box .chat-msg img { max-width: 100%; max-height: 160px; border-radius: 8px; display: block; margin-top: 6px; }
+        .ai-typing span { display: inline-block; width: 6px; height: 6px; margin: 0 2px; border-radius: 50%; background: var(--text-muted); animation: aiDot 1.2s infinite ease-in-out; }
+        .ai-typing span:nth-child(2) { animation-delay: .2s; }
+        .ai-typing span:nth-child(3) { animation-delay: .4s; }
+        @keyframes aiDot { 0%, 80%, 100% { opacity: .25; transform: scale(.8); } 40% { opacity: 1; transform: scale(1.1); } }
+        .ai-preview { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+        .ai-preview .thumb { position: relative; width: 56px; height: 56px; }
+        .ai-preview .thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
+        .ai-preview .thumb button { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; border: none; background: var(--emergency, #EF4444); color: #fff; font-size: 0.7rem; line-height: 20px; padding: 0; cursor: pointer; }
+        .ai-suggest { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+        .ai-suggest button { border: 1px solid var(--border); background: var(--card); color: var(--text); border-radius: 50px; padding: 5px 10px; font-size: 0.72rem; cursor: pointer; }
+
 
         /* 💬 መልእክቶች ታብ (አድሚን) + የቴክኒሻን ታችኛ ናቪጌሽን ቁጥር ምልክት */
         .msg-layout { display: grid; grid-template-columns: 280px 1fr; gap: 12px; align-items: stretch; }
@@ -2135,6 +2152,30 @@
             </div>
 
             <!-- ============================================================
+            TAB: 🤖 AI ቴክኒክ ረዳት (Gemini)
+            ============================================================ -->
+            <div id="tab-techai" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-robot"></i> 🤖 AI ቴክኒክ ረዳት</h3>
+                        <button id="aiNewChatBtn" class="btn btn-sm btn-secondary" title="አዲስ ውይይት"><i class="fas fa-rotate-right"></i></button>
+                    </div>
+                    <div class="chat-wrap">
+                        <div id="aiChatBox" class="chat-box ai-box"></div>
+                    </div>
+                    <div id="aiSuggest" class="ai-suggest"></div>
+                    <div id="aiPreview" class="ai-preview"></div>
+                    <div class="chat-input-row">
+                        <input type="file" id="aiFileInput" accept="image/*" multiple style="display:none" />
+                        <button id="aiAttachBtn" class="btn btn-secondary" type="button" title="ፎቶ አያይዝ"><i class="fas fa-camera"></i></button>
+                        <textarea id="aiInput" rows="2" placeholder="ስለ ጥገና ወይም ስለ አፑ ይጠይቁ... (Enter = ላክ)"></textarea>
+                        <button id="aiSendBtn" class="btn btn-success" type="button" title="ላክ"><i class="fas fa-paper-plane"></i></button>
+                    </div>
+                    <p class="ai-note">⚠️ AI ሊሳሳት ይችላል — ከመሥራትዎ በፊት (በተለይ ከፍተኛ ቮልቴጅ ወይም ጋዝ ሲኖር) ደህንነትዎን ያረጋግጡ። የደንበኛ ስልክ ወይም አድራሻ የሚታይበት ፎቶ አይላኩ።</p>
+                </div>
+            </div>
+
+            <!-- ============================================================
             TAB: JOBS (All Jobs)
             ============================================================ -->
             <div id="tab-jobs" class="tab-content">
@@ -2585,6 +2626,7 @@
             <a href="#" data-tab="complete"><i class="fas fa-check-circle"></i> አጠናቅ</a>
             <a href="#" data-tab="history"><i class="fas fa-history"></i> ታሪክ</a>
             <a href="#" data-tab="messages"><i class="fas fa-comments"></i> መልእክት<span class="nav-badge" id="techMsgBadge">0</span></a>
+            <a href="#" data-tab="ai"><i class="fas fa-robot"></i> AI</a>
             <a href="#" data-tab="profile"><i class="fas fa-user"></i> መገለጫ</a>
         </nav>
     </div>
@@ -9005,6 +9047,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     else if (tab === 'history') document.getElementById('tab-history').classList.add('active');
                     else if (tab === 'profile') document.getElementById('tab-profile').classList.add('active');
                     else if (tab === 'messages') { document.getElementById('tab-techmessages').classList.add('active'); techOpenMessagesTab(); }
+                    else if (tab === 'ai') { document.getElementById('tab-techai').classList.add('active'); try { techAiOpen(); } catch (e) { console.error(e); } }
                     else if (tab === 'report') {
                         document.getElementById('tab-report').classList.add('active');
                         techFillReportDate();
@@ -12660,5 +12703,141 @@ document.addEventListener('visibilitychange', function () {
 });
 </script>
 
+
+<script>
+/* 🤖 AI ቴክኒክ ረዳት — /aiChat (Cloudflare Worker → Gemini). ሌላውን ኮድ አይነካም። */
+(function () {
+    var AI_HISTORY = [];            // { role:'user'|'assistant', text, images:[dataUrl] }
+    var AI_PENDING = [];            // ገና ያልተላኩ ፎቶዎች (dataUrl)
+    var AI_BUSY = false, AI_INIT = false;
+    var MAX_IMG = 3;
+    var SUGGEST = ['ፍሪጅ አይቀዘቅዝም', 'ቲቪ ስክሪን ይጠፋል', 'ሰሃን ማጠቢያ ውሃ አይቀዳም', 'ሪፖርት እንዴት አስገባለሁ?'];
+
+    function $(id) { return document.getElementById(id); }
+    function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
+    function fmt(t) { return esc(t).replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>').replace(/^\s*[\*\-]\s+/gm, '• '); }
+    function toast(m, t) { try { showToast(m, t || 'info'); } catch (e) { alert(m); } }
+
+    function scrollDown() { var b = $('aiChatBox'); if (b) b.scrollTop = b.scrollHeight; }
+
+    function render() {
+        var box = $('aiChatBox'); if (!box) return;
+        if (!AI_HISTORY.length) {
+            box.innerHTML = '<div class="chat-empty">🤖 ሰላም! ስለ ኤሌክትሮኒክስ ጥገና ወይም ስለ አፑ ይጠይቁኝ።<br>ፎቶ ለመላክ 📷 ይጫኑ።</div>';
+            return;
+        }
+        box.innerHTML = AI_HISTORY.map(function (m) {
+            if (m.typing) return '<div class="chat-msg theirs ai-typing"><span></span><span></span><span></span></div>';
+            var imgs = (m.images || []).map(function (u) { return '<img src="' + u + '" alt="">'; }).join('');
+            if (m.role === 'user') return '<div class="chat-msg mine">' + esc(m.text) + imgs + '</div>';
+            return '<div class="chat-msg theirs' + (m.error ? ' ai-error' : '') + '"><div class="tag">🤖 AI ረዳት</div>' + fmt(m.text) + '</div>';
+        }).join('');
+        scrollDown();
+    }
+
+    function renderPreview() {
+        var p = $('aiPreview'); if (!p) return;
+        p.innerHTML = AI_PENDING.map(function (u, i) {
+            return '<div class="thumb"><img src="' + u + '" alt=""><button type="button" data-i="' + i + '">✕</button></div>';
+        }).join('');
+        p.querySelectorAll('button').forEach(function (b) {
+            b.addEventListener('click', function () { AI_PENDING.splice(parseInt(b.dataset.i, 10), 1); renderPreview(); });
+        });
+    }
+
+    /* ፎቶውን ወደ ≤1280px JPEG ይቀንሳል (Worker ገደብ 3.5MB) */
+    function shrink(file) {
+        return new Promise(function (resolve, reject) {
+            var fr = new FileReader();
+            fr.onerror = function () { reject(new Error('read')); };
+            fr.onload = function () {
+                var img = new Image();
+                img.onerror = function () { reject(new Error('img')); };
+                img.onload = function () {
+                    var max = 1280, w = img.width, h = img.height, k = Math.min(1, max / Math.max(w, h));
+                    var c = document.createElement('canvas');
+                    c.width = Math.round(w * k); c.height = Math.round(h * k);
+                    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+                    resolve(c.toDataURL('image/jpeg', 0.8));
+                };
+                img.src = fr.result;
+            };
+            fr.readAsDataURL(file);
+        });
+    }
+
+    async function onFiles(files) {
+        for (var i = 0; i < files.length; i++) {
+            if (AI_PENDING.length >= MAX_IMG) { toast('እስከ ' + MAX_IMG + ' ፎቶ ብቻ', 'error'); break; }
+            if (!/^image\//.test(files[i].type)) continue;
+            try { AI_PENDING.push(await shrink(files[i])); } catch (e) { toast('ፎቶውን ማንበብ አልተቻለም', 'error'); }
+        }
+        renderPreview();
+    }
+
+    function errText(res) {
+        var e = res && res.error;
+        if (e === 'ai-not-configured') return '⚠️ AI ገና አልተዋቀረም። አድሚኑን ያነጋግሩ።';
+        if (e === 'too-many-attempts') return '⏳ ብዙ መልእክት ልከዋል። ጥቂት ቆይተው ይሞክሩ።';
+        if (e === 'unauthorized') return '🔒 ክፍለ ጊዜዎ አብቅቷል። እንደገና ይግቡ።';
+        if (e === 'invalid-image') return '🖼️ ፎቶው ልክ አይደለም ወይም በጣም ትልቅ ነው። ሌላ ፎቶ ይሞክሩ።';
+        if (e === 'ai-unavailable') return '⚠️ AI ለጊዜው አልሰራም። ትንሽ ቆይተው ይሞክሩ።' + (res.detail ? '\n(' + res.detail + ')' : '');
+        return '⚠️ ስህተት ተከስቷል። እንደገና ይሞክሩ።';
+    }
+
+    async function send(textOverride) {
+        if (AI_BUSY) return;
+        var inp = $('aiInput');
+        var text = String(textOverride != null ? textOverride : (inp.value || '')).trim();
+        if (!text && !AI_PENDING.length) return;
+        if (typeof callWorker !== 'function') { toast('ግንኙነት አልተዘጋጀም', 'error'); return; }
+
+        var userMsg = { role: 'user', text: text, images: AI_PENDING.slice() };
+        AI_HISTORY.push(userMsg);
+        inp.value = ''; AI_PENDING = []; renderPreview();
+        $('aiSuggest').style.display = 'none';
+        AI_BUSY = true; $('aiSendBtn').disabled = true;
+        var typing = { role: 'assistant', typing: true };
+        AI_HISTORY.push(typing); render();
+
+        // ፎቶዎች በመጨረሻው መልእክት ብቻ ይላካሉ (ቀዳሚ ፎቶዎች ጽሑፍ ብቻ)
+        var payload = AI_HISTORY.filter(function (m) { return !m.typing && !m.error; }).slice(-14).map(function (m, i, a) {
+            var o = { role: m.role, text: m.text };
+            if (m.role === 'user' && m === userMsg && m.images.length) o.images = m.images;
+            return o;
+        });
+
+        try {
+            var res = await callWorker('aiChat', { messages: payload });
+            AI_HISTORY.splice(AI_HISTORY.indexOf(typing), 1);
+            if (res && res.ok && res.reply) AI_HISTORY.push({ role: 'assistant', text: res.reply });
+            else AI_HISTORY.push({ role: 'assistant', text: errText(res), error: true });
+        } catch (e) {
+            AI_HISTORY.splice(AI_HISTORY.indexOf(typing), 1);
+            AI_HISTORY.push({ role: 'assistant', text: '📡 ኢንተርኔት ያረጋግጡ እና እንደገና ይሞክሩ።', error: true });
+        }
+        AI_BUSY = false; $('aiSendBtn').disabled = false;
+        render();
+    }
+
+    function newChat() {
+        AI_HISTORY = []; AI_PENDING = []; renderPreview();
+        $('aiSuggest').style.display = 'flex'; render();
+    }
+
+    function init() {
+        if (AI_INIT) return; AI_INIT = true;
+        $('aiSuggest').innerHTML = SUGGEST.map(function (s) { return '<button type="button">' + esc(s) + '</button>'; }).join('');
+        $('aiSuggest').querySelectorAll('button').forEach(function (b) { b.addEventListener('click', function () { send(b.textContent); }); });
+        $('aiSendBtn').addEventListener('click', function () { send(); });
+        $('aiNewChatBtn').addEventListener('click', newChat);
+        $('aiAttachBtn').addEventListener('click', function () { $('aiFileInput').click(); });
+        $('aiFileInput').addEventListener('change', function () { onFiles(Array.prototype.slice.call(this.files)); this.value = ''; });
+        $('aiInput').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+    }
+
+    window.techAiOpen = function () { init(); render(); renderPreview(); };
+})();
+</script>
 </body>
 </html>
