@@ -1877,6 +1877,19 @@
                         <button class="btn btn-primary" id="finPwBtn" onclick="changeFinancePassword()"><i class="fas fa-save"></i> የይለፍ ቃል ቀይር</button>
                     </div>
 
+                    <!-- 🧹 ፋይናንስ እንደ አዲስ ማስጀመር (አድሚን ብቻ — ሌላ ምንም አይነካም) -->
+                    <div class="card" id="financeResetCard" style="border:1px solid var(--emergency);">
+                        <div class="card-header"><h3><i class="fas fa-broom"></i> 🧹 ፋይናንስ እንደ አዲስ ማስጀመር</h3></div>
+                        <p class="text-muted" style="font-size:0.85rem; margin-bottom:10px;">
+                            የፋይናንስ ቁጥሮችን ወደ ዜሮ ይመልሳል። <strong>ትዕዛዞች፣ ደንበኞች፣ ቴክኒሻኖች፣ ዕቃዎች እና የሪፖርት ዳታ አይነኩም።</strong>
+                            ከመሰረዙ በፊት የ backup ፋይል ይወርዳል።
+                        </p>
+                        <div class="flex" style="gap:8px; flex-wrap:wrap;">
+                            <button class="btn btn-danger" onclick="showFinanceResetModal()"><i class="fas fa-broom"></i> ፋይናንስ እንደ አዲስ አስጀምር</button>
+                            <button class="btn btn-outline" id="finRestoreExcludedBtn" onclick="restoreAllExcludedReports()" style="display:none;"><i class="fas fa-undo"></i> ከፋይናንስ የወጡ ሪፖርቶችን መልስ</button>
+                        </div>
+                    </div>
+
                 </div>
             </div>
 
@@ -5742,12 +5755,7 @@ ${locationLine}
                     <td>${onlineStatus}</td>
                     <td>${jobs}</td>
                     <td>
-                        <button class="btn btn-xs btn-primary" onclick="viewTech('${tech.id}')"><i class="fas fa-eye"></i></button>
-                        <button class="btn btn-xs ${warn && warn.manual ? 'btn-danger' : 'btn-secondary'}" title="ዋርኒግ ምልክት አድርግ/አንሳ" onclick="toggleTechWarning('${tech.id}')"><i class="fas fa-flag"></i></button>
-                        <button class="btn btn-xs ${Array.isArray(tech.pages) && tech.pages.length ? 'btn-success' : 'btn-secondary'}" title="የገጽ ፈቃድ (ፋይናንስ / አዲስ ትዕዛዞች / አዲስ ግቤት)" onclick="editPagePermissions('${tech.id}')"><i class="fas fa-key"></i></button>
-                        <button class="btn btn-xs btn-secondary" title="መልእክት ላክ" onclick="showSendMessageModal('${tech.id}')"><i class="fas fa-comment-dots"></i></button>
-                        ${(tech.isPhoneOperator || allSectorStaff.filter(x => x.isPhoneOperator).length < 2) ? `<button class="btn btn-xs btn-secondary" title="ኦፕሬተር (ስልክ/ሾፕ) አድርግ" onclick="togglePhoneOperator('${tech.id}')"><i class="fas fa-headset"></i></button>` : ''}
-                        <button class="btn btn-xs btn-danger" onclick="deleteTech('${tech.id}')"><i class="fas fa-trash"></i></button>
+                        <button class="btn btn-xs btn-primary" title="ዝርዝር እና ሁሉም እርምጃዎች" onclick="viewTech('${tech.id}')"><i class="fas fa-eye"></i></button>
                     </td>
                 </tr>`;
             });
@@ -5916,6 +5924,25 @@ ${locationLine}
             }
         }
 
+        // 🧰 ቀድሞ በዝርዝሩ ረድፍ ላይ ተዘርግተው የነበሩ እርምጃዎች — አሁን በ👁️ ውስጥ ተጠቅልለዋል
+        function techActionsPanelHTML(tech) {
+            const warnOn = !!(tech.warning && tech.warning.active);
+            const hasPages = Array.isArray(tech.pages) && tech.pages.length;
+            const canOp = tech.isPhoneOperator || allSectorStaff.filter(x => x.isPhoneOperator).length < 2;
+            const b = (cls, icon, label, fn) => `<button class="btn btn-sm ${cls}" style="justify-content:flex-start; text-align:left;" onclick="closeModal(); ${fn}('${tech.id}')"><i class="fas ${icon}"></i> ${label}</button>`;
+            return `
+                <div style="margin-top:16px; padding-top:12px; border-top:1px solid var(--border-light);">
+                    <div style="font-weight:700; margin-bottom:8px;">⚙️ እርምጃዎች</div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                        ${b(warnOn ? 'btn-danger' : 'btn-secondary', 'fa-flag', warnOn ? 'ዋርኒግ አንሳ' : 'ዋርኒግ ምልክት አድርግ', 'toggleTechWarning')}
+                        ${b(hasPages ? 'btn-success' : 'btn-secondary', 'fa-key', 'የገጽ ፈቃድ / ዘርፍ', 'editPagePermissions')}
+                        ${b('btn-secondary', 'fa-comment-dots', 'መልእክት ላክ', 'showSendMessageModal')}
+                        ${canOp ? b('btn-secondary', 'fa-headset', tech.isPhoneOperator ? 'ከኦፕሬተርነት አስወግድ' : 'ኦፕሬተር አድርግ', 'togglePhoneOperator') : ''}
+                        ${b('btn-danger', 'fa-trash', 'ቴክኒሻን ሰርዝ', 'deleteTech')}
+                    </div>
+                </div>`;
+        }
+
         function viewTech(id) {
             const tech = staffById(id);
             if (!tech) return;
@@ -5942,7 +5969,7 @@ ${locationLine}
                     <div><strong>✅ የተጠናቀቁ:</strong> ${completed}</div>
                     <div style="grid-column: span 2;"><strong>💰 ገቢ:</strong> ${earnings.toFixed(2)} ብር</div>
                 </div>
-                ${tech.isPhoneOperator ? `<div style="margin-top:14px;"><button class="btn btn-sm btn-danger" onclick="closeModal(); togglePhoneOperator('${tech.id}')"><i class="fas fa-headset"></i> ከኦፕሬተርነት አስወግድ</button></div>` : ''}
+                ${techActionsPanelHTML(tech)}
             `;
             openModal(`🔧 ${tech.name}`, bodyHTML);
         }
@@ -5950,22 +5977,77 @@ ${locationLine}
         // ============================================================
         // ✅ NEW: የባለሙያዎች ሪፖርት (Technician Daily Reports + Approval Gate)
         // ============================================================
+        // 🔎 ስራ ተመድቦለት ሪፖርት ያልተደረገበት (ባለፉት 30 ቀናት) — ሪፖርት የተደረገ ስራ በ dailyReports.jobStatuses[].orderId ይታወቃል
+        const REPORT_LOOKBACK_DAYS = 30;
+        let _techReportsShowAll = false;
+        function reportedJobKeys() {
+            const keys = new Set();          // 'orderId|C' ወይም 'orderId|N'
+            const manual = new Set();        // jobStatuses የሌለው (በአድሚን የተመዘገበ) ሪፖርት → 'techId|dateKey' ያንን ቀን ሁሉ ይሸፍናል
+            (allDailyReports || []).forEach(r => {
+                const js = Array.isArray(r.jobStatuses) ? r.jobStatuses : [];
+                if (js.length === 0) { if (r.technicianId && r.dateKey) manual.add(r.technicianId + '|' + r.dateKey); return; }
+                js.forEach(j => { if (j && j.orderId) keys.add(j.orderId + '|' + (j.status === 'completed' ? 'C' : 'N')); });
+            });
+            return { keys, manual };
+        }
+        function techUnreportedJobs(tech, rk) {
+            rk = rk || reportedJobKeys();
+            const lim = Date.now() - REPORT_LOOKBACK_DAYS * 86400000;
+            return allOrders.filter(o => {
+                const mine = o.technicianId ? o.technicianId === tech.id : o.technician === tech.name;
+                if (!mine) return false;
+                if (!o.status || o.status === 'Pending' || /^cancel/i.test(o.status)) return false; // አልተመደበም / ተሰርዟል
+                const isDone = o.status === 'Completed';
+                const ms = isDone ? (toMs(o.completedAt) || toMs(o.assignedAt) || toMs(o.createdAt)) : (toMs(o.assignedAt) || toMs(o.createdAt));
+                if (!ms || ms < lim) return false;
+                if (rk.keys.has(o.id + '|' + (isDone ? 'C' : 'N'))) return false;
+                if (rk.manual.has(tech.id + '|' + getDateKey(new Date(ms)))) return false;
+                return true;
+            });
+        }
+        function toggleTechReportsAll() { _techReportsShowAll = !_techReportsShowAll; showTechReportsModal(); }
+
         function showTechReportsModal() {
             const yesterdayKey = getDateKey(new Date(Date.now() - 86400000));
+            const rk = reportedJobKeys();
+            const techs = fieldTechs();
+            const pendingList = techs
+                .map(t => ({ tech: t, jobs: techUnreportedJobs(t, rk) }))
+                .filter(x => x.jobs.length > 0)
+                .sort((a, b) => b.jobs.length - a.jobs.length);
 
             let html = `
                 <div style="margin-bottom:16px; padding:12px; background:var(--bg); border-radius:8px; font-size:0.85rem; color:var(--text-muted); border-left:3px solid #7c3aed;">
-                    💡 እያንዳንዱ ባለሙያ የትላንቱ ሪፖርት እርስዎ ሳያጸድቁት "ነፃ ነኝ" ማለት አይችልም። ከዚህ በታች ለያንዳንዱ ቴክኒሻን ይገምግሙ እና ያጽድቁ።
+                    💡 ስራ የተመደበላቸው ነገር ግን ሪፖርት ያላደረጉ ባለሙያዎች ብቻ እዚህ ይታያሉ (ባለፉት ${REPORT_LOOKBACK_DAYS} ቀናት)። ሪፖርት ሲያደርጉ ከዝርዝሩ ይወጣሉ።
                 </div>
-                <div style="margin-bottom:16px;">
+                <div class="flex" style="margin-bottom:16px; gap:8px; flex-wrap:wrap;">
                     <button class="btn btn-success btn-sm" onclick="showAddReportForm()"><i class="fas fa-plus"></i> ሪፖርት በአድሚን መዝግብ</button>
+                    <button class="btn btn-outline btn-sm" onclick="toggleTechReportsAll()"><i class="fas fa-${_techReportsShowAll ? 'filter' : 'users'}"></i> ${_techReportsShowAll ? 'ሪፖርት ያላደረጉትን ብቻ አሳይ' : 'ሁሉንም ቴክኒሻን አሳይ (ማጽደቅ)'}</button>
                 </div>
             `;
 
-            if (fieldTechs().length === 0) {
+            if (techs.length === 0) {
                 html += `<p class="text-center text-muted">ምንም ቴክኒሻን አልተመዘገበም</p>`;
+            } else if (!_techReportsShowAll) {
+                if (pendingList.length === 0) {
+                    html += `<p class="text-center" style="color:var(--success); font-weight:600; padding:16px 0;">✅ ስራ የተመደበላቸው ሁሉም ባለሙያዎች ሪፖርት አድርገዋል</p>`;
+                }
+                pendingList.forEach(({ tech, jobs }) => {
+                    const oldest = jobs.map(o => toMs(o.assignedAt) || toMs(o.createdAt)).filter(Boolean).sort((a, b) => a - b)[0];
+                    const since = oldest ? getDateKey(new Date(oldest)) : '';
+                    html += `
+                        <div style="border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:10px;">
+                            <div class="flex-between">
+                                <strong>👤 ${escHtml(tech.name)}</strong>
+                                <span class="status-badge status-pending">⚠️ ${jobs.length} ስራ ሪፖርት አልተደረገም</span>
+                            </div>
+                            ${since ? `<div class="text-muted" style="font-size:0.78rem; margin-top:4px;">ከ ${techSummaryDateLabel(since)} ጀምሮ</div>` : ''}
+                            <button class="btn btn-outline btn-sm mt-8" onclick="viewTechReportHistory('${tech.id}')"><i class="fas fa-history"></i> ሙሉ ታሪክ ይመልከቱ</button>
+                        </div>
+                    `;
+                });
             } else {
-                fieldTechs().forEach(tech => {
+                techs.forEach(tech => {
                     const yesterdayReport = allDailyReports.find(r => r.technicianId === tech.id && r.dateKey === yesterdayKey);
                     let gateStatus;
                     if (!yesterdayReport) {
@@ -5978,7 +6060,7 @@ ${locationLine}
                     html += `
                         <div style="border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:10px;">
                             <div class="flex-between">
-                                <strong>👤 ${tech.name}</strong>
+                                <strong>👤 ${escHtml(tech.name)}</strong>
                                 ${gateStatus}
                             </div>
                             <button class="btn btn-outline btn-sm mt-8" onclick="viewTechReportHistory('${tech.id}')"><i class="fas fa-history"></i> ሙሉ ታሪክ ይመልከቱ</button>
@@ -6420,7 +6502,7 @@ ${locationLine}
                 endKey = window._techSummaryCustomRange.end || null;
             }
 
-            const relevant = allDailyReports.filter(r => {
+            const relevant = financeReports().filter(r => {
                 if (!r.dateKey) return false;
                 if (startKey && r.dateKey < startKey) return false;
                 if (endKey && r.dateKey > endKey) return false;
@@ -6581,20 +6663,45 @@ ${locationLine}
                     <thead><tr><th>ቀን</th><th>ገቢ</th><th>ወጪ</th><th>ለድርጅት</th><th>ለሰራተኛ</th><th>ሁኔታ</th><th>እርምጃ</th></tr></thead>
                     <tbody>`;
                 reports.forEach(r => {
-                    html += `<tr>
-                        <td>${r.dateKey || '—'}</td>
+                    const ex = !!r.financeExcluded;
+                    html += `<tr style="${ex ? 'opacity:0.55;' : ''}">
+                        <td>${r.dateKey || '—'}${ex ? '<div class="text-muted" style="font-size:0.65rem;">🚫 ከፋይናንስ ወጥቷል</div>' : ''}</td>
                         <td>${(r.totalIncome ?? r.income ?? 0).toLocaleString()}</td>
                         <td>${(r.totalExpense || 0).toLocaleString()}</td>
                         <td style="color:#2563eb;">${(r.companyAmount || 0).toLocaleString()}</td>
                         <td style="color:#7c3aed;">${(r.techShareAmount || 0).toLocaleString()}</td>
                         <td>${r.approved ? '<span class="status-badge status-completed">✅ ጸድቋል</span>' : '<span class="status-badge status-pending">⏳ አልጸደቀም</span>'}</td>
-                        <td><button class="btn btn-xs btn-outline" onclick="editDailyReport('${r.id}')"><i class="fas fa-edit"></i> አርም</button></td>
+                        <td style="white-space:nowrap;">
+                            ${ex
+                                ? `<button class="btn btn-xs btn-success" onclick="setReportFinanceExcluded('${r.id}', false, '${techKey}')"><i class="fas fa-undo"></i> መልስ</button>`
+                                : `<button class="btn btn-xs btn-outline" onclick="editDailyReport('${r.id}')"><i class="fas fa-edit"></i> አርም</button>
+                                   <button class="btn btn-xs btn-danger" title="በስህተት የገባ ከሆነ ከፋይናንስ ብቻ ያስወግዳል" onclick="setReportFinanceExcluded('${r.id}', true, '${techKey}')"><i class="fas fa-trash"></i> አስወግድ</button>`}
+                        </td>
                     </tr>`;
                 });
-                html += `</tbody></table></div>`;
+                html += `</tbody></table></div>
+                    <p class="text-muted" style="font-size:0.75rem; margin-top:8px;">💡 «አስወግድ» ሪፖርቱን ከፋይናንስ ድምር ብቻ ያወጣል — ሪፖርቱ ራሱ፣ ትዕዛዞች እና የቴክኒሻኑ መረጃ አይነኩም። «መልስ» በመጫን ማስመለስ ይቻላል።</p>`;
             }
 
             openModal(`📋 ${techName} - የገቢ ዝርዝር`, html);
+        }
+
+        // 🚫 አንድ ሪፖርት በስህተት ከገባ ከፋይናንስ ብቻ ማውጣት / መመለስ (ዳታው አይጠፋም)
+        async function setReportFinanceExcluded(reportId, exclude, techKey) {
+            const r = allDailyReports.find(x => x.id === reportId);
+            if (!r) { showToast('ሪፖርቱ አልተገኘም', 'error'); return; }
+            if (exclude && !confirm(`የ${r.technicianName || ''} ሪፖርት (${r.dateKey || ''}) ከፋይናንስ ይውጣ?\n\nሪፖርቱ እና ሌሎች ዳታዎች አይሰረዙም፤ ከፋይናንስ ድምር ብቻ ይወጣል።`)) return;
+            try {
+                await db.collection('dailyReports').doc(reportId).update(exclude
+                    ? { financeExcluded: true, financeExcludedAt: new Date() }
+                    : { financeExcluded: false, financeExcludedAt: null });
+                r.financeExcluded = !!exclude; // ወዲያውኑ ለማሳየት (snapshot ቀጥሎ ያድሰዋል)
+                db.collection('activity').add({ user: 'አስተዳዳሪ', action: exclude ? 'finance_exclude_report' : 'finance_restore_report',
+                    details: `ሪፖርት #${reportId.substring(0, 8)} (${r.technicianName || ''} ${r.dateKey || ''}) ${exclude ? 'ከፋይናንስ ወጥቷል' : 'ወደ ፋይናንስ ተመልሷል'}`, timestamp: new Date() }).catch(() => {});
+                showToast(exclude ? '✅ ከፋይናንስ ወጥቷል' : '✅ ወደ ፋይናንስ ተመልሷል', 'success');
+                try { updateFinanceStats(); showTechIncomeSummary(); } catch (e) {}
+                viewTechIncomeDetail(techKey);
+            } catch (e) { showToast('❌ ' + e.message, 'error'); }
         }
 
         // ✅ NEW: የተሳሳተ ሪፖርት ገቢ/ወጪ ማረሚያ (Edit a wrong daily report entry)
@@ -7603,6 +7710,9 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             }
         }
 
+        // 💰 ፋይናንስ የሚቆጥረው ከፋይናንስ ያልተወገዱ ሪፖርቶችን ብቻ ነው (ሪፖርቱ ራሱ ለሌሎች ክፍሎች አይነካም)
+        function financeReports() { return (allDailyReports || []).filter(r => !r.financeExcluded); }
+
         function updateFinanceStats() {
             const sum = (arr, f) => arr.reduce((s, x) => s + (parseFloat(f(x)) || 0), 0);
             const txIncome = sum(allTransactions.filter(t => t.type === 'income'), t => t.amount);
@@ -7611,7 +7721,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const collected = sum(allDebts.filter(d => d.type !== 'payable' && d.status === 'paid'), d => d.amount);
             const paidOut = sum(allDebts.filter(d => d.type === 'payable' && d.status === 'paid'), d => d.amount);
             // 👷 ለሰራተኛ የተሰጠ ድርሻ ወደ ድርጅቱ የገባ አይደለም → ከተጣራ ትርፍ ይቀነሳል
-            const techShare = sum(allDailyReports, r => r.techShareAmount);
+            const techShare = sum(financeReports(), r => r.techShareAmount);
 
             const income = txIncome + collected;      // ጠቅላላ የገባ (ብድር የተሰበሰበን ጨምሮ)
             const expense = txExpense + paidOut;      // ጠቅላላ ወጪ (የከፈልነውን ብድር ጨምሮ)
@@ -7625,6 +7735,149 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             setNote('finIncomeNote', collected > 0 ? `ከዚህ ውስጥ ደንበኛ የከፈለን ብድር ${f(collected)}` : '');
             setNote('finExpenseNote', paidOut > 0 ? `ከዚህ ውስጥ የከፈልነው ብድር ${f(paidOut)}` : '');
             setNote('finNetNote', techShare > 0 ? `ለሰራተኛ የተሰጠ ${f(techShare)} ተቀንሷል` : '');
+            try { refreshFinanceResetUI(); } catch (e) {}
+        }
+
+
+        // ============================================================
+        // 🧹 ፋይናንስ እንደ አዲስ ማስጀመር — የፋይናንስ ዳታ ብቻ (transactions, debts) + የሪፖርት ገቢን ከፋይናንስ ማውጣት
+        //    orders / customers / staff / inventory / dailyReports (ራሳቸው) በፍጹም አይነኩም
+        // ============================================================
+        function refreshFinanceResetUI() {
+            const n = (allDailyReports || []).filter(r => r.financeExcluded).length;
+            const b = document.getElementById('finRestoreExcludedBtn');
+            if (b) { b.style.display = n > 0 ? '' : 'none'; b.innerHTML = `<i class="fas fa-undo"></i> ከፋይናንስ የወጡ ሪፖርቶችን መልስ (${n})`; }
+        }
+
+        function showFinanceResetModal() {
+            if (!isFinanceUnlocked) { showToast('❌ እባክዎ መጀመሪያ ፋይናንስ ይክፈቱ', 'error'); return; }
+            const nTx = allTransactions.length;
+            const nDebt = allDebts.length;
+            const nRep = financeReports().length;
+            const html = `
+                <div style="padding:10px 12px; background:#FEF2F2; border-left:3px solid var(--emergency); border-radius:8px; font-size:0.85rem; margin-bottom:12px; color:#7f1d1d;">
+                    ⚠️ የተመረጡት የፋይናንስ ዳታዎች ይጠፋሉ። ትዕዛዞች፣ ደንበኞች፣ ቴክኒሻኖች፣ ዕቃዎችና የሪፖርት ዳታው <strong>አይነኩም</strong>።
+                </div>
+                <label style="display:flex; gap:10px; padding:8px 0; cursor:pointer;">
+                    <input type="checkbox" id="finRstTx" checked style="width:auto; margin-top:4px;" />
+                    <span><strong>💸 የገቢ/ወጪ ግቤቶች ሰርዝ</strong> <span class="text-muted">(${nTx})</span></span>
+                </label>
+                <label style="display:flex; gap:10px; padding:8px 0; cursor:pointer;">
+                    <input type="checkbox" id="finRstDebt" checked style="width:auto; margin-top:4px;" />
+                    <span><strong>🤝 ብድር/እዳ ሰርዝ</strong> <span class="text-muted">(${nDebt})</span></span>
+                </label>
+                <label style="display:flex; gap:10px; padding:8px 0; cursor:pointer;">
+                    <input type="checkbox" id="finRstRep" checked style="width:auto; margin-top:4px;" />
+                    <span><strong>👷 የቴክኒሻን ሪፖርት ገቢ ከፋይናንስ አውጣ</strong> <span class="text-muted">(${nRep})</span><br>
+                    <span class="text-muted" style="font-size:0.78rem;">ሪፖርቶቹ አይሰረዙም — ከፋይናንስ ድምር ብቻ ይወጣሉ፤ ካስፈለገ በኋላ መመለስ ይቻላል።</span></span>
+                </label>
+                <label style="display:flex; gap:10px; padding:8px 0; cursor:pointer;">
+                    <input type="checkbox" id="finRstBackup" checked style="width:auto; margin-top:4px;" />
+                    <span><strong>💾 ከመሰረዙ በፊት backup (JSON) አውርድ</strong> <span class="text-muted">(ይመከራል)</span></span>
+                </label>
+                <div class="form-group" style="margin-top:10px;">
+                    <label>ለማረጋገጥ «አስጀምር» ብለው ይጻፉ</label>
+                    <input type="text" id="finRstConfirm" placeholder="አስጀምር" autocomplete="off" />
+                </div>
+                <div class="form-group">
+                    <label>የአድሚን ዋና ይለፍ ቃል</label>
+                    <input type="password" id="finRstPw" autocomplete="off" placeholder="የአድሚን ዋና ይለፍ ቃል" />
+                </div>
+                <div id="finRstStatus" class="text-muted" style="font-size:0.8rem; white-space:pre-line; margin-bottom:8px;"></div>
+                <button class="btn btn-danger btn-block" id="finRstBtn" onclick="runFinanceReset()"><i class="fas fa-broom"></i> አስጀምር</button>
+            `;
+            openModal('🧹 ፋይናንስ እንደ አዲስ ማስጀመር', html);
+        }
+
+        async function finDeleteDocs(collectionName, docs, say) {
+            let n = 0;
+            for (let i = 0; i < docs.length; i += 400) {
+                const batch = db.batch();
+                docs.slice(i, i + 400).forEach(d => batch.delete(db.collection(collectionName).doc(d.id)));
+                await batch.commit();
+                n += Math.min(400, docs.length - i);
+                say(`⏳ ${collectionName}: ${n}/${docs.length}`);
+            }
+            return n;
+        }
+
+        async function runFinanceReset() {
+            if (!isFinanceUnlocked) { showToast('❌ እባክዎ መጀመሪያ ፋይናንስ ይክፈቱ', 'error'); return; }
+            const wantTx = document.getElementById('finRstTx').checked;
+            const wantDebt = document.getElementById('finRstDebt').checked;
+            const wantRep = document.getElementById('finRstRep').checked;
+            const wantBackup = document.getElementById('finRstBackup').checked;
+            const statusEl = document.getElementById('finRstStatus');
+            const btn = document.getElementById('finRstBtn');
+            const say = (t) => { if (statusEl) statusEl.textContent = t; };
+
+            if (!wantTx && !wantDebt && !wantRep) { showToast('ቢያንስ አንድ ነገር ይምረጡ', 'error'); return; }
+            if ((document.getElementById('finRstConfirm').value || '').trim() !== 'አስጀምር') { showToast('❌ «አስጀምር» ብለው በትክክል ይጻፉ', 'error'); return; }
+            const pw = document.getElementById('finRstPw').value;
+            if (!pw) { showToast('❌ የይለፍ ቃል ያስገቡ', 'error'); return; }
+            if (!(await verifyAdminMasterPassword(pw))) { showToast('❌ የተሳሳተ የይለፍ ቃል - ምንም አልጠፋም', 'error'); return; }
+            if (!confirm('የመጨረሻ ማረጋገጫ፦ ፋይናንስ እንደ አዲስ ይጀመራል። መልሶ ማግኘት የሚቻለው ከ backup ፋይል ብቻ ነው። ይቀጥሉ?')) return;
+
+            btn.disabled = true;
+            try {
+                try { await heEnsureAdminAuth(); } catch (e) {}
+                const txs = wantTx ? allTransactions.slice() : [];
+                const debts = wantDebt ? allDebts.slice() : [];
+                const reps = wantRep ? financeReports().slice() : [];
+
+                if (wantBackup) {
+                    say('💾 backup በማዘጋጀት ላይ...');
+                    const replacer = (k, v) => (v && typeof v.toDate === 'function') ? v.toDate().toISOString() : v;
+                    const backup = { exportedAt: new Date().toISOString(), note: 'Finance reset backup', transactions: txs, debts: debts, dailyReportsExcludedFromFinance: reps.map(r => r.id) };
+                    const blob = new Blob([JSON.stringify(backup, replacer, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = `finance-backup-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 2000);
+                }
+
+                let log = '';
+                if (wantTx) { const n = await finDeleteDocs('transactions', txs, say); log += `✅ ገቢ/ወጪ ግቤቶች ተሰርዘዋል: ${n}\n`; say(log); }
+                if (wantDebt) { const n = await finDeleteDocs('debts', debts, say); log += `✅ ብድር/እዳ ተሰርዟል: ${n}\n`; say(log); }
+                if (wantRep) {
+                    let n = 0;
+                    for (let i = 0; i < reps.length; i += 400) {
+                        const batch = db.batch();
+                        reps.slice(i, i + 400).forEach(r => batch.update(db.collection('dailyReports').doc(r.id), { financeExcluded: true, financeExcludedAt: new Date() }));
+                        await batch.commit();
+                        n += Math.min(400, reps.length - i);
+                    }
+                    log += `✅ ሪፖርቶች ከፋይናንስ ወጥተዋል: ${n} (ሪፖርቶቹ አልተሰረዙም)\n`; say(log);
+                }
+                db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'finance_reset',
+                    details: `ፋይናንስ እንደ አዲስ ተጀምሯል (ግቤት:${txs.length}, ብድር:${debts.length}, ሪፖርት:${reps.length})`, timestamp: new Date() }).catch(() => {});
+                showToast('✅ ፋይናንስ እንደ አዲስ ተጀምሯል', 'success');
+                setTimeout(() => { try { updateFinanceStats(); updateDebtStats(); renderTransactions(); renderDebts(); showTechIncomeSummary(); refreshFinanceResetUI(); closeModal(); } catch (e) {} }, 600);
+            } catch (e) {
+                console.error('finance reset failed', e);
+                say('❌ ' + (e.message || e));
+                showToast('❌ ' + (e.message || e), 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function restoreAllExcludedReports() {
+            const list = (allDailyReports || []).filter(r => r.financeExcluded);
+            if (!list.length) { showToast('የሚመለስ ሪፖርት የለም', 'error'); return; }
+            if (!confirm(`${list.length} ሪፖርቶች ወደ ፋይናንስ ይመለሱ?`)) return;
+            try {
+                for (let i = 0; i < list.length; i += 400) {
+                    const batch = db.batch();
+                    list.slice(i, i + 400).forEach(r => batch.update(db.collection('dailyReports').doc(r.id), { financeExcluded: false, financeExcludedAt: null }));
+                    await batch.commit();
+                }
+                list.forEach(r => { r.financeExcluded = false; });
+                db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'finance_restore_reports', details: `${list.length} ሪፖርቶች ወደ ፋይናንስ ተመልሰዋል`, timestamp: new Date() }).catch(() => {});
+                showToast('✅ ተመልሷል', 'success');
+                try { updateFinanceStats(); showTechIncomeSummary(); refreshFinanceResetUI(); } catch (e) {}
+            } catch (e) { showToast('❌ ' + e.message, 'error'); }
         }
 
         function renderTransactions() {
@@ -7634,12 +7887,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 return;
             }
             let html = '';
-            allTransactions.slice(0, 30).forEach(tx => {
+            const showAll = !!window._finShowAllTx;
+            (showAll ? allTransactions : allTransactions.slice(0, 30)).forEach(tx => {
                 const date = tx.date ? formatEthDate(new Date(tx.date)) : '—';
                 const sign = tx.type === 'income' ? '+' : '-';
                 const color = tx.type === 'income' ? 'var(--success)' : 'var(--emergency)';
                 html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border-light);">
-                    <div style="flex:1; min-width:0;"><span style="font-weight:500;">${tx.description || '—'}</span> <span class="text-muted" style="font-size:0.8rem;">${date}</span></div>
+                    <div style="flex:1; min-width:0;"><span style="font-weight:500;">${tx.description || '—'}</span> <span class="text-muted" style="font-size:0.8rem;">${date}</span>${tx.orderId ? ' <span class="text-muted" style="font-size:0.7rem;">🔗 ከትዕዛዝ</span>' : ''}</div>
                     <div style="font-weight:700; color:${color}; white-space:nowrap;">${sign} ${parseFloat(tx.amount || 0).toFixed(2)} ብር</div>
                     <div style="display:flex; gap:4px;">
                         <button class="btn btn-xs btn-outline" onclick="editTransaction('${tx.id}')" title="አርም"><i class="fas fa-edit"></i></button>
@@ -7647,6 +7901,9 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     </div>
                 </div>`;
             });
+            if (allTransactions.length > 30) {
+                html += `<div style="text-align:center; margin-top:10px;"><button class="btn btn-outline btn-sm" onclick="window._finShowAllTx = !window._finShowAllTx; renderTransactions();">${showAll ? 'የመጨረሻዎቹን 30 ብቻ አሳይ' : `ሁሉንም አሳይ (${allTransactions.length})`}</button></div>`;
+            }
             container.innerHTML = html;
         }
 
@@ -7708,9 +7965,12 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         }
 
         async function deleteTransaction(txId) {
-            if (!confirm('እርግጠኛ ነዎት ይህን ግቤት መሰረዝ ይፈልጋሉ?')) return;
+            const tx = allTransactions.find(t => t.id === txId);
+            if (!confirm('እርግጠኛ ነዎት ይህን ግቤት መሰረዝ ይፈልጋሉ?' + (tx && tx.orderId ? '\n\n(ትዕዛዙ ራሱ አይሰረዝም፤ የፋይናንስ ግቤቱ ብቻ ይሰረዛል)' : ''))) return;
             try {
                 await db.collection('transactions').doc(txId).delete();
+                db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'delete_transaction',
+                    details: `ግቤት ተሰርዟል: ${tx ? (tx.description || '') + ' ' + (tx.amount || 0) + ' ብር' : txId}`, timestamp: new Date() }).catch(() => {});
                 showToast('✅ ግቤቱ ተሰርዟል', 'success');
             } catch (error) {
                 showToast('❌ ' + error.message, 'error');
@@ -7797,7 +8057,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             }).sort((a, b) => finToKey(a.createdAt).localeCompare(finToKey(b.createdAt)));
 
             // 3) የቴክኒሻን ዕለታዊ ሪፖርት
-            const reports = allDailyReports.filter(r => r.dateKey && finInRange(r.dateKey, startDate, endDate))
+            const reports = financeReports().filter(r => r.dateKey && finInRange(r.dateKey, startDate, endDate))
                 .sort((a, b) => a.dateKey.localeCompare(b.dateKey) || String(a.technicianName).localeCompare(String(b.technicianName)));
 
             if (!txs.length && !debts.length && !reports.length) {
@@ -7877,7 +8137,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 txs: allTransactions.filter(tx => finTxKey(tx) === dk),
                 debtsNew: allDebts.filter(d => finToKey(d.createdAt) === dk),
                 debtsPaid: allDebts.filter(d => d.status === 'paid' && finToKey(d.paidAt) === dk),
-                reports: allDailyReports.filter(r => r.dateKey === dk),
+                reports: financeReports().filter(r => r.dateKey === dk),
                 orderCreated, orderDone
             };
         }
