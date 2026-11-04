@@ -1220,7 +1220,7 @@ function loadTransactions() {
 function loadDailyReports() {
     db.collection('dailyReports').onSnapshot((snapshot) => {
         allDailyReports = [];
-        snapshot.forEach(doc => { const d = doc.data(); d.id = doc.id; allDailyReports.push(d); });
+        snapshot.forEach(doc => { const d = doc.data(); d.id = doc.id; if (!d.financeExcluded) allDailyReports.push(d); }); // 🚫 አድሚን ከፋይናንስ ያወጣቸው ሪፖርቶች አይቆጠሩም
         if (!isFinanceUnlocked) return;
         try { updateFinanceStats(); } catch (e) {}
         try {
