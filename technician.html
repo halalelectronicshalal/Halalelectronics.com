@@ -9066,6 +9066,11 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // STATUS BUTTONS
         // ============================================================
         let freeLocationBusy = false;
+        // 🔒 «ነጻ ነኝ» መቆለፊያ — ስራ ሲመደብለት ይከፈታል (ስራውን ከጨረሰ በኋላ እንደገና መላክ ይችላል)
+        function techFreeLockKey() { return 'halal_free_sent_' + (technicianId || ''); }
+        function techFreeLockGet() { try { return !!localStorage.getItem(techFreeLockKey()); } catch (e) { return false; } }
+        function techFreeLockSet() { try { localStorage.setItem(techFreeLockKey(), String(Date.now())); } catch (e) {} }
+        function techFreeLockClear() { try { localStorage.removeItem(techFreeLockKey()); } catch (e) {} }
         function setupStatusButtons() {
             document.querySelectorAll('.status-btn').forEach(btn => {
                 btn.addEventListener('click', async function() {
@@ -9081,6 +9086,11 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     // ቴክኒሻን የተመደበለት ስራ (Assigned) ገና ሳያጠናቅቅ "ነፃ ነኝ" ማለት በጭራሽ አይችልም።
                     // ይህ በ UI ብቻ ሳይሆን በራሱ በ button click logic ውስጥ ስለሚፈተሽ ማንም ሊያልፈው አይችልም።
                     if (status === 'free') {
+                        // 🔒 አንዴ «ነጻ» ብሎ ከላከ ድጋሜ መላክ አይችልም — ስራ ተመድቦ እስኪጠናቀቅ ድረስ
+                        if (techFreeLockGet()) {
+                            showToast('✅ «ነጻ ነኝ» ብለው ቀድሞ ልከዋል። ድጋሜ መላክ የሚችሉት ስራ ከጨረሱ በኋላ ነው', 'info');
+                            return;
+                        }
                         const hasUnfinishedJob = myOrders.some(o => o.status === 'Assigned' && !isFutureAppointment(o));
                         if (hasUnfinishedJob) {
                             showToast('🔒 የተመደበልዎት ስራ አለ! መጀመሪያ ስራውን ያጠናቅቁ (ወይም ውጤቱን ያስመዝግቡ) ከዚያ "ነፃ" ማለት ይችላሉ', 'error');
@@ -9136,6 +9146,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
                     // ✅ NEW: "ነፃ" ሲሉ GPS ቦታ ራሱ በራስ-ሰር ለ admin ይላክ (fraud prevention አካል)
                     if (status === 'free') {
+                        techFreeLockSet();
                         autoSendLocationOnFree(freePosition);
                     }
 
@@ -9559,6 +9570,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         return dB - dA;
                     });
                     console.log('📋 Orders loaded for ' + technicianName + ':', myOrders.length);
+                    try { if (myOrders.some(o => o.status === 'Assigned' && !isFutureAppointment(o))) techFreeLockClear(); } catch (e) {}
                     try { techApplyOpenStatusOnce(); } catch (e) { console.warn('open status failed', e); }
                     renderMyJobs();
                     renderAllJobs();
@@ -12781,7 +12793,7 @@ document.addEventListener('visibilitychange', function () {
         if (e === 'too-many-attempts') return '⏳ ብዙ መልእክት ልከዋል። ጥቂት ቆይተው ይሞክሩ።';
         if (e === 'unauthorized') return '🔒 ክፍለ ጊዜዎ አብቅቷል። እንደገና ይግቡ።';
         if (e === 'invalid-image') return '🖼️ ፎቶው ልክ አይደለም ወይም በጣም ትልቅ ነው። ሌላ ፎቶ ይሞክሩ።';
-        if (e === 'ai-unavailable') { try { console.warn('AI detail:', res.detail); } catch (x) {} return '⚠️ AI ለጊዜው ተጨናንቋል። ጥቂት ሰከንድ ቆይተው ጥያቄውን እንደገና ይላኩ።' + (res.detail ? '\n\n🔧 ' + String(res.detail).slice(0, 220) : ''); }
+        if (e === 'ai-unavailable') { try { console.warn('AI detail:', res.detail); } catch (x) {} return '⚠️ AI ለጊዜው ተጨናንቋል። ጥቂት ሰከንድ ቆይተው ጥያቄውን እንደገና ይላኩ።'; }
         return '⚠️ ስህተት ተከስቷል። እንደገና ይሞክሩ።';
     }
 
