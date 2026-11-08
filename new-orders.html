@@ -56,13 +56,6 @@
         <div id="freeAnnounceList"></div>
     </div>
 
-    <div class="card" id="pendingReportsCard" style="display:none;">
-        <div class="card-header">
-            <h3><i class="fas fa-clipboard-check"></i> ⏳ የሚፀድቁ ሪፖርቶች <span class="status-badge status-pending" id="pendingReportsBadge">0</span></h3>
-        </div>
-        <div id="pendingReportsList"></div>
-    </div>
-
     <div class="card" id="dashNewOrdersCard">
         <div class="card-header">
             <h3><i class="fas fa-bell"></i> 🆕 አዲስ ትዕዛዞች (ገና ያልተመደቡ) <span class="status-badge" id="dashNewOrdersBadge" style="background:var(--emergency);color:#fff;">0</span></h3>
@@ -587,78 +580,6 @@ function renderDashNewOrders() {
 
 
 /* ============================================================
-   ⏳ የሚፀድቁ ሪፖርቶች (ከቴክኒሻኖች የመጡ፣ ገና ያልጸደቁ) — ማየትና ማጽደቅ
-   ============================================================ */
-function renderPendingReports() {
-    const card = document.getElementById('pendingReportsCard');
-    const list = document.getElementById('pendingReportsList');
-    if (!card || !list) return;
-    const pending = (allDailyReports || []).filter(r => !r.approved)
-        .slice().sort((a, b) => (b.dateKey || '').localeCompare(a.dateKey || ''));
-    const badge = document.getElementById('pendingReportsBadge'); if (badge) badge.textContent = pending.length;
-    card.style.display = pending.length ? '' : 'none';
-    list.innerHTML = pending.map(r => {
-        const income = r.totalIncome != null ? r.totalIncome : (r.income || 0);
-        const photos = ((r.warrantyPhotoURLs || []).length + (r.receiptURLs || []).length);
-        return `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px; border:1px solid var(--border); border-radius:10px; margin-bottom:8px;">
-            <div style="flex:1; min-width:150px;">
-                <strong>👤 ${escHtml(r.technicianName || r.technician || '—')}</strong>
-                <div class="text-muted" style="font-size:0.8rem;">📅 ${escHtml(r.date || r.dateKey || '')} · 💰 ${escHtml(income)} ብር${photos ? ' · 📸 ' + photos : ''}</div>
-            </div>
-            <button class="btn btn-outline btn-sm" onclick="viewReportDetail('${r.id}')"><i class="fas fa-eye"></i> ተመልከት</button>
-            <button class="btn btn-success btn-sm" onclick="approveReportFromCard('${r.id}')"><i class="fas fa-check"></i> አጽድቅ</button>
-        </div>`;
-    }).join('');
-}
-function approveReportFromCard(reportId) {
-    const r = allDailyReports.find(x => x.id === reportId);
-    if (!confirm(`የ ${r ? (r.technicianName || r.technician || '') : ''} ሪፖርት (${r ? (r.date || r.dateKey || '') : ''}) ይጽደቅ?`)) return;
-    approveReport(reportId, r ? r.technicianId : null);
-}
-async function approveReport(reportId, techId) {
-    try {
-        const report = allDailyReports.find(r => r.id === reportId);
-        if (!techId && report) techId = report.technicianId;
-        await db.collection('dailyReports').doc(reportId).update({ approved: true, approvedAt: new Date() });
-        if (techId) { try { await db.collection('staff').doc(techId).update({ lastApprovedDateKey: report ? report.dateKey : null }); } catch (e) { console.warn('lastApprovedDateKey update skipped', e); } }
-        try { await db.collection('activity').add({ user: heUserName(), action: 'approve_report', details: `የ ${report ? report.technicianName : ''} ሪፖርት ጸደቀ (${report ? report.dateKey : ''})`, timestamp: new Date() }); } catch (e) {}
-        if (window.hePushNotify) {
-            hePushNotify(['finance'], '✅ ሪፖርት ጸድቋል — ' + (report ? (report.technicianName || '') : ''), report ? ('ገቢ ' + (report.totalIncome != null ? report.totalIncome : '—') + ' ብር · ' + (report.dateKey || '')) : '', 'finance.html');
-            if (techId) hePushNotify(['staff:' + techId], '✅ ሪፖርትዎ ጸድቋል', report ? (report.dateKey || '') : '', 'technician.html');
-        }
-        showToast('✅ ሪፖርት ጸድቋል!', 'success');
-        closeModal();
-    } catch (error) { showToast('❌ ' + error.message, 'error'); }
-}
-function viewReportDetail(reportId) {
-    const r = allDailyReports.find(x => x.id === reportId);
-    if (!r) return;
-    const n = (v) => (v == null || v === '') ? '—' : escHtml(v);
-    const jobs = (r.jobStatuses || []).map((j, i) =>
-        `<div style="font-size:0.85rem;">${i + 1}. ${escHtml(j.customer || '—')} — ${j.status === 'completed' ? '✅ ተሰርቷል' : '❌ አልተሰራም' + (j.reason ? ' (' + escHtml(j.reason) + ')' : '')}</div>`).join('');
-    const gallery = (urls, label) => (urls && urls.length)
-        ? `<div class="text-muted" style="font-size:0.8rem; margin-top:10px;">${label}</div><div class="photo-gallery">${urls.map(u => `<img src="${escHtml(u)}" alt="" onclick="window.open(this.src,'_blank')" />`).join('')}</div>` : '';
-    const html = `
-        <div style="font-size:0.9rem; line-height:1.7;">
-            <div><strong>👤 ${n(r.technicianName || r.technician)}</strong> · 📅 ${n(r.date || r.dateKey)} ${r.day ? '(' + escHtml(r.day) + ')' : ''}</div>
-            <div>📊 የተላኩ: ${n(r.totalSent != null ? r.totalSent : r.jobs)} | ተጠናቀቁ: ${n(r.completedCount)} | አልተጠናቀቁ: ${n(r.notCompletedCount)}</div>
-            ${jobs ? `<div style="margin:8px 0; padding:8px; background:var(--bg); border-radius:8px;">${jobs}</div>` : ''}
-            <div>💰 ገቢ: ${n(r.totalIncome != null ? r.totalIncome : r.income)} ብር | ወጪ: ${n(r.totalExpense)} ብር | ትርፍ: ${n(r.profit)} ብር</div>
-            <div>📊 ድርሻ: ${n(r.techSharePercent)}% (ባለሙያ ${n(r.techShareAmount)} | ድርጅት ${n(r.companyAmount)})</div>
-            <div>🏦 የተቀማጭ: ${n(r.deposited)} ብር</div>
-            ${r.expenseDetails ? `<div>🧾 ወጪ: ${escHtml(r.expenseDetails)}</div>` : ''}
-            <div>📝 ${n(r.remarks || r.notes)}</div>
-            ${r.readyTomorrow ? `<div>✅ ለነገ ዝግጁ: ${r.readyTomorrow === 'yes' ? 'አዎ' : 'አይ'}</div>` : ''}
-            ${gallery(r.warrantyPhotoURLs, '📸 ዋራንቲ ካርድ')}
-            ${gallery(r.receiptURLs, '🏦 የባንክ ደረሰኝ')}
-        </div>`;
-    const footer = r.approved
-        ? '<button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>'
-        : `<button class="btn btn-success" onclick="approveReport('${r.id}','${escHtml(r.technicianId || '')}')"><i class="fas fa-check"></i> አጽድቅ</button> <button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>`;
-    openModal('📋 የሪፖርት ዝርዝር', html, footer);
-}
-
-/* ============================================================
    ዳታ መጫን (real-time)
    ============================================================ */
 function loadOrders() {
@@ -733,7 +654,6 @@ function loadDailyReports() {
         allDailyReports = [];
         snapshot.forEach(doc => { const d = doc.data(); d.id = doc.id; allDailyReports.push(d); });
         renderDashNewOrders();
-        renderPendingReports();
     }, (e) => console.warn('dailyReports listener', e));
 }
 
