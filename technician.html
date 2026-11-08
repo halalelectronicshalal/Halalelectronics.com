@@ -11404,7 +11404,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     })));
                 } catch (pushErr) { console.warn('Report admin push queue failed (non-fatal)', pushErr); }
                 // 🔔 ለስራ መዳቢ (ሪፖርት ማጽደቅ የሚጠብቅ) ማሳወቂያ
-                try { callWorker('pushNotify', { audience: ['newOrders'], title: `📋 አዲስ ሪፖርት — ${technicianName}`, body: `ተሰርቷል ${completedCount} | አልተሰራም ${notCompletedCount} | ገቢ ${totalIncome} ብር`, url: new URL('new-orders.html', location.href).href }).catch(() => {}); } catch (e) {}
+                try { callWorker('pushNotify', { audience: ['finance'], title: `📋 አዲስ ሪፖርት — ${technicianName}`, body: `ተሰርቷል ${completedCount} | አልተሰራም ${notCompletedCount} | ገቢ ${totalIncome} ብር`, url: new URL('finance.html', location.href).href }).catch(() => {}); } catch (e) {}
 
                 const photosTgOk = await tgPhotoJob;
                 const storageRes = await storageJob;
