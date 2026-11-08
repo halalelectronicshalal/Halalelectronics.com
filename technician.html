@@ -10057,6 +10057,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 }).catch(() => {});
                 // ✅ ስራ ሲጠናቀቅ ወደ ቴሌግራም አይላክም (ሪፖርት ብቻ ይላካል)
                 if (!skipMain && !queued) sendCustomerSmsFor('done', orderId); // 📱 ለደንበኛ SMS (በአድሚን ሲቲንግ የሚስተካከል)
+                // 📱 ሪፈራል/እርማት — ለደንበኛው (በተሞላው ስልክ) እንዲሁ የ «ሀ. ተሰራ» ጽሁፍ ይላካል
+                if (!queued) activeExtras.forEach(x => sendCustomerSmsFor('done', '', { order: { fullName: '', phone: x.phone, appliance: x.appliance } }));
 
                 if (queued) showToast('⏳ ኔትወርክ ደካማ ነው — ተመዝግቧል፣ ሲገናኝ በራሱ ይላካል', 'error');
                 else if (skipMain) showToast(`✅ ${activeExtras.map(x => x.def.label).join(' እና ')} ወደ ሪፖርት ተመዝግቧል`, 'success');
