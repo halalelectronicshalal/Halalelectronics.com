@@ -10056,6 +10056,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     timestamp: new Date()
                 }).catch(() => {});
                 // ✅ ስራ ሲጠናቀቅ ወደ ቴሌግራም አይላክም (ሪፖርት ብቻ ይላካል)
+                if (!skipMain && !queued) sendCustomerSmsFor('done', orderId); // 📱 ለደንበኛ SMS (በአድሚን ሲቲንግ የሚስተካከል)
 
                 if (queued) showToast('⏳ ኔትወርክ ደካማ ነው — ተመዝግቧል፣ ሲገናኝ በራሱ ይላካል', 'error');
                 else if (skipMain) showToast(`✅ ${activeExtras.map(x => x.def.label).join(' እና ')} ወደ ሪፖርት ተመዝግቧል`, 'success');
@@ -10089,6 +10090,74 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // ============================================================
         // SUBMIT: Price Not Agreed, Another Day, Not Today, Other (shortened)
         // ============================================================
+
+        // ============================================================
+        // 📱 ለደንበኛ ራስ-ሰር SMS (በ "አጠናቅ" ፊደሎች) — ጽሁፉ በአድሚን ሲቲንግ ይስተካከላል (settings/customer_sms)
+        // ቃላት፦ {ደንበኛ} {መሳሪያ} {ቀን} {ሰዓት} {ቴክኒሻን} {ቢሮ}
+        // ============================================================
+        const CUSTOMER_SMS_DEFAULTS = {
+            officePhone: '0939165164',
+            items: {
+                'done':             { label: 'ሀ. ተሰራ',              enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ የ{መሳሪያ} ጥገናዎ ተጠናቅቋል። ስለመረጡን እናመሰግናለን!' },
+                'price-not-agreed': { label: 'ለ. ዋጋ አልተስማሙም',     enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ስለ ጊዜዎ እናመሰግናለን። በዋጋ ባለመስማማታችን ስራው አልተሰራም። ሀሳብዎን ከቀየሩ ይደውሉልን።' },
+                'another-day':      { label: 'ሐ. ለሌላ ቀን',           enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ የ{መሳሪያ} ጥገናዎ ወደ {ቀን} ሰዓት {ሰዓት} ተቀይሯል። ቴክኒሻን {ቴክኒሻን} ይመጣል። ለጥያቄ፦ {ቢሮ}' },
+                'not-today':        { label: 'መ. ዛሬ አይመቻቸውም',     enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ዛሬ ለእርስዎ እንደማይመች ተረድተናል። ሲመችዎ ቀን ለመቀየር ይደውሉልን።' },
+                'other':            { label: 'ሠ. ሌላ',                enabled: false, text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ስለ {መሳሪያ} ጥገናዎ ቢሯችን በቅርቡ ያነጋግርዎታል።' },
+                'return-job':       { label: 'ረ. ስራ መልስ',           enabled: false, text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ስለ {መሳሪያ} ጥገናዎ ቢሯችን በቅርቡ ያነጋግርዎታል።' },
+                'no-answer':        { label: 'ስልክ አያነሳም',          enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ለጥገና ስንደውልልዎ አላገኘንዎትም። እባክዎ ሲመችዎ ይደውሉልን።' }
+            }
+        };
+
+        let _custSmsCache = null, _custSmsAt = 0;
+        async function loadCustomerSmsSettings() {
+            if (_custSmsCache && Date.now() - _custSmsAt < 60000) return _custSmsCache;
+            const out = { officePhone: CUSTOMER_SMS_DEFAULTS.officePhone, items: {} };
+            Object.keys(CUSTOMER_SMS_DEFAULTS.items).forEach(k => { out.items[k] = { ...CUSTOMER_SMS_DEFAULTS.items[k] }; });
+            try {
+                const snap = await db.collection('settings').doc('customer_sms').get();
+                if (snap.exists) {
+                    const d = snap.data() || {};
+                    if (d.officePhone) out.officePhone = String(d.officePhone);
+                    Object.keys(out.items).forEach(k => {
+                        const v = d.items && d.items[k];
+                        if (v) { if (typeof v.enabled === 'boolean') out.items[k].enabled = v.enabled; if (typeof v.text === 'string') out.items[k].text = v.text; }
+                    });
+                }
+            } catch (e) { console.warn('customer_sms settings read failed — defaults used', e); }
+            _custSmsCache = out; _custSmsAt = Date.now();
+            return out;
+        }
+        function custSmsPhone(raw) {
+            let p = String(raw || '').trim().replace(/[\s\-()]/g, '').replace(/^\+/, '');
+            if (p.startsWith('0')) p = '251' + p.slice(1);
+            else if (p.length === 9) p = '251' + p;
+            return /^251[79]\d{8}$/.test(p) ? p : '';
+        }
+        // ለደንበኛ ራስ-ሰር SMS — መቼም አይወድቅም (ስራውን አያስተጓጉልም)፤ ችግር ካለ ማስጠንቀቂያ ብቻ ያሳያል
+        async function sendCustomerSmsFor(kind, orderId, extra) {
+            try {
+                const cfg = await loadCustomerSmsSettings();
+                const item = cfg.items[kind];
+                if (!item || !item.enabled || !String(item.text || '').trim()) return;
+                let o = myOrders.find(x => x.id === orderId) || (extra && extra.order) || null;
+                if (!o) { try { const s = await db.collection('orders').doc(orderId).get(); o = s.exists ? s.data() : null; } catch (e) {} }
+                if (!o) { showToast('⚠️ ለደንበኛ SMS አልተላከም — ትዕዛዙ አልተገኘም', 'error'); return; }
+                const to = custSmsPhone(o.phone);
+                if (!to) { showToast('⚠️ የደንበኛ ስልክ ቁጥር የለም ወይም ትክክል አይደለም — ለደንበኛ SMS አልተላከም', 'error'); return; }
+                const vars = { 'ደንበኛ': (o.fullName || '').trim() || 'ደንበኛችን', 'መሳሪያ': (o.appliance || '').trim() || 'መሳሪያ', 'ቀን': (extra && extra.date) || '', 'ሰዓት': (extra && extra.time) || '', 'ቴክኒሻን': technicianName || '', 'ቢሮ': cfg.officePhone || '' };
+                const message = String(item.text).replace(/\{([^{}]+)\}/g, (m, k) => (k in vars ? vars[k] : m)).trim().slice(0, 600);
+                const r = await callWorker('sendSms', { phone: to, message });
+                if (r && (r.success || r.acknowledge === 'success')) showToast('📱 ለደንበኛ SMS ተልኳል', 'success');
+                else showToast('⚠️ ለደንበኛ SMS አልተላከም (' + ((r && (r.message || r.error)) || 'ስህተት') + ')', 'error');
+            } catch (e) { console.warn('customer sms failed', e); showToast('⚠️ ለደንበኛ SMS አልተላከም', 'error'); }
+        }
+        function custSmsTime(hhmm) {
+            const m = /^(\d{1,2}):(\d{2})/.exec(String(hhmm || ''));
+            if (!m) return String(hhmm || '');
+            const h = parseInt(m[1], 10);
+            return `${(h % 12) || 12}:${m[2]} ${h < 12 ? 'ጠዋት' : 'ከሰዓት'}`;
+        }
+
         async function submitPriceNotAgreed() {
             const called = document.getElementById('priceNotAgreedCalled').value;
             if (called !== 'yes') {
@@ -10105,6 +10174,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     completedAt: new Date(),
                     technician: technicianName
                 });
+                sendCustomerSmsFor('price-not-agreed', orderId);
                 await tgMuted(`
                 💰 *ዋጋ አልተስማሙም!* 💬
                 🆔 *ትዕዛዝ:* #${orderId.substring(0,8)}
@@ -10163,6 +10233,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     technician: technicianName
                 });
                 await batch.commit();
+                sendCustomerSmsFor('another-day', orderId, { order: orderData, date: formatEthDate(newDate), time: custSmsTime(newTime) });
                 try {
                     await tgMuted(`
                 📅 *ለሌላ ቀን ተዘጋጅቷል!*
@@ -10202,6 +10273,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     completedAt: new Date(),
                     technician: technicianName
                 });
+                sendCustomerSmsFor('not-today', orderId);
                 await tgMuted(`
                 📝 *ዛሬ አይመቻቸውም!*
                 🆔 *ትዕዛዝ:* #${orderId.substring(0,8)}
@@ -10227,6 +10299,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     completedAt: new Date(),
                     technician: technicianName
                 });
+                sendCustomerSmsFor('other', orderId);
                 await tgMuted(`
                 📌 *ሌላ ምክንያት!*
                 🆔 *ትዕዛዝ:* #${orderId.substring(0,8)}
@@ -10260,6 +10333,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     returnReason: reason,
                     returnedAt: new Date()
                 });
+                sendCustomerSmsFor('return-job', orderId);
                 db.collection('activity').add({
                     user: technicianName,
                     action: 'return_order',
@@ -10299,6 +10373,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     completedAt: new Date(),
                     technician: technicianName
                 });
+                sendCustomerSmsFor('no-answer', orderId);
                 db.collection('activity').add({
                     user: technicianName,
                     action: 'phone_no_answer',
@@ -11404,7 +11479,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     })));
                 } catch (pushErr) { console.warn('Report admin push queue failed (non-fatal)', pushErr); }
                 // 🔔 ለስራ መዳቢ (ሪፖርት ማጽደቅ የሚጠብቅ) ማሳወቂያ
-                try { callWorker('pushNotify', { audience: ['finance'], title: `📋 አዲስ ሪፖርት — ${technicianName}`, body: `ተሰርቷል ${completedCount} | አልተሰራም ${notCompletedCount} | ገቢ ${totalIncome} ብር`, url: new URL('finance.html', location.href).href }).catch(() => {}); } catch (e) {}
+                try { callWorker('notifyDispatchers', { audience: 'finance', text: '📋 አዲስ ሪፖርት ማጽደቅ ይጠይቃል', smsText: 'አዲስ ሪፖርት ማጽደቅ ይጠይቃል' }).catch(() => {}); } catch (e) {}
 
                 const photosTgOk = await tgPhotoJob;
                 const storageRes = await storageJob;
