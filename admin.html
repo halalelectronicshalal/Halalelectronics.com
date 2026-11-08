@@ -1632,7 +1632,7 @@
                 <div class="card">
                     <div class="card-header">
                         <h3><i class="fas fa-users"></i> 👤 ደንበኞች</h3>
-                        <button class="btn btn-primary btn-sm" onclick="showAddCustomerModal()"><i class="fas fa-plus"></i> አዲስ</button>
+                        <div class="flex" style="gap:6px;"><button class="btn btn-secondary btn-sm" onclick="showBulkSmsModal()"><i class="fas fa-sms"></i> 📢 ለሁሉም SMS</button><button class="btn btn-primary btn-sm" onclick="showAddCustomerModal()"><i class="fas fa-plus"></i> አዲስ</button></div>
                     </div>
                     <div class="filters" style="margin-bottom:16px;">
                         <input type="text" id="customerSearch" placeholder="🔍 ፈልግ (ስም ወይም ስልክ)" style="min-width:200px;" />
@@ -2031,6 +2031,17 @@
                     <div class="card-header"><h3><i class="fas fa-download"></i> 💾 ውሂብ አውርድ</h3></div>
                     <p class="text-muted" style="margin-bottom:12px; font-size:0.88rem;">ትዕዛዞች፣ ደንበኞች፣ ቴክኒሻኖች፣ እቃዎች፣ ፋይናንስ እና ዋራንቲዎችን በአንድ JSON ፋይል ያወርዳል።</p>
                     <button class="btn btn-outline" onclick="exportAllData()"><i class="fas fa-download"></i> ውሂብ አውርድ</button>
+                </div>
+                <div class="card" id="customerSmsCard">
+                    <div class="card-header"><h3><i class="fas fa-sms"></i> 📱 ለደንበኛ ራስ-ሰር SMS (አጠናቅ ፊደሎች)</h3></div>
+                    <p class="text-muted" style="margin-bottom:12px; font-size:0.88rem; line-height:1.6;">
+                        ቴክኒሻን በ «አጠናቅ» ታብ አንዱን ፊደል ሲያስገባ ለደንበኛው ይህ ጽሁፍ በራሱ ይላካል። ፊደሉን ለማጥፋት ምልክቱን ያውጡ። ቃላት፦
+                        <code>{ደንበኛ}</code> <code>{መሳሪያ}</code> <code>{ቀን}</code> <code>{ሰዓት}</code> <code>{ቴክኒሻን}</code> <code>{ቢሮ}</code>
+                        (<code>{ቀን}</code> እና <code>{ሰዓት}</code> ለ «ሐ. ለሌላ ቀን» ብቻ ይሞላሉ)። እያንዳንዱ SMS ክፍያ አለው — አጭር ያድርጉ።
+                    </p>
+                    <div class="form-group"><label>📞 የቢሮ ስልክ ({ቢሮ})</label><input type="text" id="custSmsOffice" maxlength="20" /></div>
+                    <div id="custSmsItems"></div>
+                    <button class="btn btn-primary" id="custSmsSaveBtn" onclick="saveCustomerSmsSettings()"><i class="fas fa-save"></i> አስቀምጥ</button>
                 </div>
                 <div class="card">
                     <div class="card-header"><h3><i class="fas fa-medal"></i> 🏅 የቴክኒሻን ደረጃ (ራንክ) እንዳዲስ አስጀምር</h3></div>
@@ -4459,6 +4470,7 @@
         }
         function loadDailyReports() {
             listenRankReset();
+            listenCustomerSms();
             db.collection('dailyReports').onSnapshot((snapshot) => {
                 allDailyReports = [];
                 snapshot.forEach(doc => {
@@ -7025,6 +7037,153 @@ ${locationLine}
         // ============================================================
         // RENDER CUSTOMERS
         // ============================================================
+        // ============================================================
+        // 📱 ለደንበኞች SMS — ለአንድ ደንበኛ ወይም ለሁሉም (በ Worker በኩል፤ አድሚን ብቻ)
+        // ============================================================
+        function smsInfo(text) {
+            const len = (text || '').length;
+            const uni = /[^\x00-\x7F]/.test(text || '');   // አማርኛ → Unicode: 70 ፊደል በአንድ ክፍል (67 ሲረዝም)
+            const per = len <= (uni ? 70 : 160) ? (uni ? 70 : 160) : (uni ? 67 : 153);
+            return { len, parts: len ? Math.ceil(len / per) : 0, uni };
+        }
+        function smsCounterHtml(id) {
+            return `<div class="text-muted" id="${id}" style="font-size:0.8rem; margin-top:4px;">0 ፊደል</div>`;
+        }
+        function updateSmsCounter(taId, counterId) {
+            const i = smsInfo(document.getElementById(taId).value);
+            document.getElementById(counterId).textContent = `${i.len} ፊደል · ${i.parts} የ SMS ክፍል${i.uni ? ' (አማርኛ — 70 ፊደል በክፍል)' : ''}`;
+        }
+        function showCustomerSmsModal(phone) {
+            const c = allCustomers.find(x => x.id === phone || x.phone === phone);
+            if (!c) return;
+            openModal('📱 SMS ወደ ' + (c.name || c.phone), `
+                <div class="form-group"><label>ተቀባይ</label><input type="text" value="${escHtml((c.name || '') + ' — ' + (c.phone || ''))}" disabled /></div>
+                <div class="form-group"><label>መልእክት</label><textarea id="custSmsText" rows="5" maxlength="600" oninput="updateSmsCounter('custSmsText','custSmsCount')" placeholder="መልእክትዎን ይጻፉ..."></textarea>${smsCounterHtml('custSmsCount')}</div>`,
+                `<button class="btn btn-secondary" onclick="closeModal()">ሰርዝ</button> <button class="btn btn-success" id="custSmsBtn" onclick="sendCustomerSms('${escHtml(c.id)}')"><i class="fas fa-paper-plane"></i> ላክ</button>`);
+        }
+        async function sendCustomerSms(phone) {
+            const c = allCustomers.find(x => x.id === phone || x.phone === phone);
+            const text = document.getElementById('custSmsText').value.trim();
+            const to = toAfroMessagePhone(c && c.phone);
+            if (!text) { showToast('መልእክት ይጻፉ', 'error'); return; }
+            if (!/^251[79]\d{8}$/.test(to || '')) { showToast('የስልክ ቁጥሩ ትክክል አይደለም', 'error'); return; }
+            const btn = document.getElementById('custSmsBtn'); btn.disabled = true;
+            try {
+                const r = await callWorker('sendSms', { phone: to, message: text });
+                if (!(r && (r.success || r.acknowledge === 'success'))) throw new Error((r && (r.message || r.error)) || 'አልተላከም');
+                db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'customer_sms', details: `ለ ${c.name || ''} (${c.phone}) SMS ተላከ`, timestamp: new Date() }).catch(() => {});
+                showToast('✅ SMS ተልኳል', 'success'); closeModal();
+            } catch (e) { btn.disabled = false; showToast('❌ ' + (e.message || e), 'error'); }
+        }
+        function bulkSmsRecipients() {
+            const seen = new Set(), out = [];
+            allCustomers.forEach(c => {
+                const p = toAfroMessagePhone(c.phone);
+                if (/^251[79]\d{8}$/.test(p || '') && !seen.has(p)) { seen.add(p); out.push({ name: c.name || '', phone: p }); }
+            });
+            return out;
+        }
+        function showBulkSmsModal() {
+            const n = bulkSmsRecipients().length;
+            if (!n) { showToast('ትክክለኛ ስልክ ያለው ደንበኛ የለም', 'error'); return; }
+            openModal('📢 ለሁሉም ደንበኞች SMS', `
+                <div style="padding:10px; border-radius:8px; background:#fff7e6; border:1px solid #f59e0b; margin-bottom:12px; font-size:0.85rem;">
+                    ⚠️ መልእክቱ ለ <strong>${n}</strong> ደንበኞች ይላካል። እያንዳንዱ SMS ክፍያ አለው፤ አንዴ ከተላከ መመለስ አይቻልም።
+                </div>
+                <div class="form-group"><label>መልእክት</label><textarea id="bulkSmsText" rows="6" maxlength="600" oninput="updateSmsCounter('bulkSmsText','bulkSmsCount')" placeholder="ለምሳሌ፦ ሀላል ኤሌክትሮኒክስ — ..."></textarea>${smsCounterHtml('bulkSmsCount')}</div>
+                <div id="bulkSmsProgress" class="text-muted" style="font-size:0.85rem;"></div>`,
+                `<button class="btn btn-secondary" id="bulkSmsCancel" onclick="closeModal()">ሰርዝ</button> <button class="btn btn-danger" id="bulkSmsBtn" onclick="sendBulkSms()"><i class="fas fa-paper-plane"></i> ለ ${n} ደንበኞች ላክ</button>`);
+        }
+        async function sendBulkSms() {
+            const text = document.getElementById('bulkSmsText').value.trim();
+            if (!text) { showToast('መልእክት ይጻፉ', 'error'); return; }
+            const list = bulkSmsRecipients();
+            const info = smsInfo(text);
+            if (!confirm(`ይህ መልእክት ለ ${list.length} ደንበኞች ይላካል (${info.parts} የ SMS ክፍል × ${list.length} = ${info.parts * list.length} ክፍያ)።\n\nእርግጠኛ ነዎት?`)) return;
+            const btn = document.getElementById('bulkSmsBtn'), cancel = document.getElementById('bulkSmsCancel'), prog = document.getElementById('bulkSmsProgress');
+            btn.disabled = true; cancel.disabled = true; document.getElementById('bulkSmsText').disabled = true;
+            let sent = 0, failed = [];
+            const BATCH = 40;
+            try {
+                for (let i = 0; i < list.length; i += BATCH) {
+                    const chunk = list.slice(i, i + BATCH);
+                    prog.textContent = `በመላክ ላይ... ${Math.min(i + BATCH, list.length)} / ${list.length}`;
+                    try {
+                        const r = await callWorker('sendBulkSms', { phones: chunk.map(x => x.phone), message: text });
+                        if (!r || !r.success) throw new Error((r && r.message) || 'አልተላከም');
+                        sent += r.sent || 0; failed = failed.concat(r.failed || []);
+                    } catch (e) { failed = failed.concat(chunk.map(x => x.phone)); console.warn('bulk sms batch failed', e); }
+                }
+            } finally { cancel.disabled = false; cancel.textContent = 'ዝጋ'; }
+            db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'bulk_sms', details: `ለደንበኞች በጅምላ SMS፦ ${sent} ተላከ፣ ${failed.length} አልተላከም`, timestamp: new Date() }).catch(() => {});
+            prog.innerHTML = `✅ <strong>${sent}</strong> ተልኳል` + (failed.length ? ` · ❌ <strong>${failed.length}</strong> አልተላከም<br><span style="font-size:0.75rem; word-break:break-all;">${failed.join(', ')}</span>` : '');
+            btn.style.display = 'none';
+            showToast(failed.length ? `ተልኳል ${sent}፤ አልተላከም ${failed.length}` : `✅ ለ ${sent} ደንበኞች ተልኳል`, failed.length ? 'error' : 'success');
+        }
+
+
+        // ============================================================
+        // 📱 ለደንበኛ ራስ-ሰር SMS (በ "አጠናቅ" ፊደሎች) — ጽሁፉ በአድሚን ሲቲንግ ይስተካከላል (settings/customer_sms)
+        // ቃላት፦ {ደንበኛ} {መሳሪያ} {ቀን} {ሰዓት} {ቴክኒሻን} {ቢሮ}
+        // ============================================================
+        const CUSTOMER_SMS_DEFAULTS = {
+            officePhone: '0939165164',
+            items: {
+                'done':             { label: 'ሀ. ተሰራ',              enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ የ{መሳሪያ} ጥገናዎ ተጠናቅቋል። ስለመረጡን እናመሰግናለን!' },
+                'price-not-agreed': { label: 'ለ. ዋጋ አልተስማሙም',     enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ስለ ጊዜዎ እናመሰግናለን። በዋጋ ባለመስማማታችን ስራው አልተሰራም። ሀሳብዎን ከቀየሩ ይደውሉልን።' },
+                'another-day':      { label: 'ሐ. ለሌላ ቀን',           enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ የ{መሳሪያ} ጥገናዎ ወደ {ቀን} ሰዓት {ሰዓት} ተቀይሯል። ቴክኒሻን {ቴክኒሻን} ይመጣል። ለጥያቄ፦ {ቢሮ}' },
+                'not-today':        { label: 'መ. ዛሬ አይመቻቸውም',     enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ዛሬ ለእርስዎ እንደማይመች ተረድተናል። ሲመችዎ ቀን ለመቀየር ይደውሉልን።' },
+                'other':            { label: 'ሠ. ሌላ',                enabled: false, text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ስለ {መሳሪያ} ጥገናዎ ቢሯችን በቅርቡ ያነጋግርዎታል።' },
+                'return-job':       { label: 'ረ. ስራ መልስ',           enabled: false, text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ስለ {መሳሪያ} ጥገናዎ ቢሯችን በቅርቡ ያነጋግርዎታል።' },
+                'no-answer':        { label: 'ስልክ አያነሳም',          enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ለጥገና ስንደውልልዎ አላገኘንዎትም። እባክዎ ሲመችዎ ይደውሉልን።' }
+            }
+        };
+
+        let custSmsLoaded = null;
+        function renderCustomerSmsForm() {
+            const box = document.getElementById('custSmsItems'); if (!box) return;
+            const cfg = custSmsLoaded || CUSTOMER_SMS_DEFAULTS;
+            document.getElementById('custSmsOffice').value = cfg.officePhone || '';
+            box.innerHTML = Object.keys(CUSTOMER_SMS_DEFAULTS.items).map(k => {
+                const d = CUSTOMER_SMS_DEFAULTS.items[k], v = (cfg.items && cfg.items[k]) || d;
+                return `<div style="border:1px solid var(--border); border-radius:10px; padding:10px; margin-bottom:10px;">
+                    <label style="display:flex; align-items:center; gap:8px; font-weight:700;"><input type="checkbox" id="custSmsOn_${k}" style="width:auto;" ${v.enabled ? 'checked' : ''} /> ${d.label}</label>
+                    <textarea id="custSmsTxt_${k}" rows="3" maxlength="600" style="margin-top:6px;" oninput="updateSmsCounter('custSmsTxt_${k}','custSmsCnt_${k}')">${escHtml(v.text || '')}</textarea>
+                    ${smsCounterHtml('custSmsCnt_' + k)}
+                </div>`;
+            }).join('');
+            Object.keys(CUSTOMER_SMS_DEFAULTS.items).forEach(k => { try { updateSmsCounter('custSmsTxt_' + k, 'custSmsCnt_' + k); } catch (e) {} });
+        }
+        function listenCustomerSms() {
+            try {
+                db.collection('settings').doc('customer_sms').onSnapshot((doc) => {
+                    const d = doc.exists ? doc.data() : null;
+                    const cfg = { officePhone: (d && d.officePhone) || CUSTOMER_SMS_DEFAULTS.officePhone, items: {} };
+                    Object.keys(CUSTOMER_SMS_DEFAULTS.items).forEach(k => {
+                        const v = d && d.items && d.items[k];
+                        cfg.items[k] = { enabled: v && typeof v.enabled === 'boolean' ? v.enabled : CUSTOMER_SMS_DEFAULTS.items[k].enabled, text: v && typeof v.text === 'string' ? v.text : CUSTOMER_SMS_DEFAULTS.items[k].text };
+                    });
+                    custSmsLoaded = cfg;
+                    const ae = document.activeElement;
+                    if (!(ae && ae.closest && ae.closest('#custSmsItems'))) renderCustomerSmsForm();
+                }, (e) => { console.warn('customer_sms listen failed', e); renderCustomerSmsForm(); });
+            } catch (e) { console.warn(e); renderCustomerSmsForm(); }
+        }
+        async function saveCustomerSmsSettings() {
+            const btn = document.getElementById('custSmsSaveBtn'); btn.disabled = true;
+            try {
+                await heEnsureAdminAuth();
+                const items = {};
+                Object.keys(CUSTOMER_SMS_DEFAULTS.items).forEach(k => {
+                    items[k] = { enabled: document.getElementById('custSmsOn_' + k).checked, text: document.getElementById('custSmsTxt_' + k).value.trim() };
+                });
+                await db.collection('settings').doc('customer_sms').set({ officePhone: document.getElementById('custSmsOffice').value.trim(), items, updatedAt: new Date() }, { merge: true });
+                db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'customer_sms_settings', details: 'የደንበኛ ራስ-ሰር SMS ጽሁፎች ተስተካክለዋል', timestamp: new Date() }).catch(() => {});
+                showToast('✅ ተቀምጧል', 'success');
+            } catch (e) { showToast('❌ ' + (e.message || e), 'error'); }
+            finally { btn.disabled = false; }
+        }
+
         function renderCustomers() {
             const search = document.getElementById('customerSearch').value.toLowerCase();
             const body = document.getElementById('customersBody');
@@ -7053,6 +7212,7 @@ ${locationLine}
                     <td>${formatEthDate(lastDate)}</td>
                     <td>
                         <button class="btn btn-xs btn-primary" onclick="viewCustomer('${c.id}')"><i class="fas fa-eye"></i></button>
+                        <button class="btn btn-xs btn-success" title="SMS ላክ" onclick="showCustomerSmsModal('${c.id}')"><i class="fas fa-sms"></i></button>
                     </td>
                 </tr>`;
             });
