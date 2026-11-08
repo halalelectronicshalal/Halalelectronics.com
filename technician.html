@@ -2244,21 +2244,7 @@
                                     <label>🔢 የተሰራ ስራ ብዛት</label>
                                     <input type="number" id="doneRefCount" placeholder="0" inputmode="numeric" min="1" />
                                 </div>
-                                <div class="sub-row">
-                                    <label>🔧 መሳሪያ</label>
-                                    <select id="doneRefAppliance">
-                                        <option value="">መሳሪያ ይምረጡ</option>
-                                        <option value="የልብስ ማጠቢያ ማሽን">የልብስ ማጠቢያ ማሽን</option>
-                                        <option value="ፍሪጅ">ፍሪጅ</option>
-                                        <option value="ቴሌቪዥን">ቴሌቪዥን</option>
-                                        <option value="ኦቭን">ኦቭን</option>
-                                        <option value="ቦይለር">ቦይለር</option>
-                                        <option value="Other">ሌላ</option>
-                                    </select>
-                                </div>
-                                <div class="sub-row" id="doneRefApplianceOtherRow" style="display:none;">
-                                    <input type="text" id="doneRefApplianceOther" placeholder="የመሳሪያውን ስም ይጻፉ" />
-                                </div>
+                                <div id="doneRefApplList"></div>
                                 <div class="sub-row">
                                     <label>📱 የደንበኛ ስልክ <span style="font-weight:400; font-size:0.75rem; color:var(--text-muted);">(አማራጭ)</span></label>
                                     <input type="tel" id="doneRefPhone" placeholder="09xxxxxxxx" inputmode="tel" maxlength="20" />
@@ -2286,21 +2272,7 @@
                                     <label>🔢 የተሰራ ስራ ብዛት</label>
                                     <input type="number" id="doneCorCount" placeholder="0" inputmode="numeric" min="1" />
                                 </div>
-                                <div class="sub-row">
-                                    <label>🔧 መሳሪያ</label>
-                                    <select id="doneCorAppliance">
-                                        <option value="">መሳሪያ ይምረጡ</option>
-                                        <option value="የልብስ ማጠቢያ ማሽን">የልብስ ማጠቢያ ማሽን</option>
-                                        <option value="ፍሪጅ">ፍሪጅ</option>
-                                        <option value="ቴሌቪዥን">ቴሌቪዥን</option>
-                                        <option value="ኦቭን">ኦቭን</option>
-                                        <option value="ቦይለር">ቦይለር</option>
-                                        <option value="Other">ሌላ</option>
-                                    </select>
-                                </div>
-                                <div class="sub-row" id="doneCorApplianceOtherRow" style="display:none;">
-                                    <input type="text" id="doneCorApplianceOther" placeholder="የመሳሪያውን ስም ይጻፉ" />
-                                </div>
+                                <div id="doneCorApplList"></div>
                                 <div class="sub-row">
                                     <label>📱 የደንበኛ ስልክ <span style="font-weight:400; font-size:0.75rem; color:var(--text-muted);">(አማራጭ)</span></label>
                                     <input type="tel" id="doneCorPhone" placeholder="09xxxxxxxx" inputmode="tel" maxlength="20" />
@@ -9836,8 +9808,9 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     const el = document.getElementById(p + k);
                     if (el) { el.addEventListener('input', () => techExtraUpdate(p)); el.addEventListener('change', () => techExtraUpdate(p)); }
                 });
-                const sel = document.getElementById(p + 'Appliance');
-                if (sel) sel.addEventListener('change', () => techExtraToggleOther(p));
+                const cnt = document.getElementById(p + 'Count');
+                if (cnt) { cnt.addEventListener('input', () => techExtraRenderAppl(p)); cnt.addEventListener('change', () => techExtraRenderAppl(p)); }
+                techExtraRenderAppl(p);
                 techExtraUpdate(p);
             });
         }
@@ -9870,14 +9843,36 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             el.textContent = net.toLocaleString() + ' ብር';
             el.style.color = net < 0 ? 'var(--emergency)' : 'var(--success)';
         }
-        function techExtraToggleOther(p) {
-            const on = document.getElementById(p + 'Appliance').value === 'Other';
-            document.getElementById(p + 'ApplianceOtherRow').style.display = on ? 'flex' : 'none';
-            if (!on) document.getElementById(p + 'ApplianceOther').value = '';
+        // 🔧 መሳሪያ — በስራ ብዛቱ ልክ አንድ መምረጫ (ለእያንዳንዱ ስራ)
+        const TECH_APPLIANCES = ['የልብስ ማጠቢያ ማሽን', 'ፍሪጅ', 'ቴሌቪዥን', 'ኦቭን', 'ቦይለር'];
+        function techExtraRenderAppl(p) {
+            const box = document.getElementById(p + 'ApplList'); if (!box) return;
+            const n = Math.min(50, Math.max(0, parseInt(document.getElementById(p + 'Count').value, 10) || 0));
+            const prev = [...box.querySelectorAll('.te-row')].map(r => ({ v: r.querySelector('select').value, o: r.querySelector('input').value }));
+            if (!n) { box.innerHTML = '<div class="sub-row"><small style="color:var(--text-muted);">🔧 የስራ ብዛት ሲጽፉ ለእያንዳንዱ ስራ መሳሪያ እዚህ ይመረጣል</small></div>'; return; }
+            let h = '';
+            for (let i = 0; i < n; i++) {
+                const pv = prev[i] || { v: '', o: '' };
+                h += `<div class="sub-row te-row">
+                    <label>🔧 መሳሪያ ${n > 1 ? (i + 1) + ' / ' + n : ''}</label>
+                    <select onchange="techExtraApplChange(this)">
+                        <option value="">መሳሪያ ይምረጡ</option>
+                        ${TECH_APPLIANCES.map(a => `<option value="${a}"${pv.v === a ? ' selected' : ''}>${a}</option>`).join('')}
+                        <option value="Other"${pv.v === 'Other' ? ' selected' : ''}>ሌላ</option>
+                    </select>
+                    <input type="text" placeholder="የመሳሪያውን ስም ይጻፉ" value="${(pv.o || '').replace(/"/g, '&quot;')}" style="margin-top:6px; display:${pv.v === 'Other' ? 'block' : 'none'};" />
+                </div>`;
+            }
+            box.innerHTML = h;
+        }
+        function techExtraApplChange(sel) {
+            const inp = sel.parentNode.querySelector('input');
+            inp.style.display = sel.value === 'Other' ? 'block' : 'none';
+            if (sel.value !== 'Other') inp.value = '';
         }
         function techExtraClear(p) {
-            ['Count', 'Appliance', 'ApplianceOther', 'Phone', 'Address', 'Income', 'Expense'].forEach(k => { const el = document.getElementById(p + k); if (el) el.value = ''; });
-            techExtraToggleOther(p);
+            ['Count', 'Phone', 'Address', 'Income', 'Expense'].forEach(k => { const el = document.getElementById(p + k); if (el) el.value = ''; });
+            techExtraRenderAppl(p);
             techExtraUpdate(p);
         }
         // ባዶ ከሆነ {active:false}፣ ከተሞላ ግን ሁሉም ትክክል መሆኑን ያረጋግጣል
@@ -9885,23 +9880,30 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const d = TECH_EXTRA_DEFS[p];
             const g = k => document.getElementById(p + k);
             const countRaw = g('Count').value.trim();
-            const sel = g('Appliance').value;
-            const otherTxt = g('ApplianceOther').value.trim();
+            const rows = [...document.querySelectorAll('#' + p + 'ApplList .te-row')].map(r => ({ sel: r.querySelector('select').value, other: r.querySelector('input').value.trim() }));
+            const sel = rows.some(r => r.sel) ? 'x' : '';
             const incRaw = g('Income').value.trim();
             const expRaw = g('Expense').value.trim();
             const phoneRaw = (g('Phone') ? g('Phone').value : '').trim(), addrRaw = (g('Address') ? g('Address').value : '').trim();
             if (!countRaw && !sel && !incRaw && !expRaw && !phoneRaw && !addrRaw) return { active: false };
             const count = parseInt(countRaw, 10);
             if (!(count >= 1)) return { active: true, error: `${d.label}፦ የተሰራ ስራ ብዛት ያስገቡ` };
-            if (!sel) return { active: true, error: `${d.label}፦ መሳሪያ ይምረጡ` };
-            if (sel === 'Other' && !otherTxt) return { active: true, error: `${d.label}፦ የመሳሪያውን ስም ይጻፉ` };
+            if (rows.length !== count) return { active: true, error: `${d.label}፦ ለእያንዳንዱ ስራ መሳሪያ ይምረጡ` };
+            const bad = rows.findIndex(r => !r.sel);
+            if (bad >= 0) return { active: true, error: `${d.label}፦ መሳሪያ ${bad + 1} ይምረጡ` };
+            const badO = rows.findIndex(r => r.sel === 'Other' && !r.other);
+            if (badO >= 0) return { active: true, error: `${d.label}፦ የመሳሪያ ${badO + 1} ስም ይጻፉ` };
+            const appliances = rows.map(r => r.sel === 'Other' ? r.other : r.sel);
+            const tally = {}; appliances.forEach(a => { tally[a] = (tally[a] || 0) + 1; });
+            const applianceText = Object.keys(tally).map(a => `${a} ×${tally[a]}`).join('፣ ');
+            const applianceNames = Object.keys(tally).join('፣ ');
             const income = parseFloat(incRaw) || 0;
             const expense = parseFloat(expRaw) || 0;
             if (income < 0 || expense < 0) return { active: true, error: `${d.label}፦ ገቢ/ወጪ ከ0 በታች መሆን አይችልም` };
             const phone = (g('Phone') ? g('Phone').value : '').trim();
             const address = (g('Address') ? g('Address').value : '').trim();
             if (phone && !/^[0-9+\-\s()]{7,20}$/.test(phone)) return { active: true, error: `${d.label}፦ የደንበኛ ስልክ ቁጥር ትክክል አይደለም` };
-            return { active: true, def: d, count, appliance: sel === 'Other' ? otherTxt : sel, phone, address, income, expense, staffShare: income - expense };
+            return { active: true, def: d, count, appliance: applianceNames, appliances, applianceText, phone, address, income, expense, staffShare: income - expense };
         }
         // ሪፖርት ውስጥ በራሱ እንዲገባ እንደ ተጠናቀቀ ስራ (መለያ: ሪፈራል/እርማት) ይመዘገባል
         function techExtraWrites(x, today) {
@@ -9913,13 +9915,14 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 phone: x.phone || '',
                 address: x.address || '',
                 appliance: x.appliance,
+                appliances: x.appliances || [],
                 problem: label,
                 status: 'Completed',
                 technician: technicianName,
                 technicianId: technicianId || '',
                 price: x.income,
                 expense: x.expense,
-                expenseNote: `${label} — ${x.appliance}`,
+                expenseNote: `${label} — ${x.applianceText}`,
                 netIncome: x.staffShare,
                 staffShare: x.staffShare,
                 jobCount: x.count,
@@ -9932,11 +9935,11 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 completedAt: now
             });
             const txI = x.income > 0 ? db.collection('transactions').add({
-                description: `${label}: ${x.appliance} × ${x.count}`,
+                description: `${label}: ${x.applianceText}`,
                 amount: x.income, type: 'income', staff: technicianName, date: today, workTag: x.def.tag, createdAt: now
             }) : Promise.resolve();
             const txE = x.expense > 0 ? db.collection('transactions').add({
-                description: `ወጪ (${label}): ${x.appliance} × ${x.count}`,
+                description: `ወጪ (${label}): ${x.applianceText}`,
                 amount: x.expense, type: 'expense', staff: technicianName, date: today, workTag: x.def.tag, createdAt: now
             }) : Promise.resolve();
             return [orderP, txI, txE];
@@ -10052,7 +10055,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     user: technicianName,
                     action: 'complete_job',
                     details: (skipMain ? '' : `ስራ #${orderId.substring(0,8)} ተጠናቋል, ዋጋ ${priceNum} - ወጪ ${expenseNum} = ገቢ ${netIncome} ብር`)
-                        + activeExtras.map(x => `${skipMain ? '' : ' | '}${x.def.label}: ${x.appliance} × ${x.count}, ገቢ ${x.income} - ወጪ ${x.expense} = ${x.staffShare} ብር`).join(''),
+                        + activeExtras.map(x => `${skipMain ? '' : ' | '}${x.def.label}: ${x.applianceText} (${x.count} ስራ), ገቢ ${x.income} - ወጪ ${x.expense} = ${x.staffShare} ብር`).join(''),
                     timestamp: new Date()
                 }).catch(() => {});
                 // ✅ ስራ ሲጠናቀቅ ወደ ቴሌግራም አይላክም (ሪፖርት ብቻ ይላካል)
