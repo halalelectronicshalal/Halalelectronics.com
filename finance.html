@@ -639,6 +639,7 @@ async function unlockFinance() {
         updateFinanceStats();
         renderTransactions();
         try { showTechIncomeSummary(); } catch (e) { console.warn('techIncomeSummary render failed', e); }
+        try { renderPendingReports(); } catch (e) { console.warn('pending reports failed', e); }
         showToast('🔓 ፋይናንስ ተከፍቷል!', 'success');
     } else {
         error.style.display = 'block';
