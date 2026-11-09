@@ -169,7 +169,7 @@ HE.boot(() => {
     ['txDesc', 'txAmount'].forEach(id => document.getElementById(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') addTransaction(); }));
     db.collection('transactions').orderBy('createdAt', 'desc').limit(200).onSnapshot((snap) => {
         recentTx = [];
-        snap.forEach(doc => { const d = doc.data(); d.id = doc.id; recentTx.push(d); });
+        snap.forEach(doc => { const d = doc.data(); if (d.pending === true) return; d.id = doc.id; recentTx.push(d); });
         if (isFinanceUnlocked) renderRecent();
     }, (e) => console.warn('transactions listener', e));
 }, { title: 'አዲስ ግቤት — የአድሚን መግቢያ', page: 'newEntry' });
