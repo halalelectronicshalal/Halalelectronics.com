@@ -205,6 +205,8 @@
 let allTransactions = [];
 let allDebts = [];
 let allDailyReports = [];
+// ✅ የገቢ/ወጪ ስሌት ውስጥ የሚገቡት በአድሚን የጸደቁ ሪፖርቶች ብቻ ናቸው
+function approvedReports() { return (allDailyReports || []).filter(r => r.approved === true); }
 let allOrders = [];          // ለ "የዕለቱ ጠቅላላ እንቅስቃሴ" ብቻ
 let isFinanceUnlocked = false;
 window._techSummaryCustomRange = window._techSummaryCustomRange || { start: '', end: '' };
@@ -254,7 +256,7 @@ function showTechIncomeSummary(rangeFilter, groupBy) {
         endKey = window._techSummaryCustomRange.end || null;
     }
 
-    const relevant = allDailyReports.filter(r => {
+    const relevant = approvedReports().filter(r => {
         if (!r.dateKey) return false;
         if (startKey && r.dateKey < startKey) return false;
         if (endKey && r.dateKey > endKey) return false;
@@ -399,7 +401,7 @@ function applyTechSummaryCustomRange() {
 
 // ✅ NEW: እያንዳንዱን ቴክኒሻን ሪፖርት ዝርዝር ማየት + የተሳሳተ ሪፖርት ማረሚያ (edit)
 function viewTechIncomeDetail(techKey) {
-    const reports = allDailyReports
+    const reports = approvedReports()
         .filter(r => (r.technicianId || r.technicianName) === techKey)
         .slice()
         .sort((a, b) => (b.dateKey || '').localeCompare(a.dateKey || ''));
@@ -725,7 +727,7 @@ function updateFinanceStats() {
     const collected = sum(allDebts.filter(d => d.type !== 'payable' && d.status === 'paid'), d => d.amount);
     const paidOut = sum(allDebts.filter(d => d.type === 'payable' && d.status === 'paid'), d => d.amount);
     // 👷 ለሰራተኛ የተሰጠ ድርሻ ወደ ድርጅቱ የገባ አይደለም → ከተጣራ ትርፍ ይቀነሳል
-    const techShare = sum(allDailyReports, r => r.techShareAmount);
+    const techShare = sum(approvedReports(), r => r.techShareAmount);
 
     const income = txIncome + collected;      // ጠቅላላ የገባ (ብድር የተሰበሰበን ጨምሮ)
     const expense = txExpense + paidOut;      // ጠቅላላ ወጪ (የከፈልነውን ብድር ጨምሮ)
@@ -911,7 +913,7 @@ function exportFinanceCSV() {
     }).sort((a, b) => finToKey(a.createdAt).localeCompare(finToKey(b.createdAt)));
 
     // 3) የቴክኒሻን ዕለታዊ ሪፖርት
-    const reports = allDailyReports.filter(r => r.dateKey && finInRange(r.dateKey, startDate, endDate))
+    const reports = approvedReports().filter(r => r.dateKey && finInRange(r.dateKey, startDate, endDate))
         .sort((a, b) => a.dateKey.localeCompare(b.dateKey) || String(a.technicianName).localeCompare(String(b.technicianName)));
 
     if (!txs.length && !debts.length && !reports.length) {
@@ -991,7 +993,7 @@ function collectDailyActivity(dk) {
         txs: allTransactions.filter(tx => finTxKey(tx) === dk),
         debtsNew: allDebts.filter(d => finToKey(d.createdAt) === dk),
         debtsPaid: allDebts.filter(d => d.status === 'paid' && finToKey(d.paidAt) === dk),
-        reports: allDailyReports.filter(r => r.dateKey === dk),
+        reports: approvedReports().filter(r => r.dateKey === dk),
         orderCreated, orderDone
     };
 }
