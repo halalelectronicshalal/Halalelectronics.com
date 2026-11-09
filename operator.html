@@ -305,7 +305,7 @@ db.settings({ experimentalAutoDetectLongPolling: true, merge: true });
                 'pending': '⏳ አካውንትዎ ገና በአስተዳዳሪ አልፀደቀም',
                 'rejected': '⛔ ምዝገባዎ ውድቅ ተደርጓል',
                 'inactive': '⛔ አካውንትዎ ተዘግቷል',
-                'locked': '⛔ ብዙ ጊዜ ተሳስተዋል፤ ከ15 ደቂቃ በኋላ ይሞክሩ',
+                'locked': '⛔ ዛሬ ብዙ ጊዜ ተሳስተዋል፤ ነገ ይሞክሩ ወይም "የይለፍ ቃል ረሳሁ" ይጠቀሙ',
                 'too-many-attempts': '⛔ ብዙ ሙከራ ተደርጓል፤ ጥቂት ቆይተው ይሞክሩ',
                 'wrong-portal': role === 'admin'
                     ? '⛔ ይህ የአድሚን ገፅ ነው። ቴክኒሻን ከሆኑ የቴክኒሻን ሊንክ (technician.html) ይጠቀሙ'
@@ -368,10 +368,11 @@ $('loginForm').addEventListener('submit', async e => {
   const pw = $('loginPass').value;
   const err = $('loginErr'); err.textContent = '';
   if (!phone || !pw) { err.textContent = '❌ ስልክ ቁጥር እና የይለፍ ቃል ያስፈልጋል'; return; }
-  const btn = $('loginBtn'); btn.disabled = true;
+  const btn = $('loginBtn'); if (btn.disabled) return; btn.disabled = true;
+  let lockSecs = 0;
   try {
     const res = await callWorker('login', { phone, password: pw, role: 'operator' });
-    if (!res || !res.ok) err.textContent = heLoginErrorText(res && res.error, 'operator');
+    if (!res || !res.ok) { err.textContent = heLoginErrorText(res && res.error, 'operator'); if (res && res.error === 'too-many-attempts') lockSecs = parseInt(res.retryAfter, 10) || 60; }
     else {
       await heSignInWithResult(res);
       me = { id: res.staff.id, name: res.staff.name || 'ኦፕሬተር' };
@@ -385,7 +386,28 @@ $('loginForm').addEventListener('submit', async e => {
     }
   } catch (ex) { err.textContent = '❌ ' + ex.message; }
   btn.disabled = false;
+  if (lockSecs) heLoginCountdown(btn, err, lockSecs);
 });
+// ⏱️ ብዙ ሙከራ ሲደረግ የ1 ደቂቃ ቆጠራ ያሳያል፤ ሲጨርስ ቁልፉ በራሱ ይከፈታል
+        var _heLockTimer = null;
+        function heLoginCountdown(btn, errEl, secs) {
+            clearInterval(_heLockTimer);
+            var idle = btn.innerHTML;
+            var left = Math.max(1, Math.min(parseInt(secs, 10) || 60, 600));
+            var tick = function () {
+                if (left <= 0) {
+                    clearInterval(_heLockTimer);
+                    errEl.textContent = '✅ አሁን እንደገና መሞከር ይችላሉ';
+                    btn.disabled = false; btn.innerHTML = idle;
+                    return;
+                }
+                errEl.textContent = '⛔ ብዙ ሙከራ ተደርጓል፤ ከ ' + left + ' ሰከንድ በኋላ ይሞክሩ';
+                btn.disabled = true; btn.innerHTML = '<i class="fas fa-clock"></i> ' + left;
+                left--;
+            };
+            tick();
+            _heLockTimer = setInterval(tick, 1000);
+        }
 async function logout() {
   if (unsub) { unsub(); unsub = null; }
   ['opId', 'opName', 'he_op_last_active', 'he_op_locked'].forEach(k => localStorage.removeItem(k));
