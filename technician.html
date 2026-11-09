@@ -2721,13 +2721,33 @@
             heSetSession(res);
             if (res.firebaseToken) await firebase.auth().signInWithCustomToken(res.firebaseToken);
         }
+// ⏱️ ብዙ ሙከራ ሲደረግ የ1 ደቂቃ ቆጠራ ያሳያል፤ ሲጨርስ ቁልፉ በራሱ ይከፈታል
+        var _heLockTimer = null;
+        function heLoginCountdown(btn, errEl, secs) {
+            clearInterval(_heLockTimer);
+            var idle = btn.innerHTML;
+            var left = Math.max(1, Math.min(parseInt(secs, 10) || 60, 600));
+            var tick = function () {
+                if (left <= 0) {
+                    clearInterval(_heLockTimer);
+                    errEl.textContent = '✅ አሁን እንደገና መሞከር ይችላሉ';
+                    btn.disabled = false; btn.innerHTML = idle;
+                    return;
+                }
+                errEl.textContent = '⛔ ብዙ ሙከራ ተደርጓል፤ ከ ' + left + ' ሰከንድ በኋላ ይሞክሩ';
+                btn.disabled = true; btn.innerHTML = '<i class="fas fa-clock"></i> ' + left;
+                left--;
+            };
+            tick();
+            _heLockTimer = setInterval(tick, 1000);
+        }
         function heLoginErrorText(code, role) {
             const m = {
                 'invalid-credentials': '❌ ስልክ ቁጥር ወይም የይለፍ ቃል ትክክል አይደለም',
                 'pending': '⏳ አካውንትዎ ገና በአስተዳዳሪ አልፀደቀም',
                 'rejected': '⛔ ምዝገባዎ ውድቅ ተደርጓል',
                 'inactive': '⛔ አካውንትዎ ተዘግቷል',
-                'locked': '⛔ ብዙ ጊዜ ተሳስተዋል፤ ከ15 ደቂቃ በኋላ ይሞክሩ',
+                'locked': '⛔ ዛሬ ብዙ ጊዜ ተሳስተዋል፤ ነገ ይሞክሩ ወይም "የይለፍ ቃል ረሳሁ" ይጠቀሙ',
                 'too-many-attempts': '⛔ ብዙ ሙከራ ተደርጓል፤ ጥቂት ቆይተው ይሞክሩ',
                 'token-failed': '⛔ የአገልጋይ ቅንብር ችግር (Firebase ቶከን)፤ አድሚኑን ያነጋግሩ',
                 'wrong-portal': role === 'admin'
@@ -3306,6 +3326,7 @@
             const password = document.getElementById('loginPassword').value;
             const errorEl = document.getElementById('loginError');
             const btn = document.getElementById('loginBtn');
+            if (btn.disabled) return; // ቆጠራ ላይ ወይም በመላክ ላይ ከሆነ ድጋሚ አይላክም
 
             errorEl.classList.remove('show');
 
@@ -3318,6 +3339,7 @@
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> በመግባት ላይ...';
 
+            let lockSecs = 0;
             try {
                 const portal = APP_ROLE === 'admin' ? 'admin' : 'technician';
                 const res = await callWorker('login', { phone, password, role: portal });
@@ -3328,6 +3350,7 @@
                 } else {
                     errorEl.textContent = heLoginErrorText(res && res.error, portal);
                     errorEl.classList.add('show');
+                    if (res && res.error === 'too-many-attempts') lockSecs = parseInt(res.retryAfter, 10) || 60;
                 }
             } catch (error) {
                 errorEl.textContent = '❌ ' + error.message;
@@ -3336,6 +3359,7 @@
 
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> ግባ';
+            if (lockSecs) heLoginCountdown(btn, errorEl, lockSecs);
         });
 
         document.getElementById('loginPassword').addEventListener('keydown', function(e) {
@@ -11705,6 +11729,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
     (function(){
         var LANG_KEY = 'appLang';
         var T = {
+    "✅ አሁን እንደገና መሞከር ይችላሉ": "✅ You can try again now",
     "+ አዲስ ብድር/እዳ": "+ New Loan/Debt",
     "+ አዲስ ግቤት": "+ New Entry",
     "0 ስራዎች": "0 Jobs",
@@ -12261,6 +12286,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             [/^(\d+)\s*አዲስ ትዕዛዝ \(ገና ያልተመደበ\)$/, function(m,n){ return n + ' New Order(s) (Not Yet Assigned)'; }],
             [/^(\d+)\s*አዲስ ተመዝጋቢ \(ማጽደቅ ይጠብቃል\)$/, function(m,n){ return n + ' New Registrant(s) (Awaiting Approval)'; }],
             [/^(\d+)\s*ያልፀደቀ የቴክኒሻን ሪፖርት$/, function(m,n){ return n + ' Unapproved Technician Report(s)'; }],
+            [/^⛔ ብዙ ሙከራ ተደርጓል፤ ከ (\d+) ሰከንድ በኋላ ይሞክሩ$/, function(m,n){ return '⛔ Too many attempts; try again in ' + n + ' seconds'; }],
             [/^(\d+)\s*ዓመት$/, function(m,n){ return n + ' Year(s)'; }],
             [/^(\d+)\s*ወር$/, function(m,n){ return n + ' Month(s)'; }],
             [/^(\d+)\s*ቀን$/, function(m,n){ return n + ' Day(s)'; }]
