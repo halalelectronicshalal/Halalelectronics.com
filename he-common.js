@@ -52,13 +52,33 @@ async function heSignInWithResult(res) {
     heSetSession(res);
     if (res.firebaseToken) await firebase.auth().signInWithCustomToken(res.firebaseToken);
 }
+// ⏱️ ብዙ ሙከራ ሲደረግ የ1 ደቂቃ ቆጠራ ያሳያል፤ ሲጨርስ ቁልፉ በራሱ ይከፈታል
+var _heLockTimer = null;
+function heLoginCountdown(btn, errEl, secs) {
+    clearInterval(_heLockTimer);
+    var idle = btn.innerHTML;
+    var left = Math.max(1, Math.min(parseInt(secs, 10) || 60, 600));
+    var tick = function () {
+        if (left <= 0) {
+            clearInterval(_heLockTimer);
+            errEl.textContent = '✅ አሁን እንደገና መሞከር ይችላሉ';
+            btn.disabled = false; btn.innerHTML = idle;
+            return;
+        }
+        errEl.textContent = '⛔ ብዙ ሙከራ ተደርጓል፤ ከ ' + left + ' ሰከንድ በኋላ ይሞክሩ';
+        btn.disabled = true; btn.innerHTML = '<i class="fas fa-clock"></i> ' + left;
+        left--;
+    };
+    tick();
+    _heLockTimer = setInterval(tick, 1000);
+}
 function heLoginErrorText(code, role) {
     const m = {
         'invalid-credentials': '❌ ስልክ ቁጥር ወይም የይለፍ ቃል ትክክል አይደለም',
         'pending': '⏳ አካውንትዎ ገና በአስተዳዳሪ አልፀደቀም',
         'rejected': '⛔ ምዝገባዎ ውድቅ ተደርጓል',
         'inactive': '⛔ አካውንትዎ ተዘግቷል',
-        'locked': '⛔ ብዙ ጊዜ ተሳስተዋል፤ ከ15 ደቂቃ በኋላ ይሞክሩ',
+        'locked': '⛔ ዛሬ ብዙ ጊዜ ተሳስተዋል፤ ነገ ይሞክሩ ወይም "የይለፍ ቃል ረሳሁ" ይጠቀሙ',
         'too-many-attempts': '⛔ ብዙ ሙከራ ተደርጓል፤ ጥቂት ቆይተው ይሞክሩ',
         'token-failed': '⛔ የአገልጋይ ቅንብር ችግር (Firebase ቶከን)፤ አድሚኑን ያነጋግሩ',
         'wrong-portal': role === 'admin'
@@ -393,7 +413,9 @@ const HE = (() => {
         document.getElementById('heLoginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const err = document.getElementById('heLoginError'), btn = document.getElementById('heLoginBtn');
+            if (btn.disabled) return; // ቆጠራ ላይ ወይም በመላክ ላይ ከሆነ ድጋሚ አይላክም
             err.textContent = '';
+            let lockSecs = 0;
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> በመግባት ላይ...';
             try {
@@ -406,12 +428,14 @@ const HE = (() => {
                     if (page && !canOpen(res.staff, page)) showNoAccess(res.staff); else enter(res.staff);
                 } else {
                     err.textContent = LOGIN_ERR[res && res.error] || heLoginErrorText(res && res.error, 'pages');
+                    if (res && res.error === 'too-many-attempts') lockSecs = parseInt(res.retryAfter, 10) || 60;
                 }
             } catch (ex) {
                 err.textContent = '❌ ' + (ex && ex.message ? ex.message : 'መግባት አልተቻለም');
             }
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> ግባ';
+            if (lockSecs) heLoginCountdown(btn, err, lockSecs);
         });
 
         document.getElementById('heRegisterForm').addEventListener('submit', async (e) => {
