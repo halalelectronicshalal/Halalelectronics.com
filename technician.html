@@ -2571,9 +2571,9 @@
 
                         <!-- Final Question -->
                         <div class="field" style="margin-top:12px;">
-                            <label>1️⃣- ልክ ሙሉ የቀን ሪፖርት አድርገው ሲጨርሱ “ለነገ ስራ ዝግጁ ነህ” ሚል ጥያቄ</label>
+                            <label>ለነገ ስራ ትወጣለህ?</label>
                             <div style="display:flex; gap:12px;">
-                                <label><input type="radio" name="readyTomorrow" value="yes" /> ✅ አዎ</label>
+                                <label><input type="radio" name="readyTomorrow" value="yes" required /> ✅ አዎ</label>
                                 <label><input type="radio" name="readyTomorrow" value="no" /> ❌ አይ</label>
                             </div>
                         </div>
@@ -11277,6 +11277,12 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const expenseDetails = document.getElementById('reportExpenseDetails').value.trim();
             const remarks = document.getElementById('reportRemarks').value.trim();
             const readyTomorrow = document.querySelector('input[name="readyTomorrow"]:checked')?.value || '';
+            // ✅ ግዴታ: "ለነገ ስራ ትወጣለህ?" — አዎ ወይም አይ ካልተመረጠ ሪፖርቱ አይላክም
+            if (!readyTomorrow) {
+                showToast('⚠️ "ለነገ ስራ ትወጣለህ?" ለሚለው አዎ ወይም አይ ይምረጡ', 'error');
+                try { document.querySelector('input[name="readyTomorrow"]').scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+                return;
+            }
 
             // ✅ NEW: "የተላኩ ስራዎች ብዛት" ልክ የተመዘገቡ የስራ አይነቶች
             const workTypes = Array.from(document.querySelectorAll('.work-type-input'))
@@ -11705,7 +11711,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
     "0 ብር": "0 Birr",
     "1 ዓመት": "1 Year",
     "1️⃣ የተላኩ ስራዎች ብዛት": "1️⃣ Number of Jobs Sent",
-    "1️⃣- ልክ ሙሉ የቀን ሪፖርት አድርገው ሲጨርሱ “ለነገ ስራ ዝግጁ ነህ” ሚል ጥያቄ": "1️⃣- Right after completing the full daily report, a “Are you ready for tomorrow's work” prompt",
+    "ለነገ ስራ ትወጣለህ?": "Will you go to work tomorrow?",
     "2 ዓመት": "2 Years",
     "2️⃣ የተጠናቀቁ ስራዎች ብዛት": "2️⃣ Number of Completed Jobs",
     "3 ወር": "3 Months",
