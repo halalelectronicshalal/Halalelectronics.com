@@ -2597,9 +2597,9 @@
 
                         <!-- Final Question -->
                         <div class="field" style="margin-top:12px;">
-                            <label>1️⃣- ልክ ሙሉ የቀን ሪፖርት አድርገው ሲጨርሱ “ለነገ ስራ ዝግጁ ነህ” ሚል ጥያቄ</label>
+                            <label>ለነገ ስራ ትወጣለህ? <span style="color:#DC2626;">*</span></label>
                             <div style="display:flex; gap:12px;">
-                                <label><input type="radio" name="readyTomorrow" value="yes" /> ✅ አዎ</label>
+                                <label><input type="radio" name="readyTomorrow" value="yes" required /> ✅ አዎ</label>
                                 <label><input type="radio" name="readyTomorrow" value="no" /> ❌ አይ</label>
                             </div>
                         </div>
@@ -4380,6 +4380,10 @@
                     if (data.phone) customersFromDB[data.phone] = data;
                 });
                 mergeAndRenderCustomers();
+            }, (err) => {
+                // ቀድሞ ስህተቱ ዝም ብሎ ይዋጥ ነበር (ዝርዝሩ ባዶ ሆኖ ይቀር ነበር) — አሁን መንስኤው ይታያል
+                console.error('customers listener failed', err);
+                showToast('⚠️ የደንበኞች ዝርዝር ማንበብ አልተቻለም: ' + (err && err.message ? err.message : err), 'error');
             });
 
             db.collection('orders').onSnapshot((snapshot) => {
@@ -4538,6 +4542,7 @@
                 allTransactions = [];
                 snapshot.forEach(doc => {
                     const data = doc.data();
+                    if (data.pending === true) return; // ሪፖርት እስኪጸድቅ አይታይም
                     data.id = doc.id;
                     allTransactions.push(data);
                 });
@@ -4857,7 +4862,7 @@
                     <div>🏦 የተቀማጭ: ${n(r.deposited)} ብር</div>
                     ${r.expenseDetails ? `<div>🧾 ወጪ: ${escHtml(r.expenseDetails)}</div>` : ''}
                     <div>📝 ${n(r.remarks || r.notes)}</div>
-                    ${r.readyTomorrow ? `<div>✅ ለነገ ዝግጁ: ${r.readyTomorrow === 'yes' ? 'አዎ' : 'አይ'}</div>` : ''}
+                    ${r.readyTomorrow ? `<div>🚶 ለነገ ስራ ይወጣል: ${r.readyTomorrow === 'yes' ? 'አዎ' : 'አይ'}</div>` : ''}
                     ${r.photosPending ? '<div style="color:#b45309;">⏳ ፎቶዎች አሁንም እየተጫኑ ሊሆን ይችላል</div>' : ''}
                     ${gallery(r.warrantyPhotoURLs, '📸 ዋራንቲ ካርድ')}
                     ${gallery(r.receiptURLs, '🏦 የባንክ ደረሰኝ')}
@@ -6444,6 +6449,27 @@ ${locationLine}
             }
         }
 
+
+        // ✅ በቴክኒሻን የተመዘገቡ ገቢ/ወጪ (pending:true) ሪፖርቱ ሲጸድቅ ብቻ ወደ ዝርዝሩ ይገባሉ።
+        // ሪፖርቱ ከተላከ በኋላ የተመዘገቡ (ለቀጣይ ሪፖርት የሆኑ) አይለቀቁም።
+        async function releaseTechTransactions(report) {
+            if (!report) return 0;
+            const name = report.technicianName || report.technician;
+            if (!name) return 0;
+            const sub = report.submittedAt;
+            const cutoff = sub && sub.toDate ? sub.toDate().getTime() : Infinity;
+            const snap = await db.collection('transactions').where('pending', '==', true).where('staff', '==', name).get();
+            const batch = db.batch();
+            let n = 0;
+            snap.forEach(d => {
+                const c = d.data().createdAt;
+                const t = c && c.toDate ? c.toDate().getTime() : 0;
+                if (t <= cutoff) { batch.update(d.ref, { pending: false, releasedAt: new Date(), releasedByReport: report.id || '' }); n++; }
+            });
+            if (n) await batch.commit();
+            return n;
+        }
+
         async function approveReport(reportId, techId, fromCard) {
             try {
                 const report = allDailyReports.find(r => r.id === reportId);
@@ -6457,6 +6483,8 @@ ${locationLine}
                         lastApprovedDateKey: report ? report.dateKey : null
                     });
                 }
+                try { await releaseTechTransactions(report); }
+                catch (relErr) { console.error('release transactions failed', relErr); showToast('⚠️ ሪፖርቱ ጸድቋል፣ ነገር ግን ገቢ/ወጪ ወደ ዝርዝሩ ማስገባት አልተቻለም: ' + (relErr && relErr.message ? relErr.message : relErr), 'error'); }
                 await db.collection('activity').add({
                     user: 'አስተዳዳሪ',
                     action: 'approve_report',
@@ -7312,6 +7340,9 @@ ${locationLine}
                     details: `${name} (${phone}) ተጨምሯል`,
                     timestamp: new Date()
                 });
+                // ወዲያውኑ በዝርዝሩ ላይ እንዲታይ (listener ቢዘገይ/ቢሳሳት እንኳ)
+                customersFromDB[phone] = { name, phone, address: address || '—', updatedAt: firebase.firestore.Timestamp.now() };
+                mergeAndRenderCustomers();
                 showToast(`✅ ${name} ተጨምሯል`, 'success');
                 closeModal();
             } catch (error) {
@@ -11452,6 +11483,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const expenseDetails = document.getElementById('reportExpenseDetails').value.trim();
             const remarks = document.getElementById('reportRemarks').value.trim();
             const readyTomorrow = document.querySelector('input[name="readyTomorrow"]:checked')?.value || '';
+            // ✅ ግዴታ፦ "ለነገ ስራ ትወጣለህ?" — አዎ ወይም አይ መመረጥ አለበት (ሳይመረጥ ሪፖርት አይላክም)
+            if (!readyTomorrow) {
+                showToast('⚠️ “ለነገ ስራ ትወጣለህ?” የሚለውን አዎ ወይም አይ ይምረጡ', 'error');
+                const _rb = document.querySelector('input[name="readyTomorrow"]');
+                if (_rb && _rb.scrollIntoView) _rb.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return;
+            }
 
             // ✅ NEW: "የተላኩ ስራዎች ብዛት" ልክ የተመዘገቡ የስራ አይነቶች
             const workTypes = Array.from(document.querySelectorAll('.work-type-input'))
@@ -11860,7 +11898,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
     "0 ብር": "0 Birr",
     "1 ዓመት": "1 Year",
     "1️⃣ የተላኩ ስራዎች ብዛት": "1️⃣ Number of Jobs Sent",
-    "1️⃣- ልክ ሙሉ የቀን ሪፖርት አድርገው ሲጨርሱ “ለነገ ስራ ዝግጁ ነህ” ሚል ጥያቄ": "1️⃣- Right after completing the full daily report, a “Are you ready for tomorrow's work” prompt",
+    "ለነገ ስራ ትወጣለህ?": "Will you go out for work tomorrow?",
     "2 ዓመት": "2 Years",
     "2️⃣ የተጠናቀቁ ስራዎች ብዛት": "2️⃣ Number of Completed Jobs",
     "3 ወር": "3 Months",
