@@ -3493,7 +3493,7 @@
                 if (!credential) throw new Error('አልተቻለም');
 
                 const dr = await callWorker('deviceRegister', {});
-                if (!dr || !dr.ok) throw new Error('የመሣሪያ ቶከን አልተሰጠም');
+                if (!dr || !dr.ok) throw new Error('የመሣሪያ ቶከን አልተሰጠም' + (dr && dr.error ? ' (' + dr.error + ')' : ''));
                 localStorage.setItem(FP_STORAGE_KEY, JSON.stringify({
                     staffId,
                     phone,
