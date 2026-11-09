@@ -2597,9 +2597,9 @@
 
                         <!-- Final Question -->
                         <div class="field" style="margin-top:12px;">
-                            <label>1️⃣- ልክ ሙሉ የቀን ሪፖርት አድርገው ሲጨርሱ “ለነገ ስራ ዝግጁ ነህ” ሚል ጥያቄ</label>
+                            <label>ለነገ ስራ ትወጣለህ?</label>
                             <div style="display:flex; gap:12px;">
-                                <label><input type="radio" name="readyTomorrow" value="yes" /> ✅ አዎ</label>
+                                <label><input type="radio" name="readyTomorrow" value="yes" required /> ✅ አዎ</label>
                                 <label><input type="radio" name="readyTomorrow" value="no" /> ❌ አይ</label>
                             </div>
                         </div>
@@ -4343,6 +4343,18 @@
         let customersFromDB = {};
         let customersFromOrders = {};
 
+        // ✅ FIX: የስልክ ቁጥር በተለያየ ፎርማት (+251.., 251.., 09..) ስለሚገባ ሁሉንም ወደ 09XXXXXXXX አምጥቶ ያጣምራል፤
+        // አዲስ ደንበኛ ከላይ (በቅርብ ጊዜ ቅደም ተከተል) ይታያል።
+        function custTimeMs(v) {
+            try {
+                if (!v) return 0;
+                if (v.toMillis) return v.toMillis();
+                if (v.toDate) return v.toDate().getTime();
+                const d = new Date(v);
+                return isNaN(d) ? 0 : d.getTime();
+            } catch (e) { return 0; }
+        }
+
         function mergeAndRenderCustomers() {
             const merged = {};
             Object.values(customersFromDB).forEach(c => {
@@ -4358,7 +4370,7 @@
             Object.values(customersFromOrders).forEach(c => {
                 if (merged[c.phone]) {
                     merged[c.phone].orders = c.orders;
-                    if (!merged[c.phone].lastOrder || (c.lastOrder && c.lastOrder > merged[c.phone].lastOrder)) {
+                    if (custTimeMs(c.lastOrder) > custTimeMs(merged[c.phone].lastOrder)) {
                         merged[c.phone].lastOrder = c.lastOrder;
                     }
                     if (c.name) merged[c.phone].name = c.name;
@@ -4367,42 +4379,57 @@
                     merged[c.phone] = c;
                 }
             });
-            allCustomers = Object.values(merged);
+            allCustomers = Object.values(merged).sort((x, y) => custTimeMs(y.lastOrder) - custTimeMs(x.lastOrder));
             renderCustomers();
             updateStats();
         }
 
+        // ✅ FIX: ሊስነሩ በስህተት (ለምሳሌ አድሚን መግቢያ ሳይጠናቀቅ) ከተቋረጠ ቀድሞ ዝም ብሎ ይቀር ነበር፤
+        // አሁን አድሚን መግቢያን አድሶ እንደገና ይጀምራል።
+        function listenWithRetry(name, getQuery, onData, attempt) {
+            attempt = attempt || 0;
+            getQuery().onSnapshot(onData, async (err) => {
+                console.warn(name + ' listener error', err);
+                if (attempt >= 4) return;
+                try { await heEnsureAdminAuth(); } catch (e) {}
+                setTimeout(() => listenWithRetry(name, getQuery, onData, attempt + 1), 2000 * (attempt + 1));
+            });
+        }
+
         function loadCustomers() {
-            db.collection('customers').onSnapshot((snapshot) => {
+            listenWithRetry('customers', () => db.collection('customers'), (snapshot) => {
                 customersFromDB = {};
                 snapshot.forEach(doc => {
-                    const data = doc.data();
-                    if (data.phone) customersFromDB[data.phone] = data;
+                    const data = doc.data() || {};
+                    const ph = normalizePhone(data.phone || doc.id);
+                    if (!ph) return;
+                    customersFromDB[ph] = Object.assign({}, data, { phone: ph, name: data.name || data.fullName || '' });
                 });
                 mergeAndRenderCustomers();
             });
 
-            db.collection('orders').onSnapshot((snapshot) => {
+            listenWithRetry('customers-from-orders', () => db.collection('orders'), (snapshot) => {
                 const customersMap = {};
                 snapshot.forEach(doc => {
-                    const data = doc.data();
-                    if (data.fullName && data.phone) {
-                        const key = data.phone;
-                        if (!customersMap[key]) {
-                            customersMap[key] = {
-                                id: key,
-                                name: data.fullName,
-                                phone: data.phone,
-                                address: data.address || '—',
-                                orders: 0,
-                                lastOrder: data.createdAt || null
-                            };
-                        }
-                        customersMap[key].orders++;
-                        if (data.createdAt && (!customersMap[key].lastOrder || data.createdAt > customersMap[key]
-                                .lastOrder)) {
-                            customersMap[key].lastOrder = data.createdAt;
-                        }
+                    const data = doc.data() || {};
+                    const nm = data.fullName || data.customerName || data.name;
+                    const key = normalizePhone(data.phone);
+                    if (!nm || !key) return;
+                    if (!customersMap[key]) {
+                        customersMap[key] = {
+                            id: key,
+                            name: nm,
+                            phone: key,
+                            address: data.address || '—',
+                            orders: 0,
+                            lastOrder: data.createdAt || null
+                        };
+                    }
+                    customersMap[key].orders++;
+                    if (custTimeMs(data.createdAt) >= custTimeMs(customersMap[key].lastOrder)) {
+                        customersMap[key].lastOrder = data.createdAt;
+                        customersMap[key].name = nm;
+                        if (data.address) customersMap[key].address = data.address;
                     }
                 });
                 customersFromOrders = customersMap;
@@ -6721,6 +6748,7 @@ ${locationLine}
         // ✅ NEW: እያንዳንዱን ቴክኒሻን ሪፖርት ዝርዝር ማየት + የተሳሳተ ሪፖርት ማረሚያ (edit)
         function viewTechIncomeDetail(techKey) {
             const reports = allDailyReports
+                .filter(r => r.approved === true) // ያልጸደቀ ሪፖርት በገቢ/ወጪ ዝርዝር ውስጥ አይታይም
                 .filter(r => (r.technicianId || r.technicianName) === techKey)
                 .slice()
                 .sort((a, b) => (b.dateKey || '').localeCompare(a.dateKey || ''));
@@ -7203,7 +7231,7 @@ ${locationLine}
 
             let html = '';
             filtered.forEach(c => {
-                const lastDate = c.lastOrder?.toDate?.() || new Date(0);
+                const lastDate = c.lastOrder?.toDate?.() || (c.lastOrder ? new Date(c.lastOrder) : new Date(0));
                 html += `<tr>
                     <td><strong>${c.name || '—'}</strong></td>
                     <td>${c.phone || '—'}</td>
@@ -7222,7 +7250,7 @@ ${locationLine}
         function viewCustomer(phone) {
             const customer = allCustomers.find(c => c.id === phone);
             if (!customer) return;
-            const orders = allOrders.filter(o => o.phone === phone);
+            const orders = allOrders.filter(o => normalizePhone(o.phone) === phone);
 
             let ordersHTML = '';
             if (orders.length === 0) {
@@ -7300,10 +7328,12 @@ ${locationLine}
             }
 
             try {
+                try { await heEnsureAdminAuth(); } catch (e) {} // ሩልስ: መጻፍ አድሚን መግቢያ ያስፈልጋል
                 await db.collection('customers').doc(phone).set({
                     name: name,
                     phone: phone,
                     address: address || '—',
+                    createdAt: new Date(),
                     updatedAt: new Date()
                 }, { merge: true });
                 await db.collection('activity').add({
@@ -7932,7 +7962,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         }
 
         // 💰 ፋይናንስ የሚቆጥረው ከፋይናንስ ያልተወገዱ ሪፖርቶችን ብቻ ነው (ሪፖርቱ ራሱ ለሌሎች ክፍሎች አይነካም)
-        function financeReports() { return (allDailyReports || []).filter(r => !r.financeExcluded); }
+        // ✅ የገቢ/ወጪ ዝርዝር ውስጥ የሚገቡት በአድሚን የጸደቁ (approved) ሪፖርቶች ብቻ ናቸው
+        function financeReports() { return (allDailyReports || []).filter(r => !r.financeExcluded && r.approved === true); }
 
         function updateFinanceStats() {
             const sum = (arr, f) => arr.reduce((s, x) => s + (parseFloat(f(x)) || 0), 0);
@@ -11452,6 +11483,12 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const expenseDetails = document.getElementById('reportExpenseDetails').value.trim();
             const remarks = document.getElementById('reportRemarks').value.trim();
             const readyTomorrow = document.querySelector('input[name="readyTomorrow"]:checked')?.value || '';
+            // ✅ ግዴታ: "ለነገ ስራ ትወጣለህ?" — አዎ ወይም አይ ካልተመረጠ ሪፖርቱ አይላክም
+            if (!readyTomorrow) {
+                showToast('⚠️ "ለነገ ስራ ትወጣለህ?" ለሚለው አዎ ወይም አይ ይምረጡ', 'error');
+                try { document.querySelector('input[name="readyTomorrow"]').scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+                return;
+            }
 
             // ✅ NEW: "የተላኩ ስራዎች ብዛት" ልክ የተመዘገቡ የስራ አይነቶች
             const workTypes = Array.from(document.querySelectorAll('.work-type-input'))
@@ -11860,7 +11897,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
     "0 ብር": "0 Birr",
     "1 ዓመት": "1 Year",
     "1️⃣ የተላኩ ስራዎች ብዛት": "1️⃣ Number of Jobs Sent",
-    "1️⃣- ልክ ሙሉ የቀን ሪፖርት አድርገው ሲጨርሱ “ለነገ ስራ ዝግጁ ነህ” ሚል ጥያቄ": "1️⃣- Right after completing the full daily report, a “Are you ready for tomorrow's work” prompt",
+    "ለነገ ስራ ትወጣለህ?": "Will you go to work tomorrow?",
     "2 ዓመት": "2 Years",
     "2️⃣ የተጠናቀቁ ስራዎች ብዛት": "2️⃣ Number of Completed Jobs",
     "3 ወር": "3 Months",
