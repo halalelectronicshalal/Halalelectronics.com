@@ -7973,7 +7973,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const collected = sum(allDebts.filter(d => d.type !== 'payable' && d.status === 'paid'), d => d.amount);
             const paidOut = sum(allDebts.filter(d => d.type === 'payable' && d.status === 'paid'), d => d.amount);
             // 👷 ለሰራተኛ የተሰጠ ድርሻ ወደ ድርጅቱ የገባ አይደለም → ከተጣራ ትርፍ ይቀነሳል
-            const techShare = sum(financeReports(), r => r.techShareAmount);
+            const techShare = sum(financeReports().filter(r => r.approved === true), r => r.techShareAmount); // ✅ ያልጸደቀ ሪፖርት ድርሻ አይቀነስም (ገቢውም ገና አልገባም)
 
             const income = txIncome + collected;      // ጠቅላላ የገባ (ብድር የተሰበሰበን ጨምሮ)
             const expense = txExpense + paidOut;      // ጠቅላላ ወጪ (የከፈልነውን ብድር ጨምሮ)
