@@ -205,8 +205,6 @@
 let allTransactions = [];
 let allDebts = [];
 let allDailyReports = [];
-// ✅ የገቢ/ወጪ ስሌት ውስጥ የሚገቡት በአድሚን የጸደቁ ሪፖርቶች ብቻ ናቸው
-function approvedReports() { return (allDailyReports || []).filter(r => r.approved === true); }
 let allOrders = [];          // ለ "የዕለቱ ጠቅላላ እንቅስቃሴ" ብቻ
 let isFinanceUnlocked = false;
 window._techSummaryCustomRange = window._techSummaryCustomRange || { start: '', end: '' };
@@ -256,7 +254,7 @@ function showTechIncomeSummary(rangeFilter, groupBy) {
         endKey = window._techSummaryCustomRange.end || null;
     }
 
-    const relevant = approvedReports().filter(r => {
+    const relevant = allDailyReports.filter(r => {
         if (!r.dateKey) return false;
         if (startKey && r.dateKey < startKey) return false;
         if (endKey && r.dateKey > endKey) return false;
@@ -401,7 +399,7 @@ function applyTechSummaryCustomRange() {
 
 // ✅ NEW: እያንዳንዱን ቴክኒሻን ሪፖርት ዝርዝር ማየት + የተሳሳተ ሪፖርት ማረሚያ (edit)
 function viewTechIncomeDetail(techKey) {
-    const reports = approvedReports()
+    const reports = allDailyReports
         .filter(r => (r.technicianId || r.technicianName) === techKey)
         .slice()
         .sort((a, b) => (b.dateKey || '').localeCompare(a.dateKey || ''));
@@ -727,7 +725,7 @@ function updateFinanceStats() {
     const collected = sum(allDebts.filter(d => d.type !== 'payable' && d.status === 'paid'), d => d.amount);
     const paidOut = sum(allDebts.filter(d => d.type === 'payable' && d.status === 'paid'), d => d.amount);
     // 👷 ለሰራተኛ የተሰጠ ድርሻ ወደ ድርጅቱ የገባ አይደለም → ከተጣራ ትርፍ ይቀነሳል
-    const techShare = sum(approvedReports(), r => r.techShareAmount);
+    const techShare = sum(allDailyReports, r => r.techShareAmount);
 
     const income = txIncome + collected;      // ጠቅላላ የገባ (ብድር የተሰበሰበን ጨምሮ)
     const expense = txExpense + paidOut;      // ጠቅላላ ወጪ (የከፈልነውን ብድር ጨምሮ)
@@ -913,7 +911,7 @@ function exportFinanceCSV() {
     }).sort((a, b) => finToKey(a.createdAt).localeCompare(finToKey(b.createdAt)));
 
     // 3) የቴክኒሻን ዕለታዊ ሪፖርት
-    const reports = approvedReports().filter(r => r.dateKey && finInRange(r.dateKey, startDate, endDate))
+    const reports = allDailyReports.filter(r => r.dateKey && finInRange(r.dateKey, startDate, endDate))
         .sort((a, b) => a.dateKey.localeCompare(b.dateKey) || String(a.technicianName).localeCompare(String(b.technicianName)));
 
     if (!txs.length && !debts.length && !reports.length) {
@@ -993,7 +991,7 @@ function collectDailyActivity(dk) {
         txs: allTransactions.filter(tx => finTxKey(tx) === dk),
         debtsNew: allDebts.filter(d => finToKey(d.createdAt) === dk),
         debtsPaid: allDebts.filter(d => d.status === 'paid' && finToKey(d.paidAt) === dk),
-        reports: approvedReports().filter(r => r.dateKey === dk),
+        reports: allDailyReports.filter(r => r.dateKey === dk),
         orderCreated, orderDone
     };
 }
@@ -1224,7 +1222,7 @@ async function deleteDebt(id) {
 function loadTransactions() {
     db.collection('transactions').orderBy('createdAt', 'desc').onSnapshot((snapshot) => {
         allTransactions = [];
-        snapshot.forEach(doc => { const d = doc.data(); d.id = doc.id; allTransactions.push(d); });
+        snapshot.forEach(doc => { const d = doc.data(); if (d.pending === true) return; d.id = doc.id; allTransactions.push(d); });
         if (isFinanceUnlocked) { updateFinanceStats(); renderTransactions(); }
     }, (e) => console.warn('transactions listener', e));
 }
@@ -1257,11 +1255,33 @@ function approveReportFromCard(reportId) {
     if (!confirm(`የ ${r ? (r.technicianName || r.technician || '') : ''} ሪፖርት (${r ? (r.date || r.dateKey || '') : ''}) ይጽደቅ?`)) return;
     approveReport(reportId, r ? r.technicianId : null);
 }
+
+// ✅ በቴክኒሻን የተመዘገቡ ገቢ/ወጪ (pending:true) ሪፖርቱ ሲጸድቅ ብቻ ወደ ዝርዝሩ ይገባሉ።
+// ሪፖርቱ ከተላከ በኋላ የተመዘገቡ (ለቀጣይ ሪፖርት የሆኑ) አይለቀቁም።
+async function releaseTechTransactions(report) {
+    if (!report) return 0;
+    const name = report.technicianName || report.technician;
+    if (!name) return 0;
+    const sub = report.submittedAt;
+    const cutoff = sub && sub.toDate ? sub.toDate().getTime() : Infinity;
+    const snap = await db.collection('transactions').where('pending', '==', true).where('staff', '==', name).get();
+    const batch = db.batch();
+    let n = 0;
+    snap.forEach(d => {
+        const c = d.data().createdAt;
+        const t = c && c.toDate ? c.toDate().getTime() : 0;
+        if (t <= cutoff) { batch.update(d.ref, { pending: false, releasedAt: new Date(), releasedByReport: report.id || '' }); n++; }
+    });
+    if (n) await batch.commit();
+    return n;
+}
+
 async function approveReport(reportId, techId) {
     try {
         const report = allDailyReports.find(r => r.id === reportId);
         if (!techId && report) techId = report.technicianId;
         await db.collection('dailyReports').doc(reportId).update({ approved: true, approvedAt: new Date() });
+        try { await releaseTechTransactions(report); } catch (relErr) { console.error('release transactions failed', relErr); showToast('⚠️ ሪፖርቱ ጸድቋል፣ ነገር ግን ገቢ/ወጪ ወደ ዝርዝሩ ማስገባት አልተቻለም: ' + (relErr && relErr.message ? relErr.message : relErr), 'error'); }
         if (techId) { try { await db.collection('staff').doc(techId).update({ lastApprovedDateKey: report ? report.dateKey : null }); } catch (e) { console.warn('lastApprovedDateKey update skipped', e); } }
         try { await db.collection('activity').add({ user: heUserName(), action: 'approve_report', details: `የ ${report ? report.technicianName : ''} ሪፖርት ጸደቀ (${report ? report.dateKey : ''})`, timestamp: new Date() }); } catch (e) {}
         if (window.hePushNotify) {
@@ -1288,7 +1308,7 @@ function viewReportDetail(reportId) {
             <div>📊 ድርሻ: ${n(r.techSharePercent)}% (ባለሙያ ${n(r.techShareAmount)} | ድርጅት ${n(r.companyAmount)})</div>
             ${r.expenseDetails ? `<div>🧾 ወጪ: ${escHtml(r.expenseDetails)}</div>` : ''}
             <div>📝 ${n(r.remarks || r.notes)}</div>
-            ${r.readyTomorrow ? `<div>✅ ለነገ ዝግጁ: ${r.readyTomorrow === 'yes' ? 'አዎ' : 'አይ'}</div>` : ''}
+            ${r.readyTomorrow ? `<div>🚶 ለነገ ስራ ይወጣል: ${r.readyTomorrow === 'yes' ? 'አዎ' : 'አይ'}</div>` : ''}
             ${gallery(r.warrantyPhotoURLs, '📸 ዋራንቲ ካርድ')}
             ${gallery(r.receiptURLs, '🏦 የባንክ ደረሰኝ')}
         </div>`;
