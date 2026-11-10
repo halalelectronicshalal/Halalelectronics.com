@@ -73,7 +73,7 @@
     </div>
 
     <!-- 📅 ቀጠሯቸው ገና ያልደረሱ ትዕዛዞች — ቀጠሯቸው እስኪደርስ እዚህ ይቆያሉ -->
-    <div class="card" id="scheduledOrdersCard" style="display:none;">
+    <div class="card" id="scheduledOrdersCard">
         <div class="card-header" style="cursor:pointer;" onclick="toggleScheduledOrders()">
             <h3><i class="fas fa-calendar-alt" style="color:var(--primary);"></i> 📅 እስከሚደርስ ቀጠሮ <span class="status-badge status-pending" id="scheduledOrdersBadge">0</span>
                 <span class="text-muted" id="scheduledOrdersArrow" style="font-size:.8rem; margin-left:6px;">▼ ክፈት</span></h3>
@@ -546,10 +546,32 @@ function keyToLocalDate(k) {
     const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(k || ''));
     return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
 }
+/** የአማርኛ ፊደል ልዩነቶችን (ኅ/ሕ→ህ፣ ሐ/ኀ→ሀ፣ ሠ→ሰ፣ ዐ→አ) አንድ ያደርጋል */
+function normAm(t) { return String(t || '').replace(/[ኅሕ]/g, 'ህ').replace(/[ሐኀ]/g, 'ሀ').replace(/ሠ/g, 'ሰ').replace(/ዐ/g, 'አ'); }
+/** «5 ኅዳር 2019» ወይም «ህዳር 5» ከጽሁፍ ውስጥ አውጥቶ ወደ (አካባቢያዊ) Gregorian ቀን ይቀይራል፤ ካልተገኘ null */
+function parseEthDateText(txt) {
+    const t = normAm(txt);
+    if (!t) return null;
+    let mi = -1;
+    ETH_MONTHS.forEach((n, i) => { if (mi < 0 && t.includes(normAm(n))) mi = i; });
+    if (mi < 0) return null;
+    const nums = (t.match(/\d+/g) || []).map(Number);
+    const year4 = nums.find(n => n >= 1900 && n <= 2300);
+    const day = nums.find(n => n >= 1 && n <= 30);
+    if (!day) return null;
+    const make = (ey) => { const g = ethiopianToGregorian(ey, mi + 1, day); return new Date(g.getUTCFullYear(), g.getUTCMonth(), g.getUTCDate()); };
+    if (year4) return make(year4);
+    const cur = gregorianToEthiopian(new Date()).year;       // ዓመት ከሌለ — የአሁኑ ዓመት፤ ከ6 ወር በላይ ካለፈ ቀጣዩ
+    let d = make(cur);
+    if (daysUntil(d) < -180) d = make(cur + 1);
+    return d;
+}
 function orderApptDate(o) {
     const d = keyToLocalDate(o.appointmentDate) || keyToLocalDate(o.rescheduledDate);
     if (d) return d;
     const pd = String(o.preferredDay || '').trim();
+    const ed = parseEthDateText(pd);          // «ቅዳሜ፣ 5 ኅዳር 2019» / «ቅዳሜ ህዳር 5» ዓይነት የኢትዮጵያ ቀን ጽሁፍ
+    if (ed) return ed;
     for (const name of Object.keys(WEEKDAY_IDX)) {
         if (pd.startsWith(name)) {
             const cm = toMs(o.createdAt);
@@ -645,11 +667,10 @@ function renderDashNewOrders() {
     }
 
     const schedShown = scheduled.filter(matches);
-    document.getElementById('scheduledOrdersCard').style.display = scheduled.length ? '' : 'none';
     document.getElementById('scheduledOrdersBadge').textContent = scheduled.length;
     schedList.innerHTML = schedShown.length
         ? schedShown.map(o => orderRowHtml(o, techOptions)).join('')
-        : '<p class="text-muted text-center">ከፍለጋው ጋር የሚመሳሰል ትዕዛዝ የለም</p>';
+        : `<p class="text-muted text-center">${scheduled.length ? 'ከፍለጋው ጋር የሚመሳሰል ትዕዛዝ የለም' : 'ቀጠሯቸው ገና ያልደረሱ ትዕዛዞች የሉም'}</p>`;
 
     document.querySelectorAll('.dashAssignSelect').forEach(s => { if (keep[s.dataset.id]) s.value = keep[s.dataset.id]; });
 
