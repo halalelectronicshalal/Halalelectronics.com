@@ -71,6 +71,15 @@
         </div>
         <div id="dashNewOrdersList"><p class="text-muted text-center">በመጫን ላይ...</p></div>
     </div>
+
+    <!-- 📅 ቀጠሯቸው ገና ያልደረሱ ትዕዛዞች — ቀጠሯቸው እስኪደርስ እዚህ ይቆያሉ -->
+    <div class="card" id="scheduledOrdersCard" style="display:none;">
+        <div class="card-header" style="cursor:pointer;" onclick="toggleScheduledOrders()">
+            <h3><i class="fas fa-calendar-alt" style="color:var(--primary);"></i> 📅 እስከሚደርስ ቀጠሮ <span class="status-badge status-pending" id="scheduledOrdersBadge">0</span>
+                <span class="text-muted" id="scheduledOrdersArrow" style="font-size:.8rem; margin-left:6px;">▼ ክፈት</span></h3>
+        </div>
+        <div id="scheduledOrdersList" style="display:none;"></div>
+    </div>
 </main>
 
 <script>
@@ -360,6 +369,12 @@ async function assignOrder(orderId) {
             assignedAt: new Date(),
             assignedBy: (heGetSession().staff.role === 'admin' ? 'admin' : 'office')
         });
+        // 🟢 ለቴክኒሻኑ ስራ ተመድቧል → «ነፃ ነኝ» ዝርዝር ውስጥ አይታይም (አዲስ «ነፃ ነኝ» እስከሚልክ)
+        try {
+            const _at = allTechnicians.find(t => t.name === techName);
+            if (_at && _at.id) { const _now = new Date(); _at.lastAssignedAt = _now; await db.collection('staff').doc(_at.id).update({ lastAssignedAt: _now }); }
+            renderFreeAnnounce();
+        } catch (e) { console.warn('lastAssignedAt stamp skipped', e); }
 
         await db.collection('activity').add({
             user: heUserName(),
@@ -520,6 +535,167 @@ function showStatDetail(kind) {
 /* ============================================================
    ዝርዝሩን መሳል
    ============================================================ */
+/* ============================================================
+   📅 የቀጠሮ ቀን — ቀጠሯቸው ገና ያልደረሰ ትዕዛዞች ከፊት አይታዩም
+     ምንጮች (በቅደም ተከተል)፦ appointmentDate (ኦፕሬተር) → rescheduledDate (ለሌላ ቀን የተላለፈ)
+     → preferredDay የሳምንት ቀን ስም (ሰኞ…እሁድ፤ ትዕዛዙ ከተመዘገበበት ቀን ጀምሮ የሚመጣው እንዲህ ያለ ቀን)
+     «ዛሬውኑ» ወይም ቀን የሌለው → ወዲያውኑ ከፊት ይታያል
+   ============================================================ */
+const WEEKDAY_IDX = { 'እሁድ': 0, 'ሰኞ': 1, 'ማክሰኞ': 2, 'ረቡዕ': 3, 'ሐሙስ': 4, 'አርብ': 5, 'ቅዳሜ': 6 };
+function keyToLocalDate(k) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(k || ''));
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+}
+function orderApptDate(o) {
+    const d = keyToLocalDate(o.appointmentDate) || keyToLocalDate(o.rescheduledDate);
+    if (d) return d;
+    const pd = String(o.preferredDay || '').trim();
+    for (const name of Object.keys(WEEKDAY_IDX)) {
+        if (pd.startsWith(name)) {
+            const cm = toMs(o.createdAt);
+            const c = cm ? new Date(cm) : new Date();
+            const base = new Date(c.getFullYear(), c.getMonth(), c.getDate());
+            base.setDate(base.getDate() + ((WEEKDAY_IDX[name] - base.getDay() + 7) % 7));
+            return base;
+        }
+    }
+    return null;
+}
+function todayStart() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function daysUntil(d) { return Math.round((d.getTime() - todayStart().getTime()) / 86400000); }
+/** ቀጠሮው አልደረሰም? (ነገ ወይም ከዚያ በኋላ) — ከቴሌግራም «መድብ» የመጣ ትዕዛዝ ሁል ጊዜ ከፊት ይታያል */
+function orderIsScheduled(o) {
+    if (o.id === highlightOrderId) return false;
+    const d = orderApptDate(o);
+    return !!d && daysUntil(d) > 0;
+}
+function apptTagHtml(o) {
+    const d = orderApptDate(o);
+    if (!d) return o.preferredDay ? `<span class="tag" style="color:var(--primary);">📅 ${escHtml(o.preferredDay)}</span>` : '';
+    const n = daysUntil(d);
+    const when = n === 0 ? 'ዛሬ' : n > 0 ? (n === 1 ? 'ነገ' : `ከ${n} ቀን በኋላ`) : `${-n} ቀን አልፏል`;
+    const color = n > 0 ? '#B45309' : n === 0 ? 'var(--success)' : 'var(--emergency)';
+    return `<span class="tag" style="color:${color}; font-weight:700;">📅 ቀጠሮ: ${escHtml(formatEthDate(d, true))} (${when})</span>`;
+}
+function toggleScheduledOrders() {
+    const l = document.getElementById('scheduledOrdersList'), a = document.getElementById('scheduledOrdersArrow');
+    const open = l.style.display === 'none';
+    l.style.display = open ? '' : 'none';
+    a.textContent = open ? '▲ ዝጋ' : '▼ ክፈት';
+}
+
+function orderRowHtml(order, techOptions) {
+    const date = order.createdAt && order.createdAt.toDate ? order.createdAt.toDate() : new Date();
+    const hl = order.id === highlightOrderId ? ' hl' : '';
+    return `<div class="order-row${hl}" id="ord-${order.id}">
+            <div class="order-info">
+                <div style="font-weight:600;">${escHtml(order.fullName || '—')} <span class="text-muted" style="font-weight:400; font-size:0.8rem;">• ${escHtml(order.appliance || '—')}</span></div>
+                <div class="text-muted" style="font-size:0.78rem;">📱 ${order.phone ? `<a href="tel:${escHtml(order.phone)}" style="font-weight:600;">${escHtml(order.phone)}</a>` : '—'}
+                    &nbsp; <i class="fas fa-map-marker-alt"></i> ${escHtml(order.address || '—')}
+                    &nbsp; <i class="fas fa-clock"></i> ${formatEthDateTime(date)}</div>
+                <div style="margin-top:3px;"><span class="tag">${srcLabel(order)}</span>
+                    ${apptTagHtml(order)}
+                    ${order.suggestedWorkerName ? `<span class="tag" style="color:#B45309;">⭐ ${escHtml(order.suggestedWorkerName)}</span>` : ''}</div>
+                ${order.returnReason ? `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#FEF3C7; color:#92400E; font-size:0.78rem;">↩️ <strong>ተመለሰ${order.returnedFrom ? ' ከ ' + escHtml(order.returnedFrom) : ''}</strong> — ምክንያት: ${escHtml(order.returnReason)}</div>` : ''}
+                ${operatorNotesHtml(order)}
+            </div>
+            <div class="order-actions">
+                <select class="dashAssignSelect" data-id="${order.id}"><option value="">ቴክኒሻን ምረጥ</option>${techOptions}</select>
+                <button class="btn btn-xs btn-secondary" onclick="recommendTechnician('${order.id}')" title="ዝቅተኛ ስራ ያለበትን ቴክኒሻን ምከር"><i class="fas fa-robot"></i></button>
+                <button class="btn btn-sm btn-success" onclick="assignOrder('${order.id}')"><i class="fas fa-check"></i> መድብ</button>
+                <button class="btn btn-sm btn-primary" onclick="viewOrder('${order.id}')" title="ዝርዝር"><i class="fas fa-eye"></i></button>
+                <button class="btn btn-xs btn-danger admin-only" onclick="deleteOrder('${order.id}')" title="ሰርዝ"><i class="fas fa-trash"></i></button>
+            </div>
+        </div>`;
+}
+
+function renderDashNewOrders() {
+    const list = document.getElementById('dashNewOrdersList');
+    const schedList = document.getElementById('scheduledOrdersList');
+    const pending = allOrders.filter(o => o.status === 'Pending')
+        .sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
+
+    // ማጣሪያ
+    const q = (document.getElementById('orderSearch').value || '').trim().toLowerCase();
+    const sf = document.getElementById('sourceFilter').value;
+    const matches = o => (sf === 'all' || orderSource(o) === sf) &&
+        (!q || (o.fullName || '').toLowerCase().includes(q) || (o.phone || '').includes(q));
+
+    // 📅 ቀጠሯቸው የደረሰ (ዛሬ/ያለፈ/ቀጠሮ የሌለው) ከፊት፤ ቀጠሯቸው ያልደረሰ ወደ «እስከሚደርስ ቀጠሮ»
+    const due = pending.filter(o => !orderIsScheduled(o));
+    const scheduled = pending.filter(o => orderIsScheduled(o))
+        .sort((a, b) => orderApptDate(a) - orderApptDate(b) || toMs(b.createdAt) - toMs(a.createdAt));
+
+    // ስታቲስቲክስ
+    ['dashNewOrdersBadge', 'topBadge'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = due.length; });
+    const sp = document.getElementById('statPending'); if (sp) sp.textContent = pending.length; // ጠቅላላ ያልተመደቡ (ቀጠሮ ያላቸውንም ጨምሮ)
+    document.getElementById('statAssigned').textContent = allOrders.filter(o => o.status === 'Assigned').length;
+    document.getElementById('statFree').textContent = fieldTechs().filter(t => techWorkState(t) === 'free').length;
+
+    // በግማሽ የተመረጠ ቴክኒሻን እንዳይጠፋ ማስቀመጥ
+    const keep = {};
+    document.querySelectorAll('.dashAssignSelect').forEach(s => { if (s.value) keep[s.dataset.id] = s.value; });
+
+    const techOptions = techOptionsHtml();
+    const shown = due.filter(matches);
+    if (!shown.length) {
+        list.innerHTML = `<p class="text-muted text-center">${due.length ? 'ከፍለጋው ጋር የሚመሳሰል ትዕዛዝ የለም' : 'ዛሬ የሚሰራ አዲስ ትዕዛዝ የለም'}${scheduled.length ? ' (ቀጠሮ ያላቸው ከታች «እስከሚደርስ ቀጠሮ» ውስጥ አሉ)' : ''}</p>`;
+    } else {
+        list.innerHTML = shown.map(o => orderRowHtml(o, techOptions)).join('');
+    }
+
+    const schedShown = scheduled.filter(matches);
+    document.getElementById('scheduledOrdersCard').style.display = scheduled.length ? '' : 'none';
+    document.getElementById('scheduledOrdersBadge').textContent = scheduled.length;
+    schedList.innerHTML = schedShown.length
+        ? schedShown.map(o => orderRowHtml(o, techOptions)).join('')
+        : '<p class="text-muted text-center">ከፍለጋው ጋር የሚመሳሰል ትዕዛዝ የለም</p>';
+
+    document.querySelectorAll('.dashAssignSelect').forEach(s => { if (keep[s.dataset.id]) s.value = keep[s.dataset.id]; });
+
+    if (highlightOrderId) {
+        const el = document.getElementById('ord-' + highlightOrderId);
+        if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); highlightOrderId = null; }
+    }
+    try { renderFreeAnnounce(); } catch (e) {} // ስራ ሲመደብ/ሲለወጥ «ነፃ ነኝ» ዝርዝር ይታደሳል
+}
+
+
+/* ============================================================
+   📊 የካርዶች ዝርዝር (ገና ያልተመደቡ / የተመደቡ ክፍት ስራዎች / ነጻ ቴክኒሻኖች)
+   ============================================================ */
+function showStatDetail(kind) {
+    let title = '', body = '';
+    const orderItem = o => {
+        const d = o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : null;
+        return `<div class="sd-item">
+            <div style="font-weight:600;">${escHtml(o.fullName || '—')} <span class="text-muted" style="font-weight:400;">• ${escHtml(o.appliance || '—')}</span></div>
+            <div class="text-muted" style="font-size:.78rem;">📱 ${o.phone ? `<a href="tel:${escHtml(o.phone)}">${escHtml(o.phone)}</a>` : '—'} &nbsp; 📍 ${escHtml(o.address || '—')}${d ? ' &nbsp; 🕒 ' + formatEthDateTime(d) : ''}</div>
+            ${o.technician ? `<div style="font-size:.8rem;margin-top:2px;">👨‍🔧 <b>${escHtml(o.technician)}</b></div>` : ''}
+            ${o.preferredDay ? `<div style="font-size:.78rem;color:var(--primary);">📅 ${escHtml(o.preferredDay)}</div>` : ''}
+            ${operatorNotesHtml(o)}
+        </div>`;
+    };
+    if (kind === 'pending') {
+        title = '⏳ ገና ያልተመደቡ';
+        const l = allOrders.filter(o => o.status === 'Pending').sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
+        body = l.length ? l.map(orderItem).join('') : '<p class="text-muted text-center">ምንም የለም</p>';
+    } else if (kind === 'assigned') {
+        title = '📋 የተመደቡ ክፍት ስራዎች';
+        const l = allOrders.filter(o => o.status === 'Assigned').sort((a, b) => toMs(b.assignedAt || b.createdAt) - toMs(a.assignedAt || a.createdAt));
+        body = l.length ? l.map(orderItem).join('') : '<p class="text-muted text-center">ምንም የለም</p>';
+    } else {
+        title = '🟢 ነጻ ቴክኒሻኖች';
+        const l = fieldTechs().filter(t => techWorkState(t) === 'free');
+        body = l.length ? l.map(t => `<div class="sd-item"><div style="font-weight:600;">👨‍🔧 ${escHtml(t.name || '—')}</div>
+            <div class="text-muted" style="font-size:.78rem;">${t.phone ? '📱 <a href="tel:' + escHtml(t.phone) + '">' + escHtml(t.phone) + '</a>' : ''}${techIsOffline(t) ? ' &nbsp; ⚪ ከመስመር ውጪ' : ' &nbsp; 🟢 መስመር ላይ'}</div></div>`).join('') : '<p class="text-muted text-center">ነጻ ቴክኒሻን የለም</p>';
+    }
+    openModal(title, body);
+}
+
+/* ============================================================
+   ዝርዝሩን መሳል
+   ============================================================ */
 function renderDashNewOrders() {
     const list = document.getElementById('dashNewOrdersList');
     const pending = allOrders.filter(o => o.status === 'Pending')
@@ -602,6 +778,9 @@ function renderFreeAnnounce() {
     const since = startOfTodayMs();
     const rows = fieldTechs()
         .filter(t => toMs(t.freeAnnouncedAt) >= since && t.status === 'free')
+        // ስራ የተመደበለት ቴክኒሻን ከዝርዝሩ ይጠፋል — አዲስ «ነፃ ነኝ» እስከሚልክ ድረስ
+        .filter(t => toMs(t.lastAssignedAt) <= toMs(t.freeAnnouncedAt) &&
+            !allOrders.some(o => o.status === 'Assigned' && (o.technicianId ? o.technicianId === t.id : o.technician === t.name) && toMs(o.assignedAt) > toMs(t.freeAnnouncedAt)))
         .sort((a, b) => toMs(b.freeAnnouncedAt) - toMs(a.freeAnnouncedAt));
     card.style.display = rows.length ? '' : 'none';
     document.getElementById('freeAnnounceBadge').textContent = rows.length;
