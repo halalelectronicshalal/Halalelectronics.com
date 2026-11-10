@@ -694,7 +694,8 @@ const Lock = (function () {
     $('lockPass').value = ''; $('lockErr').textContent = '';
     touch(true);
   }
-  function tick() { if (!locked && me && Date.now() - (last() || 0) >= MS) show(); }
+  // ⛔ ራስ-ሰር መቆለፍ (ከ15 ደቂቃ በኋላ) ተወግዷል — በ «ቆልፍ» ቁልፍ ብቻ በእጅ ይቆለፋል
+  function tick() { return; }
   async function pass() {
     if (busy) return;
     const pw = $('lockPass').value;
@@ -727,13 +728,10 @@ const Lock = (function () {
     $('lockNowBtn').onclick = show;
     ['pointerdown', 'touchstart', 'keydown', 'click', 'scroll'].forEach(ev =>
       document.addEventListener(ev, e => { if (!locked && !$('lockOv').contains(e.target)) touch(false); }, { passive: true, capture: true }));
-    setInterval(tick, 5000);
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') tick(); });
-    window.addEventListener('focus', tick);
-    window.addEventListener('pageshow', tick);
   }
   return { init, show, start, touch, isLocked: () => locked, restoreCheck() {
-    if (localStorage.getItem(LOCKED) === '1' || !last() || Date.now() - last() >= MS) show(); else touch(true);
+    // ከድሮ ስሪት የቀረ የመቆለፍ ምልክት ካለ ያጠፋል (ራስ-ሰር መቆለፊያ ተወግዷል)
+    localStorage.removeItem(LOCKED); $('lockOv').classList.remove('show'); touch(true);
   } };
 })();
 Lock.init();
