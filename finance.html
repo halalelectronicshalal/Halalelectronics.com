@@ -1329,58 +1329,128 @@ async function approveReport(reportId, techId) {
     } catch (error) { showToast('❌ ' + error.message, 'error'); }
 }
         // ============================================================
-        // ✍️ በሪፖርት ውስጥ ያለ የስራ "ስህተት / እርማት ጥያቄ" ጽሁፍ (ቴክኒሻን የጻፈው) — ከመጽደቁ በፊት አድሚን በቀይ ጽሁፍ ማስተካከል ይችላል
-        //    🔄 ከቆይታ በኋላ ወደ "ተጠናቀቀ" የተቀየሩ ስራዎችም እዚህ ምልክት ይደረግባቸዋል
+        // ✍️ የእርማት ጥያቄ (በሪፖርት አንድ ቦታ) — እርማት ሲጠየቅ ያልጸደቀው ሪፖርት ሁሉም ክፍል ክፍት ሆኖ ይታያል
+        //    🔄 ከቆይታ በኋላ ወደ «ተሰራ» የተቀየሩ ስራዎች ምልክት ይደረግባቸዋል
         // ============================================================
+        function admEsc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+        function admHasCorrection(r) { return !!(r && r.correctionRequest && r.correctionRequest.text); }
         function admReportJobsHtml(r) {
-            const editable = !r.approved;
-            const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
             return (r.jobStatuses || []).map((j, i) => {
                 const done = j.status === 'completed';
-                let h = `<div style="font-size:0.85rem; padding:4px 0;">${i + 1}. ${esc(j.customer || '—')} — ${done ? '✅ ተሰርቷል' : '❌ አልተሰራም' + (j.reason ? ' (' + esc(j.reason) + ')' : '')}`;
-                if (j.convertedFromNotCompleted) {
-                    h += `<div style="color:#047857; font-size:0.8rem;">🔄 ከቆይታ በኋላ ወደ «ተጠናቀቀ» ተቀይሯል — ገቢ ${esc(j.lateIncome)} | ወጪ ${esc(j.lateExpense)} ብር</div>`;
-                }
-                if (j.correctionNote) {
-                    h += `<div style="margin-top:4px; padding:6px 8px; border:1.5px solid #DC2626; border-radius:8px; background:#FEF2F2;">
-                        <div style="color:#DC2626; font-weight:700; font-size:0.78rem;">✍️ ስህተት / እርማት ጥያቄ (ቴክኒሻን)${j.correctionNoteEditedByAdmin ? ' — በአድሚን ተስተካክሏል' : ''}</div>`;
-                    if (editable) {
-                        h += `<textarea id="admNote_${i}" rows="2" style="width:100%; color:#DC2626; font-weight:600; border:1px solid #DC2626; border-radius:6px; padding:6px; margin-top:4px;">${esc(j.correctionNote)}</textarea>
-                        <button type="button" class="btn btn-sm btn-outline" style="margin-top:4px; color:#DC2626; border-color:#DC2626;" onclick="admSaveJobNote('${r.id}', ${i})"><i class="fas fa-save"></i> ማስተካከያ አስቀምጥ</button>`;
-                    } else {
-                        h += `<div style="color:#DC2626; font-weight:600; white-space:pre-wrap; margin-top:4px;">${esc(j.correctionNote)}</div>`;
-                    }
-                    if (j.correctionNoteOriginal) h += `<div style="font-size:0.72rem; color:var(--text-muted); margin-top:4px;">ቀድሞ የተጻፈው: ${esc(j.correctionNoteOriginal)}</div>`;
-                    h += `</div>`;
-                }
+                let h = `<div style="font-size:0.85rem; padding:4px 0;">${i + 1}. ${admEsc(j.customer || '—')} — ${done ? '✅ ተሰርቷል' : '❌ አልተሰራም' + (j.reason ? ' (' + admEsc(j.reason) + ')' : '')}`;
+                if (j.convertedFromNotCompleted) h += `<div style="color:#047857; font-size:0.8rem;">🔄 ከቆይታ በኋላ ወደ «ተሰራ» ተቀይሯል — ገቢ ${admEsc(j.lateIncome)} | ወጪ ${admEsc(j.lateExpense)} ብር</div>`;
                 return h + `</div>`;
             }).join('');
         }
-        async function admSaveJobNote(reportId, idx) {
+        function admReportBadges(r) {
+            return admHasCorrection(r) ? ' <span style="color:#DC2626; font-weight:700; font-size:0.75rem;">✍️ እርማት ጥያቄ</span>' : '';
+        }
+        function admReportFullEditHtml(r) {
+            const jobs = r.jobStatuses || [];
+            const v = (x) => admEsc(x == null ? '' : x);
+            const rows = jobs.map((j, i) => `
+                <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:4px 0; border-bottom:1px dashed var(--border-light);">
+                    <span style="flex:1 1 140px; font-size:0.82rem;">${i + 1}. ${admEsc(j.customer || '—')} - ${admEsc(j.appliance || '')}</span>
+                    <select id="admEJ_st_${i}" onchange="admEJRecalcCounts()" style="padding:4px;">
+                        <option value="completed" ${j.status === 'completed' ? 'selected' : ''}>✅ ተሰራ</option>
+                        <option value="not-completed" ${j.status !== 'completed' ? 'selected' : ''}>❌ አልተሰራም</option>
+                    </select>
+                    <input type="text" id="admEJ_re_${i}" value="${v(j.reason)}" placeholder="ምክንያት" style="flex:1 1 120px;" />
+                </div>`).join('');
+            return `
+                <div style="padding:8px; border:1.5px solid #DC2626; border-radius:8px; background:#FEF2F2; margin-bottom:10px;">
+                    <div style="color:#DC2626; font-weight:700; font-size:0.82rem;">✍️ ቴክኒሻኑ የጠየቀው እርማት${r.correctionRequest.editedByAdmin ? ' (በአድሚን ተስተካክሏል)' : ''}</div>
+                    <textarea id="admE_req" rows="3" style="width:100%; color:#DC2626; font-weight:600; border:1px solid #DC2626; border-radius:6px; padding:6px; margin-top:4px;">${v(r.correctionRequest.text)}</textarea>
+                    ${r.correctionRequest.original ? `<div style="font-size:0.72rem; color:var(--text-muted);">ቀድሞ የተጻፈው: ${v(r.correctionRequest.original)}</div>` : ''}
+                    <div style="font-size:0.72rem; color:var(--text-muted); margin-top:4px;">🔓 እርማት ስለተጠየቀ የሪፖርቱ ሁሉም ክፍል ክፍት ነው — ከታች ያስተካክሉ።</div>
+                </div>
+                <div style="font-size:0.85rem;"><strong>👤 ${v(r.technicianName || r.technician)}</strong> · 📅 ${v(r.date || r.dateKey)}</div>
+                ${rows ? `<div style="margin:8px 0;"><div style="font-weight:700; font-size:0.82rem;">📋 የስራ ዝርዝር</div>${rows}</div>` : ''}
+                <div class="form-row">
+                    <div class="form-group"><label>የተላኩ</label><input type="number" id="admE_sent" value="${v(r.totalSent != null ? r.totalSent : r.jobs)}" /></div>
+                    <div class="form-group"><label>የተጠናቀቁ</label><input type="number" id="admE_done" value="${v(r.completedCount)}" /></div>
+                    <div class="form-group"><label>ያልተጠናቀቁ</label><input type="number" id="admE_notdone" value="${v(r.notCompletedCount)}" /></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>ገቢ (ብር)</label><input type="number" id="admE_income" step="0.01" value="${v(r.totalIncome != null ? r.totalIncome : r.income)}" oninput="admERecalc()" /></div>
+                    <div class="form-group"><label>ወጪ (ብር)</label><input type="number" id="admE_expense" step="0.01" value="${v(r.totalExpense)}" oninput="admERecalc()" /></div>
+                    <div class="form-group"><label>የባለሙያ ድርሻ (%)</label><input type="number" id="admE_pct" min="0" max="100" step="0.1" value="${v(r.techSharePercent)}" oninput="admERecalc()" /></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>ትርፍ</label><input type="number" id="admE_profit" readonly style="background:var(--bg);" value="${v(r.profit)}" /></div>
+                    <div class="form-group"><label>ለባለሙያ</label><input type="number" id="admE_tech" readonly style="background:var(--bg);" value="${v(r.techShareAmount)}" /></div>
+                    <div class="form-group"><label>ለድርጅት</label><input type="number" id="admE_company" readonly style="background:var(--bg);" value="${v(r.companyAmount)}" /></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>🏦 ወደ ድርጅት የገባ (ብር)</label><input type="number" id="admE_deposited" step="0.01" value="${v(r.deposited)}" /></div>
+                    <div class="form-group"><label>🚶 ለነገ ስራ ይወጣል</label><select id="admE_ready"><option value="" ${!r.readyTomorrow ? 'selected' : ''}>—</option><option value="yes" ${r.readyTomorrow === 'yes' ? 'selected' : ''}>አዎ</option><option value="no" ${r.readyTomorrow === 'no' ? 'selected' : ''}>አይ</option></select></div>
+                </div>
+                <div class="form-group"><label>🧾 የወጪ ማብራሪያ</label><textarea id="admE_expd" rows="2">${v(r.expenseDetails)}</textarea></div>
+                <div class="form-group"><label>📝 ማብራሪያ / አስተያየት</label><textarea id="admE_remarks" rows="2">${v(r.remarks || r.notes)}</textarea></div>`;
+        }
+        function admEJRecalcCounts() {
+            const rep = (window._admEditRep && window._admEditRep.jobStatuses) || [];
+            let done = 0, notDone = 0;
+            rep.forEach((j, i) => {
+                const u = Math.max(1, parseInt(j && j.count, 10) || 1);
+                const st = document.getElementById('admEJ_st_' + i);
+                if (st && st.value === 'completed') done += u; else notDone += u;
+            });
+            const d = document.getElementById('admE_done'), n = document.getElementById('admE_notdone');
+            if (d) d.value = done; if (n) n.value = notDone;
+        }
+        function admERecalc() {
+            const inc = parseFloat(document.getElementById('admE_income').value) || 0;
+            const exp = parseFloat(document.getElementById('admE_expense').value) || 0;
+            const pct = Math.max(0, Math.min(100, parseFloat(document.getElementById('admE_pct').value) || 0));
+            const profit = inc - exp, tech = profit * pct / 100;
+            document.getElementById('admE_profit').value = profit.toFixed(2);
+            document.getElementById('admE_tech').value = tech.toFixed(2);
+            document.getElementById('admE_company').value = (profit - tech).toFixed(2);
+        }
+        function admFullEditFooter(r) {
+            return `<button class="btn btn-primary" onclick="admSaveFullReport('${r.id}', false)"><i class="fas fa-save"></i> አስቀምጥ</button>
+                    <button class="btn btn-success" onclick="admSaveFullReport('${r.id}', true)"><i class="fas fa-check"></i> አስቀምጥ እና አጽድቅ</button>
+                    <button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>`;
+        }
+        async function admSaveFullReport(reportId, thenApprove) {
             try {
-                const ta = document.getElementById('admNote_' + idx);
-                if (!ta) return;
-                const text = ta.value.trim();
                 const ref = db.collection('dailyReports').doc(reportId);
                 const snap = await ref.get();
                 if (!snap.exists) { showToast('ሪፖርቱ አልተገኘም', 'error'); return; }
                 const rep = snap.data();
                 if (rep.approved) { showToast('⚠️ ሪፖርቱ ጸድቋል — ማስተካከል አይቻልም', 'error'); return; }
-                const js = (rep.jobStatuses || []).slice();
-                const j = Object.assign({}, js[idx]);
-                if (!j.correctionNoteOriginal && j.correctionNote && j.correctionNote !== text) j.correctionNoteOriginal = j.correctionNote;
-                j.correctionNote = text;
-                j.correctionNoteEditedByAdmin = true;
-                j.correctionNoteEditedAt = new Date();
-                js[idx] = j;
-                await ref.update({ jobStatuses: js, hasCorrectionRequest: js.some(x => x && x.correctionNote) });
-                showToast('✅ ማስተካከያው ተቀምጧል (ቴክኒሻኑ በቀይ ጽሁፍ ያየዋል)', 'success');
+                const num = (id) => parseFloat(document.getElementById(id).value) || 0;
+                const income = num('admE_income'), expense = num('admE_expense');
+                const pct = Math.max(0, Math.min(100, num('admE_pct')));
+                const profit = income - expense, techShare = profit * pct / 100, company = profit - techShare;
+                const js = (rep.jobStatuses || []).map((j, i) => {
+                    const st = document.getElementById('admEJ_st_' + i), re = document.getElementById('admEJ_re_' + i);
+                    if (!st) return j;
+                    const status = st.value;
+                    return Object.assign({}, j, { status: status, reason: status === 'completed' ? '' : (re ? re.value.trim() : (j.reason || '')) });
+                });
+                const reqText = document.getElementById('admE_req').value.trim();
+                const old = rep.correctionRequest || {};
+                const cr = reqText ? Object.assign({}, old, { text: reqText }) : null;
+                if (cr && old.text && old.text !== reqText) { cr.editedByAdmin = true; cr.editedAt = new Date(); if (!cr.original) cr.original = old.text; }
+                const remarks = document.getElementById('admE_remarks').value.trim();
+                await ref.update({
+                    jobStatuses: js,
+                    totalSent: num('admE_sent'), jobs: num('admE_sent'),
+                    completedCount: num('admE_done'), notCompletedCount: num('admE_notdone'),
+                    totalIncome: income, income: income, totalExpense: expense,
+                    techSharePercent: pct, profit: profit, techShareAmount: techShare, companyAmount: company,
+                    deposited: num('admE_deposited'), readyTomorrow: document.getElementById('admE_ready').value,
+                    expenseDetails: document.getElementById('admE_expd').value.trim(),
+                    remarks: remarks, notes: remarks,
+                    correctionRequest: cr, hasCorrectionRequest: !!cr,
+                    editedByAdmin: true, editedAt: new Date()
+                });
+                try { db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'edit_daily_report', details: `ሪፖርት #${reportId.substring(0, 8)} በእርማት ጥያቄ ተስተካክሏል (ገቢ:${income}, ወጪ:${expense})`, timestamp: new Date() }); } catch (e) {}
+                showToast('✅ ሪፖርቱ ተስተካክሏል', 'success');
+                if (thenApprove) { await approveReport(reportId, rep.technicianId || '', true); }
             } catch (e) { showToast('❌ ' + e.message, 'error'); }
-        }
-        function admReportBadges(r) {
-            const hasNote = r.hasCorrectionRequest || (r.jobStatuses || []).some(j => j && j.correctionNote);
-            return (hasNote ? ' <span style="color:#DC2626; font-weight:700; font-size:0.75rem;">✍️ እርማት ጥያቄ</span>' : '')
-                 + (r.reopenedForApproval ? ' <span style="color:#047857; font-weight:700; font-size:0.75rem;">🔄 ተሻሽሏል — እንደገና ይጽደቅ</span>' : '');
         }
 
         function viewReportDetail(reportId) {
@@ -1407,6 +1477,7 @@ async function approveReport(reportId, techId) {
     const footer = r.approved
         ? '<button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>'
         : `<button class="btn btn-success" onclick="approveReport('${r.id}','${escHtml(r.technicianId || '')}')"><i class="fas fa-check"></i> አጽድቅ</button> <button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>`;
+    if (!r.approved && admHasCorrection(r)) { window._admEditRep = r; openModal('✏️ ሪፖርት ማረሚያ — እርማት ተጠይቋል', admReportFullEditHtml(r), admFullEditFooter(r)); return; }
     openModal('📋 የሪፖርት ዝርዝር', html, footer);
 }
 
