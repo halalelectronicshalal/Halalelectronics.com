@@ -1739,6 +1739,14 @@
                     <div id="financeError" style="color:var(--emergency); display:none;">❌ የተሳሳተ የይለፍ ቃል!</div>
                 </div>
                 <div id="financeContent" style="display:none;">
+                    <!-- 📅 የላይኞቹ ካርዶች (ጠቅላላ ገቢ/ወጪ/ትርፍ) ጊዜ መምረጫ — መነሻው «ዛሬ» -->
+                    <div id="finRangeBar" class="flex" style="gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+                        <button class="btn btn-sm btn-primary" data-finrange="today" onclick="setFinStatsRange('today')">ዛሬ</button>
+                        <button class="btn btn-sm btn-outline" data-finrange="week" onclick="setFinStatsRange('week')">ባለፉት 10 ቀናት</button>
+                        <button class="btn btn-sm btn-outline" data-finrange="month" onclick="setFinStatsRange('month')">ባለፉት 30 ቀናት</button>
+                        <button class="btn btn-sm btn-outline" data-finrange="all" onclick="setFinStatsRange('all')">ጠቅላላ</button>
+                        <span class="text-muted" id="finRangeLabel" style="font-size:0.78rem;"></span>
+                    </div>
                     <div class="stats-grid" id="financeStats">
                         <div class="stat-card">
                             <div class="icon"><i class="fas fa-arrow-up" style="color:var(--success);"></i></div>
@@ -6583,27 +6591,24 @@ ${locationLine}
             const box = document.getElementById('techIncomeSummaryBody');
             if (!box) { try { switchTab('finance'); } catch (e) {} return; }
 
-            rangeFilter = rangeFilter || window._techSummaryLastRange || 'all';
+            rangeFilter = rangeFilter || window._techSummaryLastRange || 'today'; // መነሻው «ዛሬ»
             window._techSummaryLastRange = rangeFilter;
             if (groupBy) window._techSummaryGroupBy = groupBy;
             const group = window._techSummaryGroupBy;
             const now = new Date();
             let startKey = null, endKey = null;
 
-            if (rangeFilter === 'today') {
-                startKey = getDateKey(now);
-            } else if (rangeFilter === 'week') {
-                const weekAgo = new Date(now.getTime() - 10 * 86400000); // ባለፉት 10 ቀናት
-                startKey = getDateKey(weekAgo);
-            } else if (rangeFilter === 'month') {
-                const monthAgo = new Date(now); monthAgo.setMonth(monthAgo.getMonth() - 1);
-                startKey = getDateKey(monthAgo);
+            if (rangeFilter === 'today' || rangeFilter === 'week' || rangeFilter === 'month') {
+                const bnd = finRangeBounds(rangeFilter); // ዛሬ / ባለፉት 10 ቀናት / ባለፉት 30 ቀናት (ዛሬን ጨምሮ)
+                startKey = bnd.start; endKey = bnd.end;
             } else if (rangeFilter === 'custom') {
                 startKey = window._techSummaryCustomRange.start || null;
                 endKey = window._techSummaryCustomRange.end || null;
             }
 
+            // ✅ በዚህ ካርድ ውስጥ የጸደቁ ሪፖርቶች ብቻ ይቆጠራሉ
             const relevant = financeReports().filter(r => {
+                if (r.approved !== true) return false;
                 if (!r.dateKey) return false;
                 if (startKey && r.dateKey < startKey) return false;
                 if (endKey && r.dateKey > endKey) return false;
@@ -6691,7 +6696,7 @@ ${locationLine}
             `;
 
             if (rows.length === 0) {
-                html += `<p class="text-center text-muted">በዚህ ጊዜ ውስጥ ምንም ሪፖርት የተመዘገበ ገቢ የለም</p>`;
+                html += `<p class="text-center text-muted">በዚህ ጊዜ ውስጥ ምንም የጸደቀ ሪፖርት የለም</p>`;
             } else {
                 html += `<div class="table-wrap"><table>
                     <thead><tr>
@@ -7965,15 +7970,37 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // 💰 ፋይናንስ የሚቆጥረው ከፋይናንስ ያልተወገዱ ሪፖርቶችን ብቻ ነው (ሪፖርቱ ራሱ ለሌሎች ክፍሎች አይነካም)
         function financeReports() { return (allDailyReports || []).filter(r => !r.financeExcluded); }
 
+        // 📅 የጊዜ ክልል፦ ዛሬ = ዛሬ ብቻ፣ 10 ቀናት = ዛሬን ጨምሮ 10 ቀናት፣ 30 ቀናት = ዛሬን ጨምሮ 30 ቀናት፣ all = ሁሉም
+        window._finStatsRange = window._finStatsRange || 'today';
+        function finRangeBounds(range) {
+            const back = range === 'today' ? 0 : range === 'week' ? 9 : range === 'month' ? 29 : null;
+            if (back === null) return { start: '', end: '' };
+            const now = new Date();
+            const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - back);
+            return { start: getDateKey(from), end: getDateKey(now) };
+        }
+        function setFinStatsRange(range) {
+            window._finStatsRange = range;
+            updateFinanceStats();
+        }
+
         function updateFinanceStats() {
             const sum = (arr, f) => arr.reduce((s, x) => s + (parseFloat(f(x)) || 0), 0);
-            const txIncome = sum(allTransactions.filter(t => t.type === 'income'), t => t.amount);
-            const txExpense = sum(allTransactions.filter(t => t.type === 'expense'), t => t.amount);
-            // 💳 የተከፈለ ብድር፦ ደንበኛ የከፈለን (ወደ ድርጅቱ የገባ) እና እኛ የከፈልነው (የወጣ)
-            const collected = sum(allDebts.filter(d => d.type !== 'payable' && d.status === 'paid'), d => d.amount);
-            const paidOut = sum(allDebts.filter(d => d.type === 'payable' && d.status === 'paid'), d => d.amount);
-            // 👷 ለሰራተኛ የተሰጠ ድርሻ ወደ ድርጅቱ የገባ አይደለም → ከተጣራ ትርፍ ይቀነሳል
-            const techShare = sum(financeReports().filter(r => r.approved === true), r => r.techShareAmount); // ✅ ያልጸደቀ ሪፖርት ድርሻ አይቀነስም (ገቢውም ገና አልገባም)
+            const range = window._finStatsRange || 'today';
+            const { start, end } = finRangeBounds(range);
+            const inR = (key) => finInRange(key, start, end);
+
+            // ✍️ አዲስ ግቤቶች (ገቢ/ወጪ) — በቴክኒሻን የተመዘገቡት ሪፖርታቸው ሲጸድቅ ብቻ ወደዚህ ይገባሉ (pending አይቆጠርም)
+            //    ስለዚህ የጸደቁ ሪፖርቶች ገቢ/ወጪ እዚህ ውስጥ ተካትቷል (እንደገና አይደመርም)
+            const txs = allTransactions.filter(t => inR(finTxKey(t)));
+            const txIncome = sum(txs.filter(t => t.type === 'income'), t => t.amount);
+            const txExpense = sum(txs.filter(t => t.type === 'expense'), t => t.amount);
+            // 💳 የተከፈለ ብድር፦ ደንበኛ የከፈለን (ወደ ድርጅቱ የገባ) እና እኛ የከፈልነው (የወጣ) — በተከፈለበት ቀን
+            const paidDebts = allDebts.filter(d => d.status === 'paid' && inR(finToKey(d.paidAt) || finToKey(d.createdAt)));
+            const collected = sum(paidDebts.filter(d => d.type !== 'payable'), d => d.amount);
+            const paidOut = sum(paidDebts.filter(d => d.type === 'payable'), d => d.amount);
+            // 👷 ለሰራተኛ የተሰጠ ድርሻ ወደ ድርጅቱ የገባ አይደለም → ከተጣራ ትርፍ ይቀነሳል (የጸደቁ ሪፖርቶች ብቻ፣ በሪፖርቱ ቀን)
+            const techShare = sum(financeReports().filter(r => r.approved === true && inR(r.dateKey)), r => r.techShareAmount); // ✅ ያልጸደቀ ሪፖርት ድርሻ አይቀነስም (ገቢውም ገና አልገባም)
 
             const income = txIncome + collected;      // ጠቅላላ የገባ (ብድር የተሰበሰበን ጨምሮ)
             const expense = txExpense + paidOut;      // ጠቅላላ ወጪ (የከፈልነውን ብድር ጨምሮ)
@@ -7987,6 +8014,16 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             setNote('finIncomeNote', collected > 0 ? `ከዚህ ውስጥ ደንበኛ የከፈለን ብድር ${f(collected)}` : '');
             setNote('finExpenseNote', paidOut > 0 ? `ከዚህ ውስጥ የከፈልነው ብድር ${f(paidOut)}` : '');
             setNote('finNetNote', techShare > 0 ? `ለሰራተኛ የተሰጠ ${f(techShare)} ተቀንሷል` : '');
+
+            // የጊዜ መምረጫ አዝራሮች ሁኔታ + የተመረጠው ቀን ጽሁፍ
+            document.querySelectorAll('#finRangeBar [data-finrange]').forEach(b => {
+                const on = b.getAttribute('data-finrange') === range;
+                b.classList.toggle('btn-primary', on);
+                b.classList.toggle('btn-outline', !on);
+            });
+            const lbl = document.getElementById('finRangeLabel');
+            if (lbl) lbl.textContent = !start ? 'ሁሉም ጊዜ'
+                : (start === end ? techSummaryDateLabel(start) : `${techSummaryDateLabel(start)} – ${techSummaryDateLabel(end)}`);
             try { refreshFinanceResetUI(); } catch (e) {}
         }
 
