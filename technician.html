@@ -9382,7 +9382,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             );
             notifyDispatchersFree(
                 `🟢 *ነፃ ሆኗል* 📍\n👨‍🔧 *ቴክኒሻን:* ${safeName}\n📌 *ቦታ:* ${lat}, ${lng}${accuracy ? ` (±${accuracy}ሜ)` : ''}\n🔗 https://www.google.com/maps?q=${lat},${lng}\n📅 ${formatEthDateTime(new Date())}`,
-                `🟢 ነፃ ሆኗል: ${technicianName}\nhttps://www.google.com/maps?q=${lat},${lng}`,
+                `🟢 ነፃ ሆኗል: ${technicianName}`, // SMS: ጽሁፍ ብቻ (ሊንክ/ቦታ የለም)
                 { lat: parseFloat(lat), lng: parseFloat(lng), acc: accuracy }
             );
 
