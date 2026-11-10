@@ -1509,6 +1509,21 @@
                         <div class="number" id="statYesterdayIncome" style="color:#8B5CF6;">0 ብር</div>
                         <div class="label">📅 የትላንት ጠቅላላ ገቢ</div>
                     </div>
+                    <div class="stat-card stat-clickable" role="button" tabindex="0" onclick="openStatDetail('unfinished')" onkeydown="if(event.key==='Enter')openStatDetail('unfinished')" title="ዝርዝር ለማየት ይጫኑ">
+                        <div class="icon"><i class="fas fa-times-circle" style="color:#DC2626;"></i></div>
+                        <div class="number" id="statUnfinishedJobs" style="color:#DC2626;">0</div>
+                        <div class="label">❌ ያልተጠናቀቁ ስራዎች</div>
+                    </div>
+                    <div class="stat-card stat-clickable" role="button" tabindex="0" onclick="openStatDetail('correction')" onkeydown="if(event.key==='Enter')openStatDetail('correction')" title="ዝርዝር ለማየት ይጫኑ">
+                        <div class="icon"><i class="fas fa-tools" style="color:#D97706;"></i></div>
+                        <div class="number" id="statCorrectionJobs" style="color:#D97706;">0</div>
+                        <div class="label">🛠️ የእርማት ስራዎች</div>
+                    </div>
+                    <div class="stat-card stat-clickable" role="button" tabindex="0" onclick="openStatDetail('referral')" onkeydown="if(event.key==='Enter')openStatDetail('referral')" title="ዝርዝር ለማየት ይጫኑ">
+                        <div class="icon"><i class="fas fa-link" style="color:#0D9488;"></i></div>
+                        <div class="number" id="statReferralJobs" style="color:#0D9488;">0</div>
+                        <div class="label">🔗 የሪፈራል ስራዎች</div>
+                    </div>
                     <!-- ✅ NEW: ሊንክ ጎብኚዎች ቆጠራ - አዲስ ሰው ደንበኛ/ቴክኒሻን ሊንኩን ለመጀመሪያ ጊዜ ሲከፍት ይቆጠራል -->
                     <div class="stat-card">
                         <div class="icon"><i class="fas fa-user-plus" style="color:var(--secondary);"></i></div>
@@ -4686,6 +4701,8 @@
                     <div>📍 ${escHtml(o.address || '—')}</div>
                     <div>🔧 ${escHtml(o.appliance || '—')} &nbsp;•&nbsp; 👷 ${escHtml(o.technician || 'ያልተመደበ')}</div>
                     ${o.foundUsText ? `<div>📣 ${escHtml(o.foundUsText)}</div>` : ''}
+                    ${o.correctionTechnician ? `<div>🛠️ እርማት የሚጠየቅበት ቴክኒሻን: <strong>${escHtml(o.correctionTechnician)}</strong></div>` : ''}
+                    ${o.referredBy ? `<div>🔗 ሪፈራል ከ: <strong>${escHtml(o.referredBy)}</strong></div>` : ''}
                     <div class="text-muted">📅 ${d ? formatEthDate(d) : '—'}${opts.showAge && days > 0 ? ` &nbsp;•&nbsp; <strong style="color:#DC2626;">⏰ ${days} ቀን አድሯል</strong>` : ''}${o.price ? ` &nbsp;•&nbsp; 💰 ${escHtml(o.price)} ብር` : ''}</div>
                     ${!done && reason ? `<div style="color:#B91C1C;">📝 ምክንያት: ${escHtml(reason)}</div>` : ''}
                 </div>
@@ -4731,6 +4748,14 @@
                 const done = list.filter(o => o.status === 'Completed').length;
                 summary = `ጠቅላላ ${list.length} • ✅ ተጠናቋል ${done} • ❌ አልተጠናቀቀም ${list.length - done}`;
                 rows = list.map(o => orderDetailRowHTML(o));
+            } else if (kind === 'unfinished' || kind === 'correction' || kind === 'referral') {
+                let list = allOrders.filter(isToday);
+                if (kind === 'unfinished') { list = list.filter(o => ADM_UNFINISHED_STATUSES.includes(o.status)); title = '❌ የዛሬ ያልተጠናቀቁ ስራዎች'; }
+                else if (kind === 'correction') { list = list.filter(o => admWorkKind(o) === 'correction'); title = '🛠️ የዛሬ የእርማት ስራዎች'; }
+                else { list = list.filter(o => admWorkKind(o) === 'referral'); title = '🔗 የዛሬ የሪፈራል ስራዎች'; }
+                const done = list.filter(o => o.status === 'Completed').length;
+                summary = `ጠቅላላ ${list.length} • ✅ ተጠናቋል ${done} • ❌ አልተጠናቀቀም ${list.length - done}`;
+                rows = list.map(o => orderDetailRowHTML(o));
             } else if (kind === 'overdue') {
                 const list = allOrders.filter(o => isAdmOvernightJob(o) && overnightBaseMs(o) > 0 && overnightBaseMs(o) < new Date().setHours(0, 0, 0, 0))
                     .sort((a, b) => overnightBaseMs(a) - overnightBaseMs(b));
@@ -4760,6 +4785,9 @@
         // ============================================================
         // UPDATE STATS
         // ============================================================
+        // ❌ ያልተጠናቀቀ = አጠናቅ ላይ «ተሰራ» ያልሆነ ውጤት የተመረጠበት (ዋጋ አልተስማሙም፣ ለሌላ ቀን፣ ዛሬ አይመቻቸውም፣ ስልክ አይነሳም፣ ሌላ)
+        const ADM_UNFINISHED_STATUSES = ['PriceNotAgreed', 'Rescheduled', 'NotToday', 'PhoneNoAnswer', 'Other'];
+        const admWorkKind = (o) => (o && (o.workTag || o.orderType)) || '';
         function updateStats() {
             // ✅ FIX: Dashboard Today-scoping - "ጠቅላላ ትዕዛዝ"/"በመጠባበቅ ላይ"/"ተጠናቋል" ከዚህ በፊት
             // all-time ድምር ነበሩ (ትክክል አልነበረም)። አሁን የዛሬ ቀን ብቻ እንዲቆጠሩ ተስተካክሏል።
@@ -4805,6 +4833,9 @@
             document.getElementById('statTodayIncome').textContent = todayIncome.toFixed(0) + ' ብር';
             document.getElementById('statActiveTechs').textContent = activeTechs;
             document.getElementById('statOverdueJobs').textContent = overdueJobs;
+            document.getElementById('statUnfinishedJobs').textContent = todayOrders.filter(o => ADM_UNFINISHED_STATUSES.includes(o.status)).length;
+            document.getElementById('statCorrectionJobs').textContent = todayOrders.filter(o => admWorkKind(o) === 'correction').length;
+            document.getElementById('statReferralJobs').textContent = todayOrders.filter(o => admWorkKind(o) === 'referral').length;
             document.getElementById('statYesterdayIncome').textContent = yesterdayIncome.toFixed(0) + ' ብር';
             // ✅ NEW: orderBadge (sidebar ላይ ያለው ቀይ ቁጥር) ግን ሁሉንም በመጠባበቅ ላይ ያሉ ትዕዛዞች (ታሪክ ጨምሮ)
             // ማሳየት ስላለበት - አድሚን ምንም pending ትዕዛዝ እንዳያመልጠው - ይህ የተለየ ስሌት ያስፈልገዋል
