@@ -11591,13 +11591,15 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             box.innerHTML = list.map(r => {
                 const jobs = Array.isArray(r.jobStatuses) ? r.jobStatuses : [];
                 const rows = jobs.map((j, i) => {
-                    const done = j.status === 'completed';
+                    const lateOrder = (typeof myOrders !== 'undefined' && myOrders.find(o => o.id === j.orderId)) || null;
+                    const doneLater = !!(lateOrder && lateOrder.status === 'Completed' && j.status !== 'completed');
+                    const done = j.status === 'completed' || doneLater;
                     const canNote = !r.approved;
                     const canConvert = !done;
                     let h = `<div style="padding:8px 0; border-top:1px solid var(--border-light); font-size:0.82rem;">
                         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
                             <span>${i + 1}. ${techEsc(j.customer || '—')} - ${techEsc(j.appliance || '—')}${(!done && j.reason) ? ' <span style="color:var(--text-muted);">(' + techEsc(j.reason) + ')</span>' : ''}</span>
-                            ${done ? '<span class="status-badge status-completed">✅ ተሰራ</span>'
+                            ${done ? `<span class="status-badge status-completed">✅ ተሰራ${doneLater ? ' — በሚቀጥለው ሪፖርት ይገባል' : ''}</span>`
                                    : `<select onchange="techSentStatusChange(this, '${r.id}', ${i})" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); font-size:0.8rem;"><option value="">❌ አልተጠናቀቀም</option><option value="done">✅ ተሰራ (ሀ)</option></select>`}
                         </div>`;
                     if (j.convertedFromNotCompleted) h += `<div style="color:#047857; font-size:0.78rem;">🔄 ወደ «ተጠናቀቀ» ተቀይሯል — ገቢ ${techEsc(j.lateIncome)} | ወጪ ${techEsc(j.lateExpense)} ብር</div>`;
@@ -11689,7 +11691,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 <div class="form-group"><label>📍 ወጪው የት / ለምን (አማራጭ)</label><input type="text" id="cvExpenseNote" placeholder="ለምሳሌ፦ የእቃ ግዢ" /></div>
                 <div class="form-group"><label>📝 ማብራሪያ</label><textarea id="cvNotes" rows="2" placeholder="ስለ ስራው ማብራሪያ (አማራጭ)"></textarea></div>
                 <div style="margin:6px 0 10px; font-weight:700;">💵 ገቢ (ዋጋ − ወጪ): <span id="cvNet" style="color:var(--success);">0 ብር</span></div>
-                <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:8px;">ደንበኛው ሃሳቡን ቀይሮ ስራው ከተሰራ፣ ስራው «ተጠናቀቀ» ይሆናል፣ በአድሚን ዘንድ ከ«ያልተጠናቀቀ» ወደ «ተጠናቀቀ» ይገባል፣ እና ገቢ/ወጪው በዚህ ሪፖርት ላይ ይጨመራል።${r.approved ? ' <strong style="color:#b45309;">ሪፖርቱ ቀድሞ ጸድቋል — ከተቀየረ በኋላ እንደገና ለማጽደቅ ወደ አድሚን ይመለሳል።</strong>' : ''}</div>
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:8px;">ደንበኛው ሃሳቡን ቀይሮ ስራው ከተሰራ፣ ስራው «ተጠናቀቀ» ይሆናል፣ በአድሚን ዘንድ ከ«ያልተጠናቀቀ» ወደ «ተጠናቀቀ» ይገባል፣ እና ገቢ/ወጪው በዚህ ሪፖርት ላይ ይጨመራል።${r.approved ? ' <strong style="color:#b45309;">ይህ ሪፖርት ጸድቋል — የጸደቀ ሪፖርት አይነካም፤ ስራው እንደ አዲስ ተጠናቅቆ ከሌሎች ስራዎች ጋር በሚቀጥለው ሪፖርት ይገባል።</strong>' : ' ሪፖርቱ ገና ስላልጸደቀ ገቢ/ወጪው በዚሁ ሪፖርት ላይ ይስተካከላል።'}</div>
                 <button class="btn btn-success btn-block" id="cvSaveBtn" onclick="techSubmitConvertJob('${reportId}', ${idx})"><i class="fas fa-check-circle"></i> አጠናቅ</button>`;
             openModal('✅ ሀ. ተሰራ — ዋጋ እና ወጪ ያስገቡ', html);
         }
@@ -11716,8 +11718,6 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (!(price > 0)) { showToast('እባክዎ ትክክለኛ ዋጋ ያስገቡ', 'error'); return; }
             if (expense < 0) { showToast('ወጪ ከ0 በታች መሆን አይችልም', 'error'); return; }
             if (expense > price && !confirm('ወጪው ከዋጋው ይበልጣል (ገቢው አሉታዊ ይሆናል)። መቀጠል ይፈልጋሉ?')) return;
-            const cur = techSentReports.find(x => x.id === reportId);
-            if (cur && cur.approved && !confirm('ይህ ሪፖርት ቀድሞ ጸድቋል። ከተቀየረ በኋላ እንደገና ለማጽደቅ ወደ አድሚን ይመለሳል። መቀጠል ይፈልጋሉ?')) return;
 
             const btn = document.getElementById('cvSaveBtn');
             window._cvBusy = true;
@@ -11762,18 +11762,21 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 });
 
                 const batch = db.batch();
-                batch.update(orderRef, {
+                const inPlace = !rep.approved; // ያልጸደቀ ሪፖርት → እዚያው ላይ ይስተካከላል፤ የጸደቀ → እንደ አዲስ ስራ በሚቀጥለው ሪፖርት ይገባል
+                const orderUpd = {
                     status: 'Completed', price: price, expense: expense, expenseNote: expenseNote, netIncome: net,
                     completedAt: now, completionOption: 'done', technicianNotes: notes || '',
-                    notCompletedReason: '', convertedInReportId: reportId, convertedFromStatus: order.status || ''
-                });
+                    notCompletedReason: '', convertedFromStatus: order.status || '', convertedFromReportId: reportId
+                };
+                if (inPlace) orderUpd.convertedInReportId = reportId;
+                batch.update(orderRef, orderUpd);
                 batch.set(db.collection('transactions').doc(), {
                     description: `ክፍያ: ስራ #${orderId.substring(0, 8)} (ከሪፖርት የተጠናቀቀ)`, amount: price, type: 'income',
-                    staff: technicianName, orderId: orderId, date: today, createdAt: now, pending: true, lateForReportId: reportId
+                    staff: technicianName, orderId: orderId, date: today, createdAt: now, pending: true, ...(inPlace ? { lateForReportId: reportId } : {})
                 });
                 if (expense > 0) batch.set(db.collection('transactions').doc(), {
                     description: `ወጪ: ስራ #${orderId.substring(0, 8)}${expenseNote ? ' — ' + expenseNote : ''} (ከሪፖርት የተጠናቀቀ)`, amount: expense, type: 'expense',
-                    staff: technicianName, orderId: orderId, date: today, createdAt: now, pending: true, lateForReportId: reportId
+                    staff: technicianName, orderId: orderId, date: today, createdAt: now, pending: true, ...(inPlace ? { lateForReportId: reportId } : {})
                 });
                 const repUpdate = {
                     jobStatuses: js,
@@ -11785,18 +11788,17 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     lateCompletedCount: (parseInt(rep.lateCompletedCount, 10) || 0) + 1,
                     lastLateCompletedAt: now
                 };
-                if (rep.approved) { repUpdate.approved = false; repUpdate.approvedAt = null; repUpdate.reopenedForApproval = true; repUpdate.reopenedAt = now; }
-                batch.update(repRef, repUpdate);
+                if (inPlace) batch.update(repRef, repUpdate);
                 await batch.commit();
 
                 // ከበስተጀርባ፦ ማስታወሻ + አድሚን ማሳወቂያ + ደንበኛ SMS (እንደ መደበኛ «አጠናቅ»)
                 db.collection('activity').add({ user: technicianName, action: 'complete_job_from_report',
                     details: `ስራ #${orderId.substring(0, 8)} ከሪፖርት (${rep.dateKey || ''}) ወደ ተጠናቀቀ ተቀየረ, ዋጋ ${price} - ወጪ ${expense} = ገቢ ${net} ብር`, timestamp: now }).catch(() => {});
-                try { techSendTelegramNotification(`🔄 ከቆይታ በኋላ የተጠናቀቀ ስራ\n👷 ${tgEsc(technicianName)} — ሪፖርት ${tgEsc(rep.date || rep.dateKey || '')}\n📋 ${tgEsc(job.customer || '—')} - ${tgEsc(job.appliance || '—')} ✅\n💰 ዋጋ ${price} | 🧾 ወጪ ${expense} | 💵 ገቢ ${net} ብር${rep.approved ? '\n⚠️ ሪፖርቱ እንደገና ማጽደቅ ይጠብቃል' : ''}`); } catch (e) {}
-                try { callWorker('notifyDispatchers', { audience: 'finance', text: '🔄 በሪፖርት ውስጥ ያልተጠናቀቀ ስራ ተጠናቀቀ — ማጽደቅ ይጠይቃል', smsText: 'በሪፖርት ውስጥ ያልተጠናቀቀ ስራ ተጠናቀቀ' }).catch(() => {}); } catch (e) {}
+                if (inPlace) try { techSendTelegramNotification(`🔄 ከቆይታ በኋላ የተጠናቀቀ ስራ\n👷 ${tgEsc(technicianName)} — ሪፖርት ${tgEsc(rep.date || rep.dateKey || '')}\n📋 ${tgEsc(job.customer || '—')} - ${tgEsc(job.appliance || '—')} ✅\n💰 ዋጋ ${price} | 🧾 ወጪ ${expense} | 💵 ገቢ ${net} ብር`); } catch (e) {}
+                if (inPlace) try { callWorker('notifyDispatchers', { audience: 'finance', text: '🔄 በሪፖርት ውስጥ ያልተጠናቀቀ ስራ ተጠናቀቀ — ማጽደቅ ይጠይቃል', smsText: 'በሪፖርት ውስጥ ያልተጠናቀቀ ስራ ተጠናቀቀ' }).catch(() => {}); } catch (e) {}
                 try { sendCustomerSmsFor('done', orderId); } catch (e) {}
 
-                showToast(`✅ ስራው ተጠናቋል! ገቢ ${net} ብር ወደ ሪፖርቱ ተጨምሯል`, 'success');
+                showToast(inPlace ? `✅ ስራው ተጠናቋል! ገቢ ${net} ብር ወደ ሪፖርቱ ተጨምሯል` : `✅ ስራው ተጠናቋል! ገቢ ${net} ብር — በሚቀጥለው ሪፖርት ከሌሎች ጋር ይገባል`, 'success');
                 closeModal();
             } catch (e) {
                 console.error('convert job failed', e);
