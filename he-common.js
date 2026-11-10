@@ -197,6 +197,11 @@ function setEthPickerFromGregorian(idPrefix, gregDateStr) {
 function getDateKey(d) {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
+// 🕗 የስራ ቀን መቀየሪያ፦ ቀኑ የሚቀየረው ጠዋት 2:30 (በኢትዮጵያ አቆጣጠር = 8:30 AM) ነው።
+// ከዚያ በፊት (ሌሊት/ማለዳ) የተደረገ ሪፖርት/ግቤት የትላንት ቀን ይሆናል።
+const BIZ_DAY_START_MIN = 8 * 60 + 30;
+function bizNow(d) { return new Date((d ? d.getTime() : Date.now()) - BIZ_DAY_START_MIN * 60000); }
+function getBizDateKey(d) { return getDateKey(bizNow(d)); }
 function escHtml(v) {
     return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
