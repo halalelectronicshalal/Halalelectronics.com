@@ -67,7 +67,7 @@ function heLoginErrorText(code, role) {
                 ? '⛔ ይህ አካውንት ኦፕሬተር አይደለም። አድሚኑን ያነጋግሩ'
                 : '⛔ ይህ የቴክኒሻን ገፅ ነው። አድሚን ከሆኑ admin.html፣ ኦፕሬተር ከሆኑ operator.html ይጠቀሙ'
     };
-    return m[code] || '❌ መግባት አልተቻለም፣ እንደገና ይሞክሩ';
+    return m[code] || ('❌ መግባት አልተቻለም፣ እንደገና ይሞክሩ' + (code ? ' (ኮድ: ' + code + ')' : ' (ከአገልጋዩ መልስ አልመጣም)'));
 }
 // ገጽ ሲከፈት፦ የተቀመጠ session ካለ Firebase በ role claim ይግባ፤ ከሌለ anonymous (ለደንበኛ ጥሪዎች)
 let authReady = (async () => {
