@@ -11594,7 +11594,6 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     const lateOrder = (typeof myOrders !== 'undefined' && myOrders.find(o => o.id === j.orderId)) || null;
                     const doneLater = !!(lateOrder && lateOrder.status === 'Completed' && j.status !== 'completed');
                     const done = j.status === 'completed' || doneLater;
-                    const canNote = !r.approved;
                     const canConvert = !done;
                     let h = `<div style="padding:8px 0; border-top:1px solid var(--border-light); font-size:0.82rem;">
                         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
@@ -11603,12 +11602,6 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                                    : `<select onchange="techSentStatusChange(this, '${r.id}', ${i})" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); font-size:0.8rem;"><option value="">❌ አልተጠናቀቀም</option><option value="done">✅ ተሰራ (ሀ)</option></select>`}
                         </div>`;
                     if (j.convertedFromNotCompleted) h += `<div style="color:#047857; font-size:0.78rem;">🔄 ወደ «ተጠናቀቀ» ተቀይሯል — ገቢ ${techEsc(j.lateIncome)} | ወጪ ${techEsc(j.lateExpense)} ብር</div>`;
-                    if (j.correctionNote) {
-                        h += `<div style="margin-top:4px; padding:6px 8px; border:1.5px solid #DC2626; border-radius:8px; background:#FEF2F2; color:#DC2626; font-weight:600; white-space:pre-wrap;">✍️ ${techEsc(j.correctionNote)}${j.correctionNoteEditedByAdmin ? '<div style="font-weight:400; font-size:0.72rem;">(በአድሚን ተስተካክሏል)</div>' : ''}</div>`;
-                    }
-                    const btns = [];
-                    if (canNote) btns.push(`<button type="button" class="btn btn-xs btn-outline" style="color:#DC2626; border-color:#DC2626;" onclick="techOpenReportNote('${r.id}', ${i})"><i class="fas fa-pen"></i> ${j.correctionNote ? 'እርማት አርም' : 'ስህተት / እርማት ጻፍ'}</button>`);
-                    if (btns.length) h += `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;">${btns.join('')}</div>`;
                     return h + '</div>';
                 }).join('');
                 const inc = r.totalIncome != null ? r.totalIncome : (r.income || 0);
@@ -11618,28 +11611,29 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         ${r.approved ? '<span class="status-badge status-completed">✅ ጸድቋል</span>' : '<span class="status-badge status-pending">⏳ አልጸደቀም</span>'}
                     </div>
                     <div style="font-size:0.78rem; color:var(--text-muted); margin:4px 0;">ተጠናቀቁ ${techEsc(r.completedCount || 0)} · አልተጠናቀቁ ${techEsc(r.notCompletedCount || 0)} · ገቢ ${techEsc(inc)} ብር · ወጪ ${techEsc(r.totalExpense || 0)} ብር${r.reopenedForApproval ? ' · <span style="color:#047857;">🔄 እንደገና ማጽደቅ ይጠብቃል</span>' : ''}</div>
+                    ${(r.correctionRequest && r.correctionRequest.text) ? `<div style="margin:6px 0; padding:6px 8px; border:1.5px solid #DC2626; border-radius:8px; background:#FEF2F2; color:#DC2626; font-weight:600; white-space:pre-wrap;">✍️ ${techEsc(r.correctionRequest.text)}${r.correctionRequest.editedByAdmin ? '<div style="font-weight:400; font-size:0.72rem;">(በአድሚን ተስተካክሏል)</div>' : ''}</div>` : ''}
+                    ${!r.approved ? `<button type="button" class="btn btn-xs btn-outline" style="color:#DC2626; border-color:#DC2626; margin-bottom:6px;" onclick="techOpenReportNote('${r.id}')"><i class="fas fa-pen"></i> ${(r.correctionRequest && r.correctionRequest.text) ? 'እርማት አርም' : 'ስህተት / እርማት ጻፍ'}</button>` : ''}
                     ${rows || '<div class="text-muted" style="font-size:0.8rem;">የስራ ዝርዝር የለም</div>'}
                 </div>`;
             }).join('');
         }
 
-        // ---- ✍️ ስህተት / እርማት መጠየቂያ ጽሁፍ ----
-        function techOpenReportNote(reportId, idx) {
+        // ---- ✍️ ስህተት / እርማት መጠየቂያ ጽሁፍ (በአንድ ሪፖርት አንድ ቦታ ብቻ) ----
+        function techOpenReportNote(reportId) {
             const r = techSentReports.find(x => x.id === reportId);
-            const j = r && r.jobStatuses && r.jobStatuses[idx];
-            if (!r || !j) { showToast('ሪፖርቱ አልተገኘም', 'error'); return; }
+            if (!r) { showToast('ሪፖርቱ አልተገኘም', 'error'); return; }
             if (r.approved) { showToast('⚠️ ሪፖርቱ ጸድቋል — ከዚህ በኋላ እርማት መጻፍ አይቻልም', 'error'); return; }
             const html = `
-                <div style="font-size:0.85rem; margin-bottom:8px;">📋 ${techEsc(j.customer || '—')} - ${techEsc(j.appliance || '—')}</div>
+                <div style="font-size:0.85rem; margin-bottom:8px;">📅 ሪፖርት: ${techEsc(r.date || r.dateKey || '')}</div>
                 <div class="form-group">
                     <label style="color:#DC2626; font-weight:700;">✍️ የተሳሳተው ነገር እና የእርማት ጥያቄ</label>
-                    <textarea id="techNoteText" rows="4" style="color:#DC2626; font-weight:600; border:1.5px solid #DC2626;" placeholder="ምን እንደተሳሳተ እና ምን እንዲስተካከል እንደሚፈልጉ ይጻፉ...">${techEsc(j.correctionNote || '')}</textarea>
-                    <small style="color:var(--text-muted);">አድሚን ከማጽደቁ በፊት ይህን ጽሁፍ በስራው ላይ ያየዋል፤ በቀይ ጽሁፍ ሊያስተካክለውም ይችላል። ባዶ ካስቀመጡ ጽሁፉ ይጠፋል።</small>
+                    <textarea id="techNoteText" rows="4" style="color:#DC2626; font-weight:600; border:1.5px solid #DC2626;" placeholder="በሪፖርቱ ውስጥ ምን እንደተሳሳተ እና ምን እንዲስተካከል እንደሚፈልጉ ይጻፉ...">${techEsc((r.correctionRequest && r.correctionRequest.text) || '')}</textarea>
+                    <small style="color:var(--text-muted);">አድሚን ከማጽደቁ በፊት ይህን ጽሁፍ ያየዋል፤ እርማት ሲጠየቅ አድሚኑ የሪፖርቱን ሁሉንም ክፍል ከፍቶ ማረም ይችላል። ባዶ ካስቀመጡ ጥያቄው ይሰረዛል።</small>
                 </div>
-                <button class="btn btn-success btn-block" id="techNoteSaveBtn" onclick="techSaveReportNote('${reportId}', ${idx})"><i class="fas fa-save"></i> አስቀምጥ</button>`;
+                <button class="btn btn-success btn-block" id="techNoteSaveBtn" onclick="techSaveReportNote('${reportId}')"><i class="fas fa-save"></i> አስቀምጥ</button>`;
             openModal('✍️ ስህተት / እርማት ጥያቄ', html);
         }
-        async function techSaveReportNote(reportId, idx) {
+        async function techSaveReportNote(reportId) {
             const btn = document.getElementById('techNoteSaveBtn');
             if (btn && btn.disabled) return;
             const text = (document.getElementById('techNoteText').value || '').trim();
@@ -11650,26 +11644,16 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 if (!snap.exists) throw new Error('ሪፖርቱ አልተገኘም');
                 const rep = snap.data();
                 if (rep.approved) throw new Error('ሪፖርቱ ቀድሞ ጸድቋል — እርማት መጻፍ አይቻልም');
-                const js = (rep.jobStatuses || []).slice();
-                if (!js[idx]) throw new Error('ስራው አልተገኘም');
-                const j = Object.assign({}, js[idx]);
+                const upd = text
+                    ? { correctionRequest: { text: text, by: 'technician', at: new Date(), editedByAdmin: false }, hasCorrectionRequest: true }
+                    : { correctionRequest: null, hasCorrectionRequest: false };
+                await ref.update(upd);
                 if (text) {
-                    j.correctionNote = text;
-                    j.correctionNoteBy = 'technician';
-                    j.correctionNoteAt = new Date();
-                    j.correctionNoteEditedByAdmin = false;
-                    delete j.correctionNoteOriginal;
-                } else {
-                    ['correctionNote', 'correctionNoteBy', 'correctionNoteAt', 'correctionNoteEditedByAdmin', 'correctionNoteOriginal', 'correctionNoteEditedAt'].forEach(k => delete j[k]);
-                }
-                js[idx] = j;
-                await ref.update({ jobStatuses: js, hasCorrectionRequest: js.some(x => x && x.correctionNote) });
-                if (text) {
-                    db.collection('activity').add({ user: technicianName, action: 'report_correction_request', details: `ሪፖርት ${rep.dateKey || ''} — ${j.customer || ''}: ${text.slice(0, 200)}`, timestamp: new Date() }).catch(() => {});
-                    try { techSendTelegramNotification(`✍️ የእርማት ጥያቄ\n👷 ${tgEsc(technicianName)} — ${tgEsc(rep.date || rep.dateKey || '')}\n📋 ${tgEsc(j.customer || '—')} - ${tgEsc(j.appliance || '—')}\n${tgEsc(text)}`); } catch (e) {}
+                    db.collection('activity').add({ user: technicianName, action: 'report_correction_request', details: `ሪፖርት ${rep.dateKey || ''}: ${text.slice(0, 200)}`, timestamp: new Date() }).catch(() => {});
+                    try { techSendTelegramNotification(`✍️ የእርማት ጥያቄ\n👷 ${tgEsc(technicianName)} — ${tgEsc(rep.date || rep.dateKey || '')}\n${tgEsc(text)}`); } catch (e) {}
                     try { callWorker('notifyDispatchers', { audience: 'finance', text: '✍️ ቴክኒሻን በሪፖርት ላይ እርማት ጠይቋል', smsText: 'ቴክኒሻን በሪፖርት ላይ እርማት ጠይቋል' }).catch(() => {}); } catch (e) {}
                 }
-                showToast(text ? '✅ የእርማት ጥያቄ ተቀምጧል' : '✅ ጽሁፉ ተሰርዟል', 'success');
+                showToast(text ? '✅ የእርማት ጥያቄ ተልኳል' : '✅ ጥያቄው ተሰርዟል', 'success');
                 closeModal();
             } catch (e) {
                 showToast('❌ ' + e.message, 'error');
