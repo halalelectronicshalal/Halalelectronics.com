@@ -16,12 +16,14 @@
 .order-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border-light)}
 .order-row:last-child{border-bottom:0}
 .order-row.hl{background:rgba(245,158,11,.15);border-radius:10px;padding-left:8px;padding-right:8px;outline:2px solid var(--warning)}
-.order-info{flex:1;min-width:220px}
+.order-info{flex:1 1 220px;min-width:0;overflow-wrap:anywhere}
 .order-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.order-actions select{width:auto;max-width:230px;padding:7px 8px;font-size:.82rem;border-radius:8px}
+.order-actions{min-width:0;max-width:100%}
+.order-actions select{width:auto;min-width:0;max-width:min(230px,100%);padding:7px 8px;font-size:.82rem;border-radius:8px;text-overflow:ellipsis}
 .tag{display:inline-block;border-radius:6px;padding:1px 7px;font-size:.68rem;font-weight:700;background:var(--border);color:var(--text-muted)}
 .search-row{display:grid;grid-template-columns:1fr 180px;gap:10px;margin-bottom:12px}
-@media (max-width:640px){.search-row{grid-template-columns:1fr}.order-actions select{max-width:100%;flex:1}}
+@media (max-width:640px){.search-row{grid-template-columns:1fr}.order-actions{width:100%}.order-actions select{max-width:100%;width:100%;flex:1 1 100%}}
+html,body{overflow-x:hidden;max-width:100%}.he-wrap,.card,.modal{min-width:0;max-width:100%}.modal-overlay{overflow-x:hidden}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
@@ -46,6 +48,7 @@
         <div class="stat-card stat-click" onclick="showStatDetail('pending')" role="button" tabindex="0"><div class="icon"><i class="fas fa-clock" style="color:var(--warning);"></i></div><div class="number" id="statPending" style="color:var(--warning);">0</div><div class="label">ገና ያልተመደቡ</div></div>
         <div class="stat-card stat-click" onclick="showStatDetail('assigned')" role="button" tabindex="0"><div class="icon"><i class="fas fa-user-check" style="color:var(--primary);"></i></div><div class="number" id="statAssigned">0</div><div class="label">የተመደቡ (ክፍት ስራ)</div></div>
         <div class="stat-card stat-click" onclick="showStatDetail('free')" role="button" tabindex="0"><div class="icon"><i class="fas fa-circle" style="color:var(--success);"></i></div><div class="number" id="statFree" style="color:var(--success);">0</div><div class="label">ነጻ ቴክኒሻኖች</div></div>
+        <div class="stat-card stat-click" onclick="showStatDetail('scheduled')" role="button" tabindex="0"><div class="icon"><i class="fas fa-calendar-alt" style="color:#B45309;"></i></div><div class="number" id="statScheduled" style="color:#B45309;">0</div><div class="label">📅 እስከሚደርስ ቀጠሮ</div></div>
     </div>
 
 
@@ -72,14 +75,6 @@
         <div id="dashNewOrdersList"><p class="text-muted text-center">በመጫን ላይ...</p></div>
     </div>
 
-    <!-- 📅 ቀጠሯቸው ገና ያልደረሱ ትዕዛዞች — ቀጠሯቸው እስኪደርስ እዚህ ይቆያሉ -->
-    <div class="card" id="scheduledOrdersCard">
-        <div class="card-header" style="cursor:pointer;" onclick="toggleScheduledOrders()">
-            <h3><i class="fas fa-calendar-alt" style="color:var(--primary);"></i> 📅 እስከሚደርስ ቀጠሮ <span class="status-badge status-pending" id="scheduledOrdersBadge">0</span>
-                <span class="text-muted" id="scheduledOrdersArrow" style="font-size:.8rem; margin-left:6px;">▼ ክፈት</span></h3>
-        </div>
-        <div id="scheduledOrdersList" style="display:none;"></div>
-    </div>
 </main>
 
 <script>
@@ -127,7 +122,7 @@ function techNotTodayToday(tech) {
 function techIsOffline(t) { return t.isOnline !== true || t.status === 'off-duty'; }
 /** 🔴 በስራ ላይ ያለ ቴክኒሻን ክፍት (Assigned) ስራዎች ብዛት */
 function techOpenAssignedCount(t) {
-    return allOrders.filter(o => o.status === 'Assigned' && (o.technicianId ? o.technicianId === t.id : o.technician === t.name)).length;
+    return allOrders.filter(o => o.status === 'Assigned' && !orderHasFutureAppt(o) && (o.technicianId ? o.technicianId === t.id : o.technician === t.name)).length;
 }
 /** 'busy' (🔴 በስራ ላይ) | 'off' (⚪ «ዛሬ አልወጣሁም» ያለ) | 'free' (🟢 ከሁለቱ ውጪ ሁሉ — «ነጻ ነኝ» ባይልክም) */
 function techWorkState(t) {
@@ -503,7 +498,9 @@ function operatorNotesHtml(o) {
 /* ============================================================
    📊 የካርዶች ዝርዝር (ገና ያልተመደቡ / የተመደቡ ክፍት ስራዎች / ነጻ ቴክኒሻኖች)
    ============================================================ */
-function showStatDetail(kind) {
+let statModalKind = null;
+function showStatDetail(kind, refresh) {
+    statModalKind = kind;
     let title = '', body = '';
     const orderItem = o => {
         const d = o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : null;
@@ -523,6 +520,22 @@ function showStatDetail(kind) {
         title = '📋 የተመደቡ ክፍት ስራዎች';
         const l = allOrders.filter(o => o.status === 'Assigned').sort((a, b) => toMs(b.assignedAt || b.createdAt) - toMs(a.assignedAt || a.createdAt));
         body = l.length ? l.map(orderItem).join('') : '<p class="text-muted text-center">ምንም የለም</p>';
+    } else if (kind === 'scheduled') {
+        title = '📅 እስከሚደርስ ቀጠሮ';
+        const pend = allOrders.filter(o => o.status === 'Pending' && orderIsScheduled(o));
+        const asg = allOrders.filter(o => o.status === 'Assigned' && orderHasFutureAppt(o));
+        const l = pend.concat(asg).sort((a, b) => orderApptDate(a) - orderApptDate(b) || toMs(b.createdAt) - toMs(a.createdAt));
+        const keepSel = {};
+        document.querySelectorAll('#modalBody .dashAssignSelect').forEach(x => { if (x.value) keepSel[x.dataset.id] = x.value; });
+        const opts = techOptionsHtml();
+        body = l.length ? l.map(o => o.status === 'Pending' ? orderRowHtml(o, opts)
+            : `<div class="sd-item">${orderItem(o)}<div style="margin-top:3px;">${apptTagHtml(o)}</div></div>`).join('')
+            : '<p class="text-muted text-center">ቀጠሯቸው ገና ያልደረሱ ትዕዛዞች የሉም</p>';
+        if (refresh) {
+            document.getElementById('modalBody').innerHTML = body;
+            document.querySelectorAll('#modalBody .dashAssignSelect').forEach(x => { if (keepSel[x.dataset.id]) x.value = keepSel[x.dataset.id]; });
+            return;
+        }
     } else {
         title = '🟢 ነጻ ቴክኒሻኖች';
         const l = fieldTechs().filter(t => techWorkState(t) === 'free');
@@ -586,6 +599,11 @@ function orderApptDate(o) {
 function todayStart() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
 function daysUntil(d) { return Math.round((d.getTime() - todayStart().getTime()) / 86400000); }
 /** ቀጠሮው አልደረሰም? (ነገ ወይም ከዚያ በኋላ) — ከቴሌግራም «መድብ» የመጣ ትዕዛዝ ሁል ጊዜ ከፊት ይታያል */
+/** 📅 ለተመደበ ስራ ግልጽ የቀጠሮ ቀን (appointmentDate/rescheduledDate) ያለው እና ገና ያልደረሰ */
+function orderHasFutureAppt(o) {
+    const d = keyToLocalDate(o.appointmentDate) || keyToLocalDate(o.rescheduledDate);
+    return !!d && daysUntil(d) > 0;
+}
 function orderIsScheduled(o) {
     if (o.id === highlightOrderId) return false;
     const d = orderApptDate(o);
@@ -599,13 +617,6 @@ function apptTagHtml(o) {
     const color = n > 0 ? '#B45309' : n === 0 ? 'var(--success)' : 'var(--emergency)';
     return `<span class="tag" style="color:${color}; font-weight:700;">📅 ቀጠሮ: ${escHtml(formatEthDate(d, true))} (${when})</span>`;
 }
-function toggleScheduledOrders() {
-    const l = document.getElementById('scheduledOrdersList'), a = document.getElementById('scheduledOrdersArrow');
-    const open = l.style.display === 'none';
-    l.style.display = open ? '' : 'none';
-    a.textContent = open ? '▲ ዝጋ' : '▼ ክፈት';
-}
-
 function orderRowHtml(order, techOptions) {
     const date = order.createdAt && order.createdAt.toDate ? order.createdAt.toDate() : new Date();
     const hl = order.id === highlightOrderId ? ' hl' : '';
@@ -633,7 +644,6 @@ function orderRowHtml(order, techOptions) {
 
 function renderDashNewOrders() {
     const list = document.getElementById('dashNewOrdersList');
-    const schedList = document.getElementById('scheduledOrdersList');
     const pending = allOrders.filter(o => o.status === 'Pending')
         .sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
 
@@ -651,7 +661,9 @@ function renderDashNewOrders() {
     // ስታቲስቲክስ
     ['dashNewOrdersBadge', 'topBadge'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = due.length; });
     const sp = document.getElementById('statPending'); if (sp) sp.textContent = pending.length; // ጠቅላላ ያልተመደቡ (ቀጠሮ ያላቸውንም ጨምሮ)
-    document.getElementById('statAssigned').textContent = allOrders.filter(o => o.status === 'Assigned').length;
+    const apptAssigned = allOrders.filter(o => o.status === 'Assigned' && orderHasFutureAppt(o));
+    document.getElementById('statAssigned').textContent = allOrders.filter(o => o.status === 'Assigned' && !orderHasFutureAppt(o)).length;
+    document.getElementById('statScheduled').textContent = scheduled.length + apptAssigned.length;
     document.getElementById('statFree').textContent = fieldTechs().filter(t => techWorkState(t) === 'free').length;
 
     // በግማሽ የተመረጠ ቴክኒሻን እንዳይጠፋ ማስቀመጥ
@@ -661,16 +673,10 @@ function renderDashNewOrders() {
     const techOptions = techOptionsHtml();
     const shown = due.filter(matches);
     if (!shown.length) {
-        list.innerHTML = `<p class="text-muted text-center">${due.length ? 'ከፍለጋው ጋር የሚመሳሰል ትዕዛዝ የለም' : 'ዛሬ የሚሰራ አዲስ ትዕዛዝ የለም'}${scheduled.length ? ' (ቀጠሮ ያላቸው ከታች «እስከሚደርስ ቀጠሮ» ውስጥ አሉ)' : ''}</p>`;
+        list.innerHTML = `<p class="text-muted text-center">${due.length ? 'ከፍለጋው ጋር የሚመሳሰል ትዕዛዝ የለም' : 'ዛሬ የሚሰራ አዲስ ትዕዛዝ የለም'}${scheduled.length ? ' (ቀጠሮ ያላቸው በ«እስከሚደርስ ቀጠሮ» ካርድ ውስጥ አሉ)' : ''}</p>`;
     } else {
         list.innerHTML = shown.map(o => orderRowHtml(o, techOptions)).join('');
     }
-
-    const schedShown = scheduled.filter(matches);
-    document.getElementById('scheduledOrdersBadge').textContent = scheduled.length;
-    schedList.innerHTML = schedShown.length
-        ? schedShown.map(o => orderRowHtml(o, techOptions)).join('')
-        : `<p class="text-muted text-center">${scheduled.length ? 'ከፍለጋው ጋር የሚመሳሰል ትዕዛዝ የለም' : 'ቀጠሯቸው ገና ያልደረሱ ትዕዛዞች የሉም'}</p>`;
 
     document.querySelectorAll('.dashAssignSelect').forEach(s => { if (keep[s.dataset.id]) s.value = keep[s.dataset.id]; });
 
@@ -678,101 +684,8 @@ function renderDashNewOrders() {
         const el = document.getElementById('ord-' + highlightOrderId);
         if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); highlightOrderId = null; }
     }
+    try { if (statModalKind === 'scheduled' && document.getElementById('modalOverlay').classList.contains('show')) showStatDetail('scheduled', true); } catch (e) {}
     try { renderFreeAnnounce(); } catch (e) {} // ስራ ሲመደብ/ሲለወጥ «ነፃ ነኝ» ዝርዝር ይታደሳል
-}
-
-
-/* ============================================================
-   📊 የካርዶች ዝርዝር (ገና ያልተመደቡ / የተመደቡ ክፍት ስራዎች / ነጻ ቴክኒሻኖች)
-   ============================================================ */
-function showStatDetail(kind) {
-    let title = '', body = '';
-    const orderItem = o => {
-        const d = o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : null;
-        return `<div class="sd-item">
-            <div style="font-weight:600;">${escHtml(o.fullName || '—')} <span class="text-muted" style="font-weight:400;">• ${escHtml(o.appliance || '—')}</span></div>
-            <div class="text-muted" style="font-size:.78rem;">📱 ${o.phone ? `<a href="tel:${escHtml(o.phone)}">${escHtml(o.phone)}</a>` : '—'} &nbsp; 📍 ${escHtml(o.address || '—')}${d ? ' &nbsp; 🕒 ' + formatEthDateTime(d) : ''}</div>
-            ${o.technician ? `<div style="font-size:.8rem;margin-top:2px;">👨‍🔧 <b>${escHtml(o.technician)}</b></div>` : ''}
-            ${o.preferredDay ? `<div style="font-size:.78rem;color:var(--primary);">📅 ${escHtml(o.preferredDay)}</div>` : ''}
-            ${operatorNotesHtml(o)}
-        </div>`;
-    };
-    if (kind === 'pending') {
-        title = '⏳ ገና ያልተመደቡ';
-        const l = allOrders.filter(o => o.status === 'Pending').sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
-        body = l.length ? l.map(orderItem).join('') : '<p class="text-muted text-center">ምንም የለም</p>';
-    } else if (kind === 'assigned') {
-        title = '📋 የተመደቡ ክፍት ስራዎች';
-        const l = allOrders.filter(o => o.status === 'Assigned').sort((a, b) => toMs(b.assignedAt || b.createdAt) - toMs(a.assignedAt || a.createdAt));
-        body = l.length ? l.map(orderItem).join('') : '<p class="text-muted text-center">ምንም የለም</p>';
-    } else {
-        title = '🟢 ነጻ ቴክኒሻኖች';
-        const l = fieldTechs().filter(t => techWorkState(t) === 'free');
-        body = l.length ? l.map(t => `<div class="sd-item"><div style="font-weight:600;">👨‍🔧 ${escHtml(t.name || '—')}</div>
-            <div class="text-muted" style="font-size:.78rem;">${t.phone ? '📱 <a href="tel:' + escHtml(t.phone) + '">' + escHtml(t.phone) + '</a>' : ''}${techIsOffline(t) ? ' &nbsp; ⚪ ከመስመር ውጪ' : ' &nbsp; 🟢 መስመር ላይ'}</div></div>`).join('') : '<p class="text-muted text-center">ነጻ ቴክኒሻን የለም</p>';
-    }
-    openModal(title, body);
-}
-
-/* ============================================================
-   ዝርዝሩን መሳል
-   ============================================================ */
-function renderDashNewOrders() {
-    const list = document.getElementById('dashNewOrdersList');
-    const pending = allOrders.filter(o => o.status === 'Pending')
-        .sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
-
-    // ስታቲስቲክስ
-    ['dashNewOrdersBadge', 'topBadge', 'statPending'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = pending.length; });
-    document.getElementById('statAssigned').textContent = allOrders.filter(o => o.status === 'Assigned').length;
-    document.getElementById('statFree').textContent = fieldTechs().filter(t => techWorkState(t) === 'free').length;
-
-    // ማጣሪያ
-    const q = (document.getElementById('orderSearch').value || '').trim().toLowerCase();
-    const sf = document.getElementById('sourceFilter').value;
-    const shown = pending.filter(o =>
-        (sf === 'all' || orderSource(o) === sf) &&
-        (!q || (o.fullName || '').toLowerCase().includes(q) || (o.phone || '').includes(q)));
-
-    // በግማሽ የተመረጠ ቴክኒሻን እንዳይጠፋ ማስቀመጥ
-    const keep = {};
-    list.querySelectorAll('.dashAssignSelect').forEach(s => { if (s.value) keep[s.dataset.id] = s.value; });
-
-    if (!shown.length) {
-        list.innerHTML = `<p class="text-muted text-center">${pending.length ? 'ከፍለጋው ጋር የሚመሳሰል ትዕዛዝ የለም' : 'ምንም አዲስ ትዕዛዝ የለም'}</p>`;
-        return;
-    }
-    const techOptions = techOptionsHtml();
-    list.innerHTML = shown.map(order => {
-        const date = order.createdAt && order.createdAt.toDate ? order.createdAt.toDate() : new Date();
-        const hl = order.id === highlightOrderId ? ' hl' : '';
-        return `<div class="order-row${hl}" id="ord-${order.id}">
-            <div class="order-info">
-                <div style="font-weight:600;">${escHtml(order.fullName || '—')} <span class="text-muted" style="font-weight:400; font-size:0.8rem;">• ${escHtml(order.appliance || '—')}</span></div>
-                <div class="text-muted" style="font-size:0.78rem;">📱 ${order.phone ? `<a href="tel:${escHtml(order.phone)}" style="font-weight:600;">${escHtml(order.phone)}</a>` : '—'}
-                    &nbsp; <i class="fas fa-map-marker-alt"></i> ${escHtml(order.address || '—')}
-                    &nbsp; <i class="fas fa-clock"></i> ${formatEthDateTime(date)}</div>
-                <div style="margin-top:3px;"><span class="tag">${srcLabel(order)}</span>
-                    ${order.preferredDay ? `<span class="tag" style="color:var(--primary);">📅 ${escHtml(order.preferredDay)}</span>` : ''}
-                    ${order.suggestedWorkerName ? `<span class="tag" style="color:#B45309;">⭐ ${escHtml(order.suggestedWorkerName)}</span>` : ''}</div>
-                ${order.returnReason ? `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#FEF3C7; color:#92400E; font-size:0.78rem;">↩️ <strong>ተመለሰ${order.returnedFrom ? ' ከ ' + escHtml(order.returnedFrom) : ''}</strong> — ምክንያት: ${escHtml(order.returnReason)}</div>` : ''}
-                ${operatorNotesHtml(order)}
-            </div>
-            <div class="order-actions">
-                <select class="dashAssignSelect" data-id="${order.id}"><option value="">ቴክኒሻን ምረጥ</option>${techOptions}</select>
-                <button class="btn btn-xs btn-secondary" onclick="recommendTechnician('${order.id}')" title="ዝቅተኛ ስራ ያለበትን ቴክኒሻን ምከር"><i class="fas fa-robot"></i></button>
-                <button class="btn btn-sm btn-success" onclick="assignOrder('${order.id}')"><i class="fas fa-check"></i> መድብ</button>
-                <button class="btn btn-sm btn-primary" onclick="viewOrder('${order.id}')" title="ዝርዝር"><i class="fas fa-eye"></i></button>
-                <button class="btn btn-xs btn-danger admin-only" onclick="deleteOrder('${order.id}')" title="ሰርዝ"><i class="fas fa-trash"></i></button>
-            </div>
-        </div>`;
-    }).join('');
-    list.querySelectorAll('.dashAssignSelect').forEach(s => { if (keep[s.dataset.id]) s.value = keep[s.dataset.id]; });
-
-    if (highlightOrderId) {
-        const el = document.getElementById('ord-' + highlightOrderId);
-        if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); highlightOrderId = null; }
-    }
 }
 
 
