@@ -4029,10 +4029,10 @@
             const todayISO = new Date().toISOString().slice(0,10);
             document.getElementById('orderDateFilterEthContainer').innerHTML = buildEthiopianPickerHTML('orderDateFilterEth', 'orderDateFilter', todayISO);
             document.getElementById('orderDateFilter').value = todayISO;
-            document.getElementById('txDateEthContainer').innerHTML = buildEthiopianPickerHTML('txDateEth', 'txDate', new Date().toISOString().slice(0,10));
-            document.getElementById('txDate').value = new Date().toISOString().slice(0,10);
-            document.getElementById('dailyActDateEthContainer').innerHTML = buildEthiopianPickerHTML('dailyActDateEth', 'dailyActDate', getDateKey(new Date()));
-            document.getElementById('dailyActDate').value = getDateKey(new Date());
+            document.getElementById('txDateEthContainer').innerHTML = buildEthiopianPickerHTML('txDateEth', 'txDate', getBizDateKey());
+            document.getElementById('txDate').value = getBizDateKey();
+            document.getElementById('dailyActDateEthContainer').innerHTML = buildEthiopianPickerHTML('dailyActDateEth', 'dailyActDate', getBizDateKey());
+            document.getElementById('dailyActDate').value = getBizDateKey();
 
             document.getElementById('orderFilter').addEventListener('change', renderOrders);
             document.getElementById('orderDateFilter').addEventListener('change', renderOrders);
@@ -4443,6 +4443,11 @@
         function getDateKey(d) {
             return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
         }
+        // 🕗 የስራ ቀን መቀየሪያ፦ ቀኑ የሚቀየረው ጠዋት 2:30 (በኢትዮጵያ አቆጣጠር = 8:30 AM) ነው።
+        // ከዚያ በፊት (ሌሊት/ማለዳ) የተደረገ ሪፖርት/ግቤት የትላንት ቀን ይሆናል።
+        const BIZ_DAY_START_MIN = 8 * 60 + 30;
+        function bizNow(d) { return new Date((d ? d.getTime() : Date.now()) - BIZ_DAY_START_MIN * 60000); }
+        function getBizDateKey(d) { return getDateKey(bizNow(d)); }
         function renderRankResetInfo() {
             const el = document.getElementById('rankResetInfo');
             if (!el) return;
@@ -6094,7 +6099,7 @@ ${locationLine}
         function toggleTechReportsAll() { _techReportsShowAll = !_techReportsShowAll; showTechReportsModal(); }
 
         function showTechReportsModal() {
-            const yesterdayKey = getDateKey(new Date(Date.now() - 86400000));
+            const yesterdayKey = getBizDateKey(new Date(Date.now() - 86400000));
             const rk = reportedJobKeys();
             const techs = fieldTechs();
             const pendingList = techs
@@ -6595,7 +6600,7 @@ ${locationLine}
             window._techSummaryLastRange = rangeFilter;
             if (groupBy) window._techSummaryGroupBy = groupBy;
             const group = window._techSummaryGroupBy;
-            const now = new Date();
+            const now = bizNow(); // የስራ ቀን
             let startKey = null, endKey = null;
 
             if (rangeFilter === 'today' || rangeFilter === 'week' || rangeFilter === 'month') {
@@ -7975,7 +7980,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         function finRangeBounds(range) {
             const back = range === 'today' ? 0 : range === 'week' ? 9 : range === 'month' ? 29 : null;
             if (back === null) return { start: '', end: '' };
-            const now = new Date();
+            const now = bizNow(); // የስራ ቀን (ጠዋት 2:30 ኢት. ይቀየራል)
             const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - back);
             return { start: getDateKey(from), end: getDateKey(now) };
         }
@@ -8442,7 +8447,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             return { income, expense, given, taken, recvPaid, payPaid, repIncome, repExpense };
         }
         function renderDailyActivityPreview() {
-            const dk = (document.getElementById('dailyActDate') || {}).value || getDateKey(new Date());
+            const dk = (document.getElementById('dailyActDate') || {}).value || getBizDateKey();
             const x = collectDailyActivity(dk), t = dailyActTotals(x);
             const cell = (label, val, color) => `<div class="stat-card" style="padding:10px;"><div class="number" style="font-size:1.15rem; color:${color};">${val}</div><div class="label">${label}</div></div>`;
             const f = (n) => n.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' ብር';
@@ -8461,7 +8466,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         }
         function exportDailyActivityCSV() {
             if (!isFinanceUnlocked) { showToast('❌ እባክዎ መጀመሪያ ፋይናንስ ይክፈቱ', 'error'); return; }
-            const dk = (document.getElementById('dailyActDate') || {}).value || getDateKey(new Date());
+            const dk = (document.getElementById('dailyActDate') || {}).value || getBizDateKey();
             const x = collectDailyActivity(dk), t = dailyActTotals(x);
             const total = x.txs.length + x.debtsNew.length + x.debtsPaid.length + x.reports.length + x.orderCreated.length + x.orderDone.length;
             if (!total) { showToast('❌ በዚህ ቀን ምንም እንቅስቃሴ የለም', 'error'); return; }
@@ -8509,7 +8514,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const desc = document.getElementById('txDesc').value.trim();
             const amount = parseFloat(document.getElementById('txAmount').value);
             const type = document.getElementById('txType').value;
-            const date = document.getElementById('txDate').value || new Date().toISOString().split('T')[0];
+            const date = document.getElementById('txDate').value || getBizDateKey();
 
             if (!desc || isNaN(amount) || amount <= 0) {
                 showToast('እባክዎ ትክክለኛ መግለጫ እና ገንዘብ ያስገቡ', 'error');
@@ -9730,7 +9735,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             safe(() => { document.getElementById('techLogoutBtn').addEventListener('click', logout); }, 'techLogoutBtn');
 
             // Set default date for report
-            const today = new Date().toISOString().split('T')[0];
+            const today = getBizDateKey();
             safe(() => {
                 document.getElementById('reportDate').value = today;
                 document.getElementById('reportDateEthContainer').innerHTML = techBuildEthiopianPickerHTML('reportDateEth', 'reportDate', today);
@@ -9741,7 +9746,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             // Auto-fill day
             safe(() => {
                 const dayNames = ['እሁድ', 'ሰኞ', 'ማክሰኞ', 'ረቡዕ', 'ሐሙስ', 'አርብ', 'ቅዳሜ'];
-                document.getElementById('reportDay').value = dayNames[new Date().getDay()];
+                document.getElementById('reportDay').value = dayNames[bizNow().getDay()];
             }, 'reportDay');
             safe(techFillReportDate, 'techFillReportDate');
 
@@ -11424,7 +11429,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         function techFillReportDate() {
             try {
                 const now = new Date();
-                const key = getDateKey(now); // YYYY-MM-DD (local)
+                const bn = bizNow(now); // የስራ ቀን (ጠዋት 2:30 ኢት. = 8:30 AM ይቀየራል)
+                const key = getDateKey(bn); // YYYY-MM-DD
                 const dateEl = document.getElementById('reportDate');
                 if (dateEl) dateEl.value = key;
 
@@ -11432,7 +11438,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 if (cont && !document.getElementById('reportDateEth_day')) {
                     cont.innerHTML = techBuildEthiopianPickerHTML('reportDateEth', 'reportDate', key);
                 }
-                const eth = gregorianToEthiopian(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12));
+                const eth = gregorianToEthiopian(new Date(bn.getFullYear(), bn.getMonth(), bn.getDate(), 12));
                 const setSel = (id, v) => {
                     const el = document.getElementById(id);
                     if (!el) return;
@@ -11457,7 +11463,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
                 const dayEl = document.getElementById('reportDay');
                 if (dayEl) {
-                    dayEl.value = ['እሁድ', 'ሰኞ', 'ማክሰኞ', 'ረቡዕ', 'ሐሙስ', 'አርብ', 'ቅዳሜ'][now.getDay()];
+                    dayEl.value = ['እሁድ', 'ሰኞ', 'ማክሰኞ', 'ረቡዕ', 'ሐሙስ', 'አርብ', 'ቅዳሜ'][bn.getDay()];
                     dayEl.readOnly = true;
                 }
             } catch (e) { console.warn('techFillReportDate failed', e); }
@@ -11553,7 +11559,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             try {
                 const dupSnap = await db.collection('dailyReports')
                     .where('technicianId', '==', technicianId)
-                    .where('dateKey', '==', getDateKey(new Date()))
+                    .where('dateKey', '==', getBizDateKey())
                     .limit(1).get();
                 if (!dupSnap.empty) {
                     showToast('⚠️ የዛሬ ሪፖርት አስቀድሞ ተልኳል፣ ድጋሚ መላክ አይቻልም። ለማስተካከል አድሚኑን ያነጋግሩ።', 'error');
@@ -11594,7 +11600,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const reportData = {
                 technicianId: technicianId,
                 technicianName: technicianName,
-                dateKey: getDateKey(new Date()),
+                dateKey: getBizDateKey(),
                 jobs: totalSent,
                 income: totalIncome,
                 notes: remarks,
