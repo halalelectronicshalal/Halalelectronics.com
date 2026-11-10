@@ -2583,6 +2583,15 @@
                         </button>
                     </form>
                 </div>
+
+                <!-- 📤 የላኳቸው ሪፖርቶች: ስህተት/እርማት ጽሁፍ + ወደ አጠናቅ መቀየር -->
+                <div class="card" id="techSentReportsCard" style="margin-top:12px;">
+                    <div class="card-header">
+                        <h3><i class="fas fa-paper-plane"></i> 📤 የላኳቸው ሪፖርቶች</h3>
+                        <span style="font-size:0.7rem; color:var(--text-muted);">ስህተት ካለ እርማት ይጻፉ · ያልተሰራ ስራ ከተሰራ ወደ «ተሰራ» ይቀይሩ</span>
+                    </div>
+                    <div id="techSentReportsList"><p class="text-muted text-center" style="font-size:0.85rem;">በመጫን ላይ...</p></div>
+                </div>
             </div>
 
         </div>
@@ -6080,7 +6089,7 @@ ${locationLine}
             snap.forEach(d => {
                 const c = d.data().createdAt;
                 const t = c && c.toDate ? c.toDate().getTime() : 0;
-                if (t <= cutoff) { batch.update(d.ref, { pending: false, releasedAt: new Date(), releasedByReport: report.id || '' }); n++; }
+                if (t <= cutoff || (d.data().lateForReportId && d.data().lateForReportId === report.id)) { batch.update(d.ref, { pending: false, releasedAt: new Date(), releasedByReport: report.id || '' }); n++; }
             });
             if (n) await batch.commit();
             return n;
@@ -9062,6 +9071,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         document.getElementById('tab-report').classList.add('active');
                         techFillReportDate();
                         loadReportJobs();
+                        try { techStartSentReports(); } catch (e) { console.warn('sent reports failed', e); }
                     }
 
                     if (tab === 'jobs') renderAllJobs();
@@ -10930,6 +10940,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             // (ገቢ ድምር) ትክክል እንዳይሆን ያደርግ ነበር። አሁን ዛሬ የተፈጠሩ ወይም ዛሬ የተጠናቀቁ ስራዎችን ያካትታል።
             const reportedSet = techGetReportedSet(); // ✅ ቀደም ሲል በሪፖርት የተላኩ ስራዎች እንደገና አይታዩም
             const todayJobsAll = myOrders.filter(o => {
+                if (o.convertedInReportId) return false; // ከተላከ ሪፖርት ውስጥ ወደ አጠናቅ የተቀየረ — ገቢው ቀድሞ በዚያ ሪፖርት ገብቷል
                 const createdStr = (o.createdAt?.toDate?.() || null)?.toISOString().split('T')[0];
                 const completedStr = (o.completedAt?.toDate?.() || null)?.toISOString().split('T')[0];
                 return createdStr === today || completedStr === today;
@@ -11544,6 +11555,255 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 console.error(error);
                 document.getElementById('submitReportBtn').disabled = false;
                 document.getElementById('submitReportBtn').innerHTML = '<i class="fas fa-paper-plane"></i> ሪፖርት አስገባ';
+            }
+        }
+
+        // ============================================================
+        // 📤 የላኳቸው ሪፖርቶች
+        //   ✍️ በስህተት የተላከ ሪፖርት ላይ ስለ ስራው ስህተት/እርማት መጠየቂያ ጽሁፍ መጻፍ (አድሚን ከማጽደቁ በፊት ብቻ፤ አድሚን በቀይ ያስተካክለዋል)
+        //   ✅ «አልተጠናቀቀም» ተብሎ የተላከ ስራ ከቆይታ በኋላ ሲሰራ ከሪፖርቱ ውስጥ ወደ «አጠናቅ» መቀየር (ገቢ/ወጪ ማስገቢያ ይከፈታል)
+        // ============================================================
+        let techSentReports = [];
+        let techSentReportsUnsub = null;
+        function techStartSentReports() {
+            if (!technicianId) return;
+            if (techSentReportsUnsub) { renderTechSentReports(); return; }
+            techSentReportsUnsub = db.collection('dailyReports').where('technicianId', '==', technicianId).onSnapshot((snap) => {
+                techSentReports = [];
+                snap.forEach(d => { const r = d.data(); r.id = d.id; techSentReports.push(r); });
+                techSentReports.sort((a, b) => {
+                    const ta = a.submittedAt && a.submittedAt.toDate ? a.submittedAt.toDate().getTime() : 0;
+                    const tb = b.submittedAt && b.submittedAt.toDate ? b.submittedAt.toDate().getTime() : 0;
+                    return tb - ta;
+                });
+                renderTechSentReports();
+            }, (err) => {
+                console.warn('sent reports listener', err);
+                const box = document.getElementById('techSentReportsList');
+                if (box) box.innerHTML = '<p class="text-muted text-center" style="font-size:0.85rem;">ሪፖርቶችን መጫን አልተቻለም</p>';
+            });
+        }
+        function renderTechSentReports() {
+            const box = document.getElementById('techSentReportsList');
+            if (!box) return;
+            const list = techSentReports.slice(0, 15);
+            if (!list.length) { box.innerHTML = '<p class="text-muted text-center" style="font-size:0.85rem;">እስካሁን የላኩት ሪፖርት የለም</p>'; return; }
+            box.innerHTML = list.map(r => {
+                const jobs = Array.isArray(r.jobStatuses) ? r.jobStatuses : [];
+                const rows = jobs.map((j, i) => {
+                    const done = j.status === 'completed';
+                    const canNote = !r.approved;
+                    const canConvert = !done;
+                    let h = `<div style="padding:8px 0; border-top:1px solid var(--border-light); font-size:0.82rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <span>${i + 1}. ${techEsc(j.customer || '—')} - ${techEsc(j.appliance || '—')}${(!done && j.reason) ? ' <span style="color:var(--text-muted);">(' + techEsc(j.reason) + ')</span>' : ''}</span>
+                            ${done ? '<span class="status-badge status-completed">✅ ተሰራ</span>'
+                                   : `<select onchange="techSentStatusChange(this, '${r.id}', ${i})" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); font-size:0.8rem;"><option value="">❌ አልተጠናቀቀም</option><option value="done">✅ ተሰራ (ሀ)</option></select>`}
+                        </div>`;
+                    if (j.convertedFromNotCompleted) h += `<div style="color:#047857; font-size:0.78rem;">🔄 ወደ «ተጠናቀቀ» ተቀይሯል — ገቢ ${techEsc(j.lateIncome)} | ወጪ ${techEsc(j.lateExpense)} ብር</div>`;
+                    if (j.correctionNote) {
+                        h += `<div style="margin-top:4px; padding:6px 8px; border:1.5px solid #DC2626; border-radius:8px; background:#FEF2F2; color:#DC2626; font-weight:600; white-space:pre-wrap;">✍️ ${techEsc(j.correctionNote)}${j.correctionNoteEditedByAdmin ? '<div style="font-weight:400; font-size:0.72rem;">(በአድሚን ተስተካክሏል)</div>' : ''}</div>`;
+                    }
+                    const btns = [];
+                    if (canNote) btns.push(`<button type="button" class="btn btn-xs btn-outline" style="color:#DC2626; border-color:#DC2626;" onclick="techOpenReportNote('${r.id}', ${i})"><i class="fas fa-pen"></i> ${j.correctionNote ? 'እርማት አርም' : 'ስህተት / እርማት ጻፍ'}</button>`);
+                    if (btns.length) h += `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;">${btns.join('')}</div>`;
+                    return h + '</div>';
+                }).join('');
+                const inc = r.totalIncome != null ? r.totalIncome : (r.income || 0);
+                return `<div style="border:1px solid var(--border); border-radius:10px; padding:10px; margin-bottom:10px;">
+                    <div style="display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; align-items:center;">
+                        <strong>📅 ${techEsc(r.date || r.dateKey || '')}</strong>
+                        ${r.approved ? '<span class="status-badge status-completed">✅ ጸድቋል</span>' : '<span class="status-badge status-pending">⏳ አልጸደቀም</span>'}
+                    </div>
+                    <div style="font-size:0.78rem; color:var(--text-muted); margin:4px 0;">ተጠናቀቁ ${techEsc(r.completedCount || 0)} · አልተጠናቀቁ ${techEsc(r.notCompletedCount || 0)} · ገቢ ${techEsc(inc)} ብር · ወጪ ${techEsc(r.totalExpense || 0)} ብር${r.reopenedForApproval ? ' · <span style="color:#047857;">🔄 እንደገና ማጽደቅ ይጠብቃል</span>' : ''}</div>
+                    ${rows || '<div class="text-muted" style="font-size:0.8rem;">የስራ ዝርዝር የለም</div>'}
+                </div>`;
+            }).join('');
+        }
+
+        // ---- ✍️ ስህተት / እርማት መጠየቂያ ጽሁፍ ----
+        function techOpenReportNote(reportId, idx) {
+            const r = techSentReports.find(x => x.id === reportId);
+            const j = r && r.jobStatuses && r.jobStatuses[idx];
+            if (!r || !j) { showToast('ሪፖርቱ አልተገኘም', 'error'); return; }
+            if (r.approved) { showToast('⚠️ ሪፖርቱ ጸድቋል — ከዚህ በኋላ እርማት መጻፍ አይቻልም', 'error'); return; }
+            const html = `
+                <div style="font-size:0.85rem; margin-bottom:8px;">📋 ${techEsc(j.customer || '—')} - ${techEsc(j.appliance || '—')}</div>
+                <div class="form-group">
+                    <label style="color:#DC2626; font-weight:700;">✍️ የተሳሳተው ነገር እና የእርማት ጥያቄ</label>
+                    <textarea id="techNoteText" rows="4" style="color:#DC2626; font-weight:600; border:1.5px solid #DC2626;" placeholder="ምን እንደተሳሳተ እና ምን እንዲስተካከል እንደሚፈልጉ ይጻፉ...">${techEsc(j.correctionNote || '')}</textarea>
+                    <small style="color:var(--text-muted);">አድሚን ከማጽደቁ በፊት ይህን ጽሁፍ በስራው ላይ ያየዋል፤ በቀይ ጽሁፍ ሊያስተካክለውም ይችላል። ባዶ ካስቀመጡ ጽሁፉ ይጠፋል።</small>
+                </div>
+                <button class="btn btn-success btn-block" id="techNoteSaveBtn" onclick="techSaveReportNote('${reportId}', ${idx})"><i class="fas fa-save"></i> አስቀምጥ</button>`;
+            openModal('✍️ ስህተት / እርማት ጥያቄ', html);
+        }
+        async function techSaveReportNote(reportId, idx) {
+            const btn = document.getElementById('techNoteSaveBtn');
+            if (btn && btn.disabled) return;
+            const text = (document.getElementById('techNoteText').value || '').trim();
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> በማስቀመጥ ላይ...'; }
+            try {
+                const ref = db.collection('dailyReports').doc(reportId);
+                const snap = await ref.get();
+                if (!snap.exists) throw new Error('ሪፖርቱ አልተገኘም');
+                const rep = snap.data();
+                if (rep.approved) throw new Error('ሪፖርቱ ቀድሞ ጸድቋል — እርማት መጻፍ አይቻልም');
+                const js = (rep.jobStatuses || []).slice();
+                if (!js[idx]) throw new Error('ስራው አልተገኘም');
+                const j = Object.assign({}, js[idx]);
+                if (text) {
+                    j.correctionNote = text;
+                    j.correctionNoteBy = 'technician';
+                    j.correctionNoteAt = new Date();
+                    j.correctionNoteEditedByAdmin = false;
+                    delete j.correctionNoteOriginal;
+                } else {
+                    ['correctionNote', 'correctionNoteBy', 'correctionNoteAt', 'correctionNoteEditedByAdmin', 'correctionNoteOriginal', 'correctionNoteEditedAt'].forEach(k => delete j[k]);
+                }
+                js[idx] = j;
+                await ref.update({ jobStatuses: js, hasCorrectionRequest: js.some(x => x && x.correctionNote) });
+                if (text) {
+                    db.collection('activity').add({ user: technicianName, action: 'report_correction_request', details: `ሪፖርት ${rep.dateKey || ''} — ${j.customer || ''}: ${text.slice(0, 200)}`, timestamp: new Date() }).catch(() => {});
+                    try { techSendTelegramNotification(`✍️ የእርማት ጥያቄ\n👷 ${tgEsc(technicianName)} — ${tgEsc(rep.date || rep.dateKey || '')}\n📋 ${tgEsc(j.customer || '—')} - ${tgEsc(j.appliance || '—')}\n${tgEsc(text)}`); } catch (e) {}
+                    try { callWorker('notifyDispatchers', { audience: 'finance', text: '✍️ ቴክኒሻን በሪፖርት ላይ እርማት ጠይቋል', smsText: 'ቴክኒሻን በሪፖርት ላይ እርማት ጠይቋል' }).catch(() => {}); } catch (e) {}
+                }
+                showToast(text ? '✅ የእርማት ጥያቄ ተቀምጧል' : '✅ ጽሁፉ ተሰርዟል', 'success');
+                closeModal();
+            } catch (e) {
+                showToast('❌ ' + e.message, 'error');
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> አስቀምጥ'; }
+            }
+        }
+
+        // ---- ✅ ወደ አጠናቅ መቀየር (ወጪ/ገቢ ማስገቢያ ይከፈታል) ----
+        function techOpenConvertJob(reportId, idx) {
+            const r = techSentReports.find(x => x.id === reportId);
+            const j = r && r.jobStatuses && r.jobStatuses[idx];
+            if (!r || !j) { showToast('ሪፖርቱ አልተገኘም', 'error'); return; }
+            const html = `
+                <div style="font-size:0.85rem; margin-bottom:8px;">📋 ${techEsc(j.customer || '—')} - ${techEsc(j.appliance || '—')}<br/><span class="text-muted">ሪፖርት: ${techEsc(r.date || r.dateKey || '')}</span></div>
+                <div class="form-row">
+                    <div class="form-group"><label>💰 ዋጋ (ከደንበኛው የተቀበሉት) *</label><input type="number" id="cvPrice" min="0" step="0.01" inputmode="decimal" oninput="techConvertCalc()" /></div>
+                    <div class="form-group"><label>🧾 ወጪ (ለዚህ ስራ የወጣ)</label><input type="number" id="cvExpense" min="0" step="0.01" inputmode="decimal" oninput="techConvertCalc()" /></div>
+                </div>
+                <div class="form-group"><label>📍 ወጪው የት / ለምን (አማራጭ)</label><input type="text" id="cvExpenseNote" placeholder="ለምሳሌ፦ የእቃ ግዢ" /></div>
+                <div class="form-group"><label>📝 ማብራሪያ</label><textarea id="cvNotes" rows="2" placeholder="ስለ ስራው ማብራሪያ (አማራጭ)"></textarea></div>
+                <div style="margin:6px 0 10px; font-weight:700;">💵 ገቢ (ዋጋ − ወጪ): <span id="cvNet" style="color:var(--success);">0 ብር</span></div>
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:8px;">ደንበኛው ሃሳቡን ቀይሮ ስራው ከተሰራ፣ ስራው «ተጠናቀቀ» ይሆናል፣ በአድሚን ዘንድ ከ«ያልተጠናቀቀ» ወደ «ተጠናቀቀ» ይገባል፣ እና ገቢ/ወጪው በዚህ ሪፖርት ላይ ይጨመራል።${r.approved ? ' <strong style="color:#b45309;">ሪፖርቱ ቀድሞ ጸድቋል — ከተቀየረ በኋላ እንደገና ለማጽደቅ ወደ አድሚን ይመለሳል።</strong>' : ''}</div>
+                <button class="btn btn-success btn-block" id="cvSaveBtn" onclick="techSubmitConvertJob('${reportId}', ${idx})"><i class="fas fa-check-circle"></i> አጠናቅ</button>`;
+            openModal('✅ ሀ. ተሰራ — ዋጋ እና ወጪ ያስገቡ', html);
+        }
+        // በስራው ትይዩ ያለው ሁኔታ መምረጫ — «ተሰራ» ሲመረጥ የ«ሀ. ተሰራ» መረጃ ማስገቢያ ይከፈታል
+        function techSentStatusChange(sel, reportId, idx) {
+            const v = sel.value;
+            sel.value = ''; // ማስገቢያው እስኪቀመጥ ድረስ ሁኔታው አይቀየርም
+            if (v === 'done') techOpenConvertJob(reportId, idx);
+        }
+        function techConvertCalc() {
+            const p = parseFloat(document.getElementById('cvPrice').value) || 0;
+            const e = parseFloat(document.getElementById('cvExpense').value) || 0;
+            const el = document.getElementById('cvNet');
+            if (!el) return;
+            el.textContent = (p - e).toLocaleString() + ' ብር';
+            el.style.color = (p - e) < 0 ? 'var(--emergency)' : 'var(--success)';
+        }
+        async function techSubmitConvertJob(reportId, idx) {
+            if (window._cvBusy) return;
+            const price = parseFloat(document.getElementById('cvPrice').value);
+            const expense = parseFloat(document.getElementById('cvExpense').value) || 0;
+            const expenseNote = (document.getElementById('cvExpenseNote').value || '').trim();
+            const notes = (document.getElementById('cvNotes').value || '').trim();
+            if (!(price > 0)) { showToast('እባክዎ ትክክለኛ ዋጋ ያስገቡ', 'error'); return; }
+            if (expense < 0) { showToast('ወጪ ከ0 በታች መሆን አይችልም', 'error'); return; }
+            if (expense > price && !confirm('ወጪው ከዋጋው ይበልጣል (ገቢው አሉታዊ ይሆናል)። መቀጠል ይፈልጋሉ?')) return;
+            const cur = techSentReports.find(x => x.id === reportId);
+            if (cur && cur.approved && !confirm('ይህ ሪፖርት ቀድሞ ጸድቋል። ከተቀየረ በኋላ እንደገና ለማጽደቅ ወደ አድሚን ይመለሳል። መቀጠል ይፈልጋሉ?')) return;
+
+            const btn = document.getElementById('cvSaveBtn');
+            window._cvBusy = true;
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> በማጠናቀቅ ላይ...'; }
+            try {
+                const repRef = db.collection('dailyReports').doc(reportId);
+                const repSnap = await repRef.get();
+                if (!repSnap.exists) throw new Error('ሪፖርቱ አልተገኘም');
+                const rep = repSnap.data();
+                const js = (rep.jobStatuses || []).slice();
+                const job = js[idx];
+                if (!job) throw new Error('ስራው በሪፖርቱ ውስጥ አልተገኘም');
+                if (job.status === 'completed') throw new Error('ይህ ስራ በሪፖርቱ ውስጥ ቀድሞ «ተጠናቋል» ነው');
+                const orderId = job.orderId;
+                if (!orderId) throw new Error('የስራ መለያ አልተገኘም');
+                const orderRef = db.collection('orders').doc(orderId);
+                const orderSnap = await orderRef.get();
+                if (!orderSnap.exists) throw new Error('ትዕዛዙ አልተገኘም');
+                const order = orderSnap.data();
+                if (order.status === 'Completed') throw new Error('ይህ ስራ ቀድሞ ተጠናቋል (ድርብ ገቢ እንዳይመዘገብ ተከልክሏል)');
+
+                const now = new Date();
+                const today = getBizDateKey();
+                const net = price - expense;
+                const unit = Math.max(1, parseInt(job.count, 10) || 1);
+
+                // የሪፖርት ድምር ማሻሻያ
+                const pct = parseFloat(rep.techSharePercent) || 0;
+                const newIncome = (parseFloat(rep.totalIncome != null ? rep.totalIncome : rep.income) || 0) + price;
+                const newExpense = (parseFloat(rep.totalExpense) || 0) + expense;
+                const profit = Math.round((newIncome - newExpense) * 100) / 100;
+                const techShare = Math.round(profit * pct) / 100;
+                const company = Math.round((profit - techShare) * 100) / 100;
+                const expItems = Array.isArray(rep.expenseItems) ? rep.expenseItems.slice() : [];
+                if (expense > 0) expItems.push({ location: expenseNote || 'ወጪ (ከቆይታ በኋላ የተጠናቀቀ ስራ)', amount: expense });
+                const reasons = Array.isArray(rep.notCompletedReasons) ? rep.notCompletedReasons.slice() : [];
+                const ri = reasons.indexOf(job.reason); if (ri >= 0) reasons.splice(ri, 1);
+
+                js[idx] = Object.assign({}, job, {
+                    status: 'completed', reason: '', convertedFromNotCompleted: true, convertedAt: now,
+                    lateIncome: price, lateExpense: expense, lateExpenseNote: expenseNote, previousReason: job.reason || ''
+                });
+
+                const batch = db.batch();
+                batch.update(orderRef, {
+                    status: 'Completed', price: price, expense: expense, expenseNote: expenseNote, netIncome: net,
+                    completedAt: now, completionOption: 'done', technicianNotes: notes || '',
+                    notCompletedReason: '', convertedInReportId: reportId, convertedFromStatus: order.status || ''
+                });
+                batch.set(db.collection('transactions').doc(), {
+                    description: `ክፍያ: ስራ #${orderId.substring(0, 8)} (ከሪፖርት የተጠናቀቀ)`, amount: price, type: 'income',
+                    staff: technicianName, orderId: orderId, date: today, createdAt: now, pending: true, lateForReportId: reportId
+                });
+                if (expense > 0) batch.set(db.collection('transactions').doc(), {
+                    description: `ወጪ: ስራ #${orderId.substring(0, 8)}${expenseNote ? ' — ' + expenseNote : ''} (ከሪፖርት የተጠናቀቀ)`, amount: expense, type: 'expense',
+                    staff: technicianName, orderId: orderId, date: today, createdAt: now, pending: true, lateForReportId: reportId
+                });
+                const repUpdate = {
+                    jobStatuses: js,
+                    completedCount: (parseInt(rep.completedCount, 10) || 0) + unit,
+                    notCompletedCount: Math.max(0, (parseInt(rep.notCompletedCount, 10) || 0) - unit),
+                    notCompletedReasons: reasons,
+                    income: newIncome, totalIncome: newIncome, totalExpense: newExpense, expenseItems: expItems,
+                    profit: profit, techShareAmount: techShare, companyAmount: company,
+                    lateCompletedCount: (parseInt(rep.lateCompletedCount, 10) || 0) + 1,
+                    lastLateCompletedAt: now
+                };
+                if (rep.approved) { repUpdate.approved = false; repUpdate.approvedAt = null; repUpdate.reopenedForApproval = true; repUpdate.reopenedAt = now; }
+                batch.update(repRef, repUpdate);
+                await batch.commit();
+
+                // ከበስተጀርባ፦ ማስታወሻ + አድሚን ማሳወቂያ + ደንበኛ SMS (እንደ መደበኛ «አጠናቅ»)
+                db.collection('activity').add({ user: technicianName, action: 'complete_job_from_report',
+                    details: `ስራ #${orderId.substring(0, 8)} ከሪፖርት (${rep.dateKey || ''}) ወደ ተጠናቀቀ ተቀየረ, ዋጋ ${price} - ወጪ ${expense} = ገቢ ${net} ብር`, timestamp: now }).catch(() => {});
+                try { techSendTelegramNotification(`🔄 ከቆይታ በኋላ የተጠናቀቀ ስራ\n👷 ${tgEsc(technicianName)} — ሪፖርት ${tgEsc(rep.date || rep.dateKey || '')}\n📋 ${tgEsc(job.customer || '—')} - ${tgEsc(job.appliance || '—')} ✅\n💰 ዋጋ ${price} | 🧾 ወጪ ${expense} | 💵 ገቢ ${net} ብር${rep.approved ? '\n⚠️ ሪፖርቱ እንደገና ማጽደቅ ይጠብቃል' : ''}`); } catch (e) {}
+                try { callWorker('notifyDispatchers', { audience: 'finance', text: '🔄 በሪፖርት ውስጥ ያልተጠናቀቀ ስራ ተጠናቀቀ — ማጽደቅ ይጠይቃል', smsText: 'በሪፖርት ውስጥ ያልተጠናቀቀ ስራ ተጠናቀቀ' }).catch(() => {}); } catch (e) {}
+                try { sendCustomerSmsFor('done', orderId); } catch (e) {}
+
+                showToast(`✅ ስራው ተጠናቋል! ገቢ ${net} ብር ወደ ሪፖርቱ ተጨምሯል`, 'success');
+                closeModal();
+            } catch (e) {
+                console.error('convert job failed', e);
+                showToast('❌ ' + e.message, 'error');
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check-circle"></i> አጠናቅ'; }
+            } finally {
+                window._cvBusy = false;
             }
         }
 
