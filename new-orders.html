@@ -480,9 +480,20 @@ async function deleteOrder(orderId) {
             timestamp: new Date()
         });
         showToast('✅ ትዕዛዝ ተሰርዟል', 'success');
+        return true;
     } catch (error) {
         showToast('❌ ' + error.message, 'error');
+        return false;
     }
+}
+
+/** ከዝርዝር መስኮት (የተመለሱ ስራዎች) ውስጥ መሰረዝ — ከተሰረዘ ወደ ዝርዝሩ ይመለሳል */
+async function deleteFromDetail(orderId, back) {
+    const ok = await deleteOrder(orderId);
+    if (!ok) return;
+    allOrders = allOrders.filter(x => x.id !== orderId); // snapshot እስኪመጣ ዝርዝሩ ወዲያው እንዲታደስ
+    if (back) showStatDetail(back); else closeModal();
+    try { renderDashNewOrders(); } catch (e) {}
 }
 
 /* ============================================================
@@ -520,6 +531,8 @@ function viewOrder(orderId) {
             <button class="btn btn-success" onclick="assignFromDetail('${o.id}')"><i class="fas fa-check"></i> መድብ</button>`;
     }
     if (back) footer += ` <button class="btn btn-secondary" onclick="showStatDetail('${back}')"><i class="fas fa-arrow-right"></i> ወደ ዝርዝር ተመለስ</button>`;
+    // 🗑️ የተመለሰ ስራ ከሆነ «ሰርዝ» (አድሚን ብቻ)
+    if (o.status === 'Pending' && orderIsReturned(o)) footer += ` <button class="btn btn-danger admin-only" onclick="deleteFromDetail('${o.id}', ${back ? "'" + back + "'" : 'null'})"><i class="fas fa-trash"></i> ሰርዝ</button>`;
     footer += ' <button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>';
     openModal('🧾 የትዕዛዝ ዝርዝር', html, footer);
 }
