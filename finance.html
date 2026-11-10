@@ -727,7 +727,7 @@ window._finStatsRange = window._finStatsRange || 'today';
 function finRangeBounds(range) {
     const back = range === 'today' ? 0 : range === 'week' ? 9 : range === 'month' ? 29 : null;
     if (back === null) return { start: '', end: '' };
-    const now = new Date();
+    const now = bizNow(); // የስራ ቀን (ጠዋት 2:30 ኢት. ይቀየራል)
     const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - back);
     return { start: getDateKey(from), end: getDateKey(now) };
 }
@@ -1044,7 +1044,7 @@ function dailyActTotals(x) {
     return { income, expense, given, taken, recvPaid, payPaid, repIncome, repExpense };
 }
 function renderDailyActivityPreview() {
-    const dk = (document.getElementById('dailyActDate') || {}).value || getDateKey(new Date());
+    const dk = (document.getElementById('dailyActDate') || {}).value || getBizDateKey();
     const x = collectDailyActivity(dk), t = dailyActTotals(x);
     const cell = (label, val, color) => `<div class="stat-card" style="padding:10px;"><div class="number" style="font-size:1.15rem; color:${color};">${val}</div><div class="label">${label}</div></div>`;
     const f = (n) => n.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' ብር';
@@ -1063,7 +1063,7 @@ function renderDailyActivityPreview() {
 }
 function exportDailyActivityCSV() {
     if (!isFinanceUnlocked) { showToast('❌ እባክዎ መጀመሪያ ፋይናንስ ይክፈቱ', 'error'); return; }
-    const dk = (document.getElementById('dailyActDate') || {}).value || getDateKey(new Date());
+    const dk = (document.getElementById('dailyActDate') || {}).value || getBizDateKey();
     const x = collectDailyActivity(dk), t = dailyActTotals(x);
     const total = x.txs.length + x.debtsNew.length + x.debtsPaid.length + x.reports.length + x.orderCreated.length + x.orderDone.length;
     if (!total) { showToast('❌ በዚህ ቀን ምንም እንቅስቃሴ የለም', 'error'); return; }
@@ -1111,7 +1111,7 @@ async function addTransaction() {
     const desc = document.getElementById('txDesc').value.trim();
     const amount = parseFloat(document.getElementById('txAmount').value);
     const type = document.getElementById('txType').value;
-    const date = document.getElementById('txDate').value || new Date().toISOString().split('T')[0];
+    const date = document.getElementById('txDate').value || getBizDateKey();
 
     if (!desc || isNaN(amount) || amount <= 0) {
         showToast('እባክዎ ትክክለኛ መግለጫ እና ገንዘብ ያስገቡ', 'error');
@@ -1379,11 +1379,11 @@ function loadOrdersForActivity() {
    ገጽ ማስነሻ
    ============================================================ */
 HE.boot(() => {
-    const todayISO = new Date().toISOString().slice(0, 10);
+    const todayISO = getBizDateKey(); // የስራ ቀን (ጠዋት 2:30 ኢት. ይቀየራል)
     document.getElementById('txDateEthContainer').innerHTML = buildEthiopianPickerHTML('txDateEth', 'txDate', todayISO);
     document.getElementById('txDate').value = todayISO;
-    document.getElementById('dailyActDateEthContainer').innerHTML = buildEthiopianPickerHTML('dailyActDateEth', 'dailyActDate', getDateKey(new Date()));
-    document.getElementById('dailyActDate').value = getDateKey(new Date());
+    document.getElementById('dailyActDateEthContainer').innerHTML = buildEthiopianPickerHTML('dailyActDateEth', 'dailyActDate', getBizDateKey());
+    document.getElementById('dailyActDate').value = getBizDateKey();
 
     document.getElementById('unlockFinanceBtn').addEventListener('click', unlockFinance);
     ['financePassInput','financePhoneInput'].forEach(id => document.getElementById(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') unlockFinance(); }));
