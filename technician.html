@@ -4674,7 +4674,7 @@
                     <div>📊 ድርሻ: ${n(r.techSharePercent)}% (ባለሙያ ${n(r.techShareAmount)} | ድርጅት ${n(r.companyAmount)})</div>
                     ${(r.referralCount > 0) ? `<div>🔗 ሪፈራል: ${n(r.referralCount)} ስራ | ገቢ ${n(r.referralIncome)} | ወጪ ${n(r.referralExpense)} | ለሠራተኛ ${n(r.referralStaffShare)} ብር</div>` : ''}
                     ${(r.correctionCount > 0) ? `<div>🛠️ እርማት: ${n(r.correctionCount)} ስራ | ገቢ ${n(r.correctionIncome)} | ወጪ ${n(r.correctionExpense)} | ለሠራተኛ ${n(r.correctionStaffShare)} ብር</div>` : ''}
-                    <div>🏦 የተቀማጭ: ${n(r.deposited)} ብር</div>
+                    <div>🏦 ወደ ድርጅት የገባ: ${n(r.deposited)} ብር</div>
                     ${r.expenseDetails ? `<div>🧾 ወጪ: ${escHtml(r.expenseDetails)}</div>` : ''}
                     <div>📝 ${n(r.remarks || r.notes)}</div>
                     ${r.readyTomorrow ? `<div>🚶 ለነገ ስራ ይወጣል: ${r.readyTomorrow === 'yes' ? 'አዎ' : 'አይ'}</div>` : ''}
@@ -6520,7 +6520,7 @@ ${locationLine}
 
             // ---- 2) እያንዳንዱ ዕለታዊ ሪፖርት
             csv += '\n' + line(['ዕለታዊ ሪፖርቶች']);
-            csv += line(['ቀን', 'ቴክኒሻን', 'የተላኩ ስራዎች', 'የተጠናቀቁ', 'ያልተጠናቀቁ', 'ገቢ (ብር)', 'ወጪ (ብር)', 'ትርፍ (ብር)', 'ለድርጅት (ብር)', 'ለሰራተኛ (ብር)', 'የተቀማጭ (ብር)', 'የስራ አይነቶች', 'ያልተጠናቀቁ ምክንያቶች', 'ማብራሪያ', 'ሁኔታ']);
+            csv += line(['ቀን', 'ቴክኒሻን', 'የተላኩ ስራዎች', 'የተጠናቀቁ', 'ያልተጠናቀቁ', 'ገቢ (ብር)', 'ወጪ (ብር)', 'ትርፍ (ብር)', 'ለድርጅት (ብር)', 'ለሰራተኛ (ብር)', 'ወደ ድርጅት የገባ (ብር)', 'የስራ አይነቶች', 'ያልተጠናቀቁ ምክንያቶች', 'ማብራሪያ', 'ሁኔታ']);
             reports.forEach(r => {
                 csv += line([
                     dLabel(r.dateKey), r.technicianName || '',
@@ -12503,6 +12503,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         }
 
         function showLock() {
+            return; // ራስ-ሰር መቆለፊያ ተወግዷል
             if (!session()) return;
             locked = true;
             try { localStorage.setItem(LOCKED_KEY, '1'); } catch (e) {}
@@ -12522,12 +12523,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             passEl.value = ''; setErr(''); touch(true);
         }
 
-        function tick() {
-            if (locked) return;
-            if (!session()) return;
-            var la = lastActive() || startedAt;
-            if (Date.now() - la >= AUTO_LOCK_MS) showLock();
-        }
+        // ⛔ ራስ-ሰር መቆለፍ (ከ15 ደቂቃ በኋላ) ተወግዷል
+        function tick() { return; }
 
         function fpAvailableFor(s) {
             try {
@@ -12629,22 +12626,12 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             fpBtn.addEventListener('click', function () { tryFingerprint(false); });
             logoutLink.addEventListener('click', function () { if (confirm('ከአካውንቱ መውጣት እርግጠኛ ነዎት?')) forceLogout(); });
 
+            // ⛔ ራስ-ሰር መቆለፊያ ተወግዷል — ሰዓት ቆጣሪም ሆነ የእንቅስቃሴ መከታተያ የለም።
+            // ከድሮ ስሪት የቀረ የመቆለፍ ምልክት ካለ ያጠፋል።
             startedAt = Date.now();
-            timer = setInterval(tick, 5000);
-            // ተጠቃሚው አፑን በነካ ቁጥር "የመጨረሻ እንቅስቃሴ" ጊዜ ይታደሳል
-            ['pointerdown', 'touchstart', 'keydown', 'click', 'scroll', 'wheel'].forEach(function (ev) {
-                document.addEventListener(ev, function (e) { if (!locked && !(overlay && overlay.contains(e.target))) touch(false); }, { passive: true, capture: true });
-            });
-            document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') tick(); });
-            window.addEventListener('focus', tick);
-            window.addEventListener('pageshow', tick);
-
-            if (session()) {
-                var la = lastActive();
-                if (localStorage.getItem(LOCKED_KEY) === '1') showLock();              // ቀድሞ ተቆልፎ ከነበረ (refresh ቢደረግ) ወዲያውኑ ቆልፍ
-                else if (!la || Date.now() - la >= AUTO_LOCK_MS) showLock();           // አፑ ተዘግቶ ከቆየ (ወይም መዝገብ ከሌለ) ቆልፍ
-                else touch(true);
-            }
+            locked = false;
+            try { localStorage.removeItem(LOCKED_KEY); localStorage.removeItem(ACTIVE_KEY); } catch (e) {}
+            overlay.classList.remove('show');
         }
 
         window.AppLock = { start: start, clear: clear, lockNow: showLock, minutes: AUTO_LOCK_MINUTES };
