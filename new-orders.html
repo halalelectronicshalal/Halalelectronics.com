@@ -579,7 +579,7 @@ function showStatDetail(kind, refresh) {
     };
     if (kind === 'pending') {
         title = '⏳ ገና ያልተመደቡ';
-        const l = allOrders.filter(o => o.status === 'Pending').sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
+        const l = allOrders.filter(o => o.status === 'Pending' && !orderIsOvernight(o)).sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt)); // ያደሩት በ«ያደሩ ስራዎች» ካርድ ውስጥ ናቸው
         body = l.length ? l.map(orderItem).join('') : '<p class="text-muted text-center">ምንም የለም</p>';
     } else if (kind === 'assigned') {
         title = '📋 የተመደቡ ክፍት ስራዎች';
@@ -587,7 +587,7 @@ function showStatDetail(kind, refresh) {
         body = l.length ? l.map(orderItem).join('') : '<p class="text-muted text-center">ምንም የለም</p>';
     } else if (kind === 'returned') {
         title = '↩️ የተመለሱ ስራዎች';
-        const l = allOrders.filter(o => o.status === 'Pending' && orderIsReturned(o))
+        const l = allOrders.filter(o => o.status === 'Pending' && orderIsReturned(o) && !orderIsOvernight(o))
             .sort((a, b) => (toMs(b.returnedAt) || toMs(b.createdAt)) - (toMs(a.returnedAt) || toMs(a.createdAt)));
         const keepSel = {};
         document.querySelectorAll('#modalBody .dashAssignSelect').forEach(x => { if (x.value) keepSel[x.dataset.id] = x.value; });
@@ -758,7 +758,8 @@ function orderRowHtml(order, techOptions) {
 
 function renderDashNewOrders() {
     const list = document.getElementById('dashNewOrdersList');
-    const pending = allOrders.filter(o => o.status === 'Pending')
+    // ⏰ ሳይመደብ ያደረ ስራ ወደ «ያደሩ ስራዎች» ካርድ ብቻ ይገባል (እዚያም መመደብ ይቻላል) — እዚህ የሚገባው ትክክለኛ ገና ያልተመደበ (ያላደረ) ስራ ብቻ ነው
+    const pending = allOrders.filter(o => o.status === 'Pending' && !orderIsOvernight(o))
         .sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
 
     // ማጣሪያ
