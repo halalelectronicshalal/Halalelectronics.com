@@ -7578,11 +7578,19 @@ ${locationLine}
                 </div>
                 <div class="form-group">
                     <label>🗂️ የስራ አይነት</label>
-                    <select id="phoneOrderWorkType">
+                    <select id="phoneOrderWorkType" onchange="togglePhoneOrderWorkType()">
                         <option value="new" selected>🆕 አዲስ</option>
                         <option value="correction">🛠️ እርማት</option>
                         <option value="referral">🔗 ሪፈራል</option>
                     </select>
+                </div>
+                <div class="form-group" id="phoneOrderCorrBox" style="display:none;">
+                    <label>🛠️ እርማት የሚጠየቅበት ቴክኒሻን ስም *</label>
+                    <input type="text" id="phoneOrderCorrTech" maxlength="80" placeholder="ስራውን ሰርቶ የነበረው ቴክኒሻን ስም" />
+                </div>
+                <div class="form-group" id="phoneOrderRefBox" style="display:none;">
+                    <label>🔗 ሪፈራሉ ከማን መጣ? *</label>
+                    <input type="text" id="phoneOrderReferredBy" maxlength="80" placeholder="ሪፈራል ያመጣው ሰው/ድርጅት ስም" />
                 </div>
                 <div class="form-row">
                     <div class="form-group">
@@ -7633,6 +7641,18 @@ ${locationLine}
             openModal('📞 በስልክ የተደወለ ስራ ጨምር', bodyHTML);
         }
 
+        // 🛠️ እርማት / 🔗 ሪፈራል ሲመረጥ ከስር የስም ማስገቢያ ይከፈታል (እንደ ኦፕሬተር ገጽ)
+        function togglePhoneOrderWorkType() {
+            const t = (document.getElementById('phoneOrderWorkType') || {}).value;
+            const cb = document.getElementById('phoneOrderCorrBox'), rb = document.getElementById('phoneOrderRefBox');
+            if (cb) cb.style.display = t === 'correction' ? 'block' : 'none';
+            if (rb) rb.style.display = t === 'referral' ? 'block' : 'none';
+            if (t !== 'correction') { const i = document.getElementById('phoneOrderCorrTech'); if (i) i.value = ''; }
+            if (t !== 'referral') { const i = document.getElementById('phoneOrderReferredBy'); if (i) i.value = ''; }
+            const f = document.getElementById(t === 'correction' ? 'phoneOrderCorrTech' : t === 'referral' ? 'phoneOrderReferredBy' : '');
+            if (f) f.focus();
+        }
+
         async function submitPhoneOrder() {
             const fullName = document.getElementById('phoneOrderName').value.trim();
             const phone = document.getElementById('phoneOrderPhone').value.trim();
@@ -7644,11 +7664,15 @@ ${locationLine}
             const technician = document.getElementById('phoneOrderTechnician').value;
             const workType = (document.getElementById('phoneOrderWorkType') || {}).value || 'new';
             const WORK_TYPE_LABELS = { new: '🆕 አዲስ', correction: '🛠️ እርማት', referral: '🔗 ሪፈራል' };
+            const corrTech = workType === 'correction' ? ((document.getElementById('phoneOrderCorrTech') || {}).value || '').trim() : '';
+            const referredBy = workType === 'referral' ? ((document.getElementById('phoneOrderReferredBy') || {}).value || '').trim() : '';
 
             if (!fullName || !phone || !address || !appliance) {
                 showToast('እባክዎ ስም፣ ስልክ፣ አድራሻ እና መሳሪያ ይሙሉ', 'error');
                 return;
             }
+            if (workType === 'correction' && !corrTech) { showToast('እርማት የሚጠየቅበትን ቴክኒሻን ስም ይጻፉ', 'error'); document.getElementById('phoneOrderCorrTech').focus(); return; }
+            if (workType === 'referral' && !referredBy) { showToast('ሪፈራሉ ከማን እንደመጣ ይጻፉ', 'error'); document.getElementById('phoneOrderReferredBy').focus(); return; }
             if (altPhone && altPhone === phone) { showToast('ተለዋጭ ስልክ ከዋናው የተለየ መሆን አለበት', 'error'); return; }
 
             try {
@@ -7660,6 +7684,8 @@ ${locationLine}
                     appliance: appliance,
                     orderType: workType,                                   // operator.html ጋር አንድ አይነት መስክ
                     orderTypeLabel: WORK_TYPE_LABELS[workType] || WORK_TYPE_LABELS.new,
+                    correctionTechnician: corrTech,                        // 🛠️ እርማት የሚጠየቅበት ቴክኒሻን
+                    referredBy: referredBy,                                // 🔗 ሪፈራሉ የመጣው ከማን
                     preferredDay: preferredDay,
                     problem: problem || 'በስልክ የተደወለ ስራ',
                     status: 'Pending',
