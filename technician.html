@@ -8544,6 +8544,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             gEl.value = greg.toISOString().slice(0,10);
             const tEl = gEl.dataset.target ? document.getElementById(gEl.dataset.target) : null;
             if (tEl) tEl.value = gEl.value;
+            if (idPrefix === 'reportDateEth' && typeof techOnReportDateChange === 'function') techOnReportDateChange();
         }
         function getEthPickerGregorianValue(idPrefix) {
             const el = document.getElementById(idPrefix + '_gregorian');
@@ -10940,11 +10941,12 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // ============================================================
         function loadReportJobs() {
             const container = document.getElementById('reportJobList');
-            const today = new Date().toISOString().split('T')[0];
+            const today = techReportDateChosen || new Date().toISOString().split('T')[0]; // 📅 የተመረጠ ቀን ወይም ዛሬ
+            try { techStartSentReports(); } catch (e) {}
             // ✅ FIX: ቀድሞ የተጣራው በ 'createdAt' ብቻ ስለነበር፣ ከትናንት/ካለፈ ቀን ተመድቦ ዛሬ የተጠናቀቀ
             // ስራ (ለምሳሌ የ"ለሌላ ቀን ተዘጋጅቷል" ስራዎች) ከሪፖርቱ ውጪ ይቀር ነበር፣ ይህም አውቶ-ካልኩሌት
             // (ገቢ ድምር) ትክክል እንዳይሆን ያደርግ ነበር። አሁን ዛሬ የተፈጠሩ ወይም ዛሬ የተጠናቀቁ ስራዎችን ያካትታል።
-            const reportedSet = techGetReportedSet(); // ✅ ቀደም ሲል በሪፖርት የተላኩ ስራዎች እንደገና አይታዩም
+            const reportedSet = techReportedKeysAll(); // ✅ ቀደም ሲል በማንኛውም ሪፖርት የተላኩ ስራዎች እንደገና አይታዩም
             const todayJobsAll = myOrders.filter(o => {
                 if (o.convertedInReportId) return false; // ከተላከ ሪፖርት ውስጥ ወደ አጠናቅ የተቀየረ — ገቢው ቀድሞ በዚያ ሪፖርት ገብቷል
                 const createdStr = (o.createdAt?.toDate?.() || null)?.toISOString().split('T')[0];
@@ -10955,7 +10957,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const todayJobs = todayJobsAll.filter(o => !reportedSet.has(techJobKey(o)));
 
             if (todayJobs.length === 0) {
-                container.innerHTML = '<p class="text-muted text-center">ዛሬ ምንም ስራ የለም</p>';
+                container.innerHTML = techReportDateChosen ? '<p class="text-muted text-center">በዚህ ቀን ያልተላከ ስራ የለም</p>' : '<p class="text-muted text-center">ዛሬ ምንም ስራ የለም</p>';
                 try { techRenderExtraWorkCard([]); } catch (e) {}
                 if (todayJobsAll.length > 0) techClearReportAutoFields(); // ሁሉም ተልኳል → ፎርሙ ባዶ ሆኖ ለአዲስ ሪፖርት ዝግጁ
                 return;
@@ -11042,11 +11044,14 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // ቀደም ሲል toISOString() (UTC) ይጠቀም ስለነበር ከሌሊት 6:00 (ከ 12:00 ማታ እስከ 3:00 ሌሊት አካባቢ) ቀኑ
         // ወደ ትላንት ሊያዛባ ይችል ነበር። አሁን የአካባቢ ቀን ይጠቀማል፤ ቴክኒሻኑ እንዳይቀይረው ተቆልፏል።
         // ============================================================
+        // 📅 ቴክኒሻኑ የመረጠው የሪፖርት ቀን ('' = ዛሬ)። ቀኑ ክፍት ነው፤ ሲመረጥ በዚያ ቀን ያልተላኩ ስራዎች ይመጣሉ።
+        let techReportDateChosen = '';
         function techFillReportDate() {
             try {
                 const now = new Date();
                 const bn = bizNow(now); // የስራ ቀን (ጠዋት 2:30 ኢት. = 8:30 AM ይቀየራል)
-                const key = getDateKey(bn); // YYYY-MM-DD
+                const key = techReportDateChosen || getDateKey(bn); // YYYY-MM-DD
+                const kd = new Date(key + 'T12:00:00');
                 const dateEl = document.getElementById('reportDate');
                 if (dateEl) dateEl.value = key;
 
@@ -11054,14 +11059,14 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 if (cont && !document.getElementById('reportDateEth_day')) {
                     cont.innerHTML = techBuildEthiopianPickerHTML('reportDateEth', 'reportDate', key);
                 }
-                const eth = gregorianToEthiopian(new Date(bn.getFullYear(), bn.getMonth(), bn.getDate(), 12));
+                const eth = gregorianToEthiopian(new Date(kd.getFullYear(), kd.getMonth(), kd.getDate(), 12));
                 const setSel = (id, v) => {
                     const el = document.getElementById(id);
                     if (!el) return;
                     if (!Array.from(el.options).some(o => o.value === String(v))) el.add(new Option(String(v), String(v)));
                     el.value = String(v);
-                    el.disabled = true; // ተቆልፏል - ሁልጊዜ የዛሬ ቀን
-                    el.style.opacity = '0.85';
+                    el.disabled = false; // 🔓 ክፍት — ቀን መምረጥ ይቻላል
+                    el.style.opacity = '1';
                 };
                 setSel('reportDateEth_day', eth.day);
                 setSel('reportDateEth_month', eth.month);
@@ -11073,13 +11078,16 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     const note = document.createElement('small');
                     note.id = 'reportDateAutoNote';
                     note.style.cssText = 'color:var(--text-muted); font-size:0.72rem; display:block; margin-top:2px;';
-                    note.textContent = '🔒 ዛሬ ባለው ቀን ራሱ ተሞልቷል';
                     cont.parentElement.appendChild(note);
                 }
+                const _noteEl = document.getElementById('reportDateAutoNote');
+                if (_noteEl) _noteEl.textContent = techReportDateChosen
+                    ? '📅 የተመረጠ ቀን — በዚህ ቀን ያልተላኩ ስራዎች ከታች ይታያሉ (ወደ ዛሬ ለመመለስ የዛሬን ቀን ይምረጡ)'
+                    : '📅 ዛሬ ነው — ያልተላከ የሌላ ቀን ሪፖርት ለመላክ ቀኑን ይቀይሩ';
 
                 const dayEl = document.getElementById('reportDay');
                 if (dayEl) {
-                    dayEl.value = ['እሁድ', 'ሰኞ', 'ማክሰኞ', 'ረቡዕ', 'ሐሙስ', 'አርብ', 'ቅዳሜ'][bn.getDay()];
+                    dayEl.value = ['እሁድ', 'ሰኞ', 'ማክሰኞ', 'ረቡዕ', 'ሐሙስ', 'አርብ', 'ቅዳሜ'][kd.getDay()];
                     dayEl.readOnly = true;
                 }
             } catch (e) { console.warn('techFillReportDate failed', e); }
@@ -11186,6 +11194,26 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const k = techOrderDateKey(o);
             return !!k && !o.workTag && k < getBizDateKey();
         }
+        // 📅 ቀን ሲመረጥ፦ በዚያ ቀን ያልተላኩ ስራዎች ዝርዝር ይመጣል
+        function techOnReportDateChange() {
+            const v = String((document.getElementById('reportDate') || {}).value || '').slice(0, 10);
+            if (!v) return;
+            const todayKey = getDateKey(bizNow());
+            if (v > todayKey) { showToast('⚠️ የወደፊት ቀን መምረጥ አይቻልም', 'error'); techReportDateChosen = ''; }
+            else techReportDateChosen = (v === todayKey) ? '' : v;
+            try { techStartSentReports(); } catch (e) {}
+            techFillReportDate();
+            try { techClearReportAutoFields(); } catch (e) {}
+            loadReportJobs();
+        }
+        // ቀድሞ በማንኛውም ሪፖርት የተላኩ ስራዎች (Firestore) + በዚህ መሣሪያ ዛሬ የተላኩ
+        function techReportedKeysAll() {
+            const set = techGetReportedSet();
+            (techSentReports || []).forEach(r => (Array.isArray(r.jobStatuses) ? r.jobStatuses : []).forEach(j => {
+                if (j && j.orderId) set.add(j.orderId + '|' + (j.status === 'completed' ? 'C' : 'N'));
+            }));
+            return set;
+        }
         function techJobKey(o) { return o.id + '|' + (o.status === 'Completed' ? 'C' : 'N'); }
         function techReportedStoreKey() { return 'techReported_' + (technicianId || 'x') + '_' + getBizDateKey(); }
         function techGetReportedSet() {
@@ -11268,6 +11296,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             }
             const note = $('autoIncomeNote'); if (note) note.textContent = '';
             if ($('reportJobList')) $('reportJobList').innerHTML = '<p class="text-muted text-center">ምንም የዛሬ ስራ የለም</p>';
+            techReportDateChosen = ''; // ከተላከ በኋላ ወደ ዛሬ ይመለሳል
             techFillReportDate();
             calcProfit();
             try { loadReportJobs(); } catch (e) { console.warn(e); }
@@ -11410,7 +11439,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const reportData = {
                 technicianId: technicianId,
                 technicianName: technicianName,
-                dateKey: getBizDateKey(),
+                dateKey: techReportDateChosen || getBizDateKey(),
                 jobs: totalSent,
                 income: totalIncome,
                 notes: remarks,
@@ -11594,6 +11623,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     return tb - ta;
                 });
                 renderTechSentReports();
+                try { if (document.getElementById('tab-report').classList.contains('active')) loadReportJobs(); } catch (e) {} // የተላኩት ስራዎች ከዝርዝሩ ይወጣሉ
             }, (err) => {
                 console.warn('sent reports listener', err);
                 const box = document.getElementById('techSentReportsList');
