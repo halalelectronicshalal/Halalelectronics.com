@@ -569,7 +569,7 @@ function showStatDetail(kind, refresh) {
     statModalKind = kind;
     let title = '', body = '';
     const orderItem = o => {
-        const d = o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : null;
+        const _m = toMs(o.createdAt); const d = _m ? new Date(_m) : null;
         return `<div class="sd-item">
             <div style="font-weight:600;">${escHtml(o.fullName || '—')} <span class="text-muted" style="font-weight:400;">• ${escHtml(o.appliance || '—')}</span></div>
             <div class="text-muted" style="font-size:.78rem;">📱 ${o.phone ? `<a href="tel:${escHtml(o.phone)}">${escHtml(o.phone)}</a>` : '—'} &nbsp; 📍 ${escHtml(o.address || '—')}${d ? ' &nbsp; 🕒 ' + formatEthDateTime(d) : ''}</div>
@@ -588,7 +588,7 @@ function showStatDetail(kind, refresh) {
         body = l.length ? l.map(orderItem).join('') : '<p class="text-muted text-center">ምንም የለም</p>';
     } else if (kind === 'returned') {
         title = '↩️ የተመለሱ ስራዎች';
-        const l = allOrders.filter(o => o.status === 'Pending' && orderIsReturned(o) && !orderIsOvernight(o))
+        const l = allOrders.filter(o => o.status === 'Pending' && orderIsReturned(o))
             .sort((a, b) => (toMs(b.returnedAt) || toMs(b.createdAt)) - (toMs(a.returnedAt) || toMs(a.createdAt)));
         const keepSel = {};
         document.querySelectorAll('#modalBody .dashAssignSelect').forEach(x => { if (x.value) keepSel[x.dataset.id] = x.value; });
@@ -699,7 +699,7 @@ function orderHasFutureAppt(o) {
 }
 /** ↩️ ቴክኒሻን «ስራ መልስ» ብሎ የመለሰው (ያልተመደበ) ስራ */
 function orderIsReturned(o) {
-    return !!(o.returnReason || o.returnedAt || o.returnedFrom);
+    return !!(o.returnReason || o.returnedAt || o.returnedFrom || o.returnedFromId || o.completionOption === 'return-job');
 }
 function orderIsScheduled(o) {
     if (o.id === highlightOrderId) return false;
@@ -731,14 +731,15 @@ function overnightDays(o) {
     return Math.max(0, Math.round((startOfTodayMs() - a.getTime()) / 86400000));
 }
 function orderRowHtml(order, techOptions) {
-    const date = order.createdAt && order.createdAt.toDate ? order.createdAt.toDate() : new Date();
+    const _cMs = toMs(order.createdAt); // ✅ FIX: ትዕዛዙ የገባበት እውነተኛ ቀን — ወደ «ዛሬ» አይመለስም
+    const date = _cMs ? new Date(_cMs) : null;
     const hl = order.id === highlightOrderId ? ' hl' : '';
     return `<div class="order-row${hl}" id="ord-${order.id}">
             <div class="order-info">
+                <div style="font-size:0.8rem; font-weight:700; color:var(--primary); margin-bottom:2px;">📅 ትዕዛዝ የገባበት: ${date ? formatEthDateTime(date) : '—'}</div>
                 <div style="font-weight:600;">${escHtml(order.fullName || '—')} <span class="text-muted" style="font-weight:400; font-size:0.8rem;">• ${escHtml(order.appliance || '—')}</span></div>
                 <div class="text-muted" style="font-size:0.78rem;">📱 ${order.phone ? `<a href="tel:${escHtml(order.phone)}" style="font-weight:600;">${escHtml(order.phone)}</a>` : '—'}
-                    &nbsp; <i class="fas fa-map-marker-alt"></i> ${escHtml(order.address || '—')}
-                    &nbsp; <i class="fas fa-clock"></i> ${formatEthDateTime(date)}</div>
+                    &nbsp; <i class="fas fa-map-marker-alt"></i> ${escHtml(order.address || '—')}</div>
                 <div style="margin-top:3px;"><span class="tag">${srcLabel(order)}</span>
                     ${apptTagHtml(order)}
                     ${order.suggestedWorkerName ? `<span class="tag" style="color:#B45309;">⭐ ${escHtml(order.suggestedWorkerName)}</span>` : ''}</div>
@@ -771,7 +772,7 @@ function renderDashNewOrders() {
 
     // 📅 ቀጠሯቸው የደረሰ (ዛሬ/ያለፈ/ቀጠሮ የሌለው) ከፊት፤ ቀጠሯቸው ያልደረሰ ወደ «እስከሚደርስ ቀጠሮ»
     // ↩️ የተመለሱ ስራዎች ወደ «የተመለሱ ስራዎች» ካርድ ይገባሉ (ከአዲስ ትዕዛዞች ዝርዝር ይወጣሉ)
-    const returned = pending.filter(o => orderIsReturned(o))
+    const returned = allOrders.filter(o => o.status === 'Pending' && orderIsReturned(o))
         .sort((a, b) => (toMs(b.returnedAt) || toMs(b.createdAt)) - (toMs(a.returnedAt) || toMs(a.createdAt)));
     const fresh = pending.filter(o => !orderIsReturned(o));
     const due = fresh.filter(o => !orderIsScheduled(o));
