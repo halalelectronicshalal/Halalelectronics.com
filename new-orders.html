@@ -318,12 +318,11 @@ function recommendTechnician(orderId) {
         }
     });
 
-    const select = document.querySelector(`.dashAssignSelect[data-id="${orderId}"]`);
-    if (select) {
+    document.querySelectorAll(`.dashAssignSelect[data-id="${orderId}"]`).forEach(select => {
         select.value = best;
         select.style.borderColor = 'var(--success)';
         select.style.background = '#F0FDF4';
-    }
+    });
     showToast(`🤖 ተመክሯል፡ ${best} (አሁን ${bestLoad} ክፍት ስራ አለው) — "ምድብ" ተጫን ለማረጋገጥ`, 'success');
 }
 
@@ -331,13 +330,17 @@ function recommendTechnician(orderId) {
  *  1) በሂደት ላይ ያለ ምደባ ሲኖር ሁለተኛ ጠቅታ ይታገዳል
  *  2) ትዕዛዙ በ Firestore ላይ አስቀድሞ «ተመድቧል» ከሆነ (ሌላ ሰው/ትር መድቦት) ከመመደብ በፊት ያስጠነቅቃል */
 const _assignInFlight = new Set();
+/** 🎯 ለአንድ ትዕዛዝ ከሚገኙት select ሁሉ (ዋናው ገጽ ዝርዝር፣ ካርድ መስኮት፣ ዝርዝር መስኮት) ቴክኒሻን የተመረጠበትን ያገኛል።
+ *  ቀድሞ የሚገኘው የመጀመሪያው select ብቻ ይነበብ ነበር፤ በመስኮት ውስጥ የተመረጠው ችላ ይባል ነበር */
+function pickAssignSelect(orderId) {
+    const all = Array.from(document.querySelectorAll(`.dashAssignSelect[data-id="${orderId}"], .assignSelect[data-id="${orderId}"]`));
+    return all.find(x => x.value && x.value.trim()) || all[0] || null;
+}
 async function assignOrder(orderId) {
     if (_assignInFlight.has(orderId)) { showToast('⏳ ምደባው በሂደት ላይ ነው፣ ትንሽ ይጠብቁ', 'error'); return; }
     _assignInFlight.add(orderId);
     try {
-        const dSel = document.querySelector(`.dashAssignSelect[data-id="${orderId}"]`);
-        const oSel = document.querySelector(`.assignSelect[data-id="${orderId}"]`);
-        const pick = ((dSel && dSel.value) ? dSel : oSel);
+        const pick = pickAssignSelect(orderId);
         const wanted = pick ? pick.value.trim() : '';
         if (wanted) {
             let f = null;
@@ -355,9 +358,7 @@ async function assignOrder(orderId) {
 
 async function _assignOrderCore(orderId) {
     // ✅ NEW: ከ Dashboard ላይ ካለው quick-assign select ወይም ከ Orders ትር ላይ ካለው select ይነበብ
-    const dashSelect = document.querySelector(`.dashAssignSelect[data-id="${orderId}"]`);
-    const ordersSelect = document.querySelector(`.assignSelect[data-id="${orderId}"]`);
-    const select = (dashSelect && dashSelect.value) ? dashSelect : ordersSelect;
+    const select = pickAssignSelect(orderId);
     let techName = select ? select.value.trim() : '';
 
     if (!techName) {
