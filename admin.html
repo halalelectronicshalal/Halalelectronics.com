@@ -1524,6 +1524,11 @@
                         <div class="number" id="statReferralJobs" style="color:#0D9488;">0</div>
                         <div class="label">🔗 የሪፈራል ስራዎች</div>
                     </div>
+                    <div class="stat-card stat-clickable" role="button" tabindex="0" onclick="openStatDetail('returned')" onkeydown="if(event.key==='Enter')openStatDetail('returned')" title="ዝርዝር ለማየት ይጫኑ">
+                        <div class="icon"><i class="fas fa-undo-alt" style="color:#DC2626;"></i></div>
+                        <div class="number" id="statReturnedJobs" style="color:#DC2626;">0</div>
+                        <div class="label">↩️ የተመለሱ ስራዎች</div>
+                    </div>
                     <!-- ✅ NEW: ሊንክ ጎብኚዎች ቆጠራ - አዲስ ሰው ደንበኛ/ቴክኒሻን ሊንኩን ለመጀመሪያ ጊዜ ሲከፍት ይቆጠራል -->
                     <div class="stat-card">
                         <div class="icon"><i class="fas fa-user-plus" style="color:var(--secondary);"></i></div>
@@ -4667,6 +4672,9 @@
             const apMs = m ? new Date(+m[1], +m[2] - 1, +m[3]).getTime() : 0;
             return Math.max(f(o && o.createdAt), f(o && o.returnedAt), apMs);
         }
+        // ↩️ ቴክኒሻን «ስራ መልስ» ብሎ ወደ አድሚን የመለሰው ገና ያልተመደበ ስራ (ዛሬ የተመለሰ)፤ ያደረ ከሆነ ወደ «ያደሩ ስራዎች» ብቻ ይገባል
+        const admIsReturnedRaw = (o) => !!o && o.status === 'Pending' && !!(o.returnReason || o.returnedAt || o.returnedFrom);
+        const admIsReturnedJob = (o) => admIsReturnedRaw(o) && !(isAdmOvernightJob(o) && overnightBaseMs(o) > 0 && overnightBaseMs(o) < new Date().setHours(0, 0, 0, 0));
         const isAdmOvernightJob = (o) => !!o && !o.workTag && !ADM_FINISHED_STATUSES.includes(o.status);
         function orderReasonText(o) {
             return o.notTodayReason || o.returnReason || o.otherReason || o.priceNotAgreedReason || o.phoneNoAnswerNote || o.reason || '';
@@ -4690,7 +4698,7 @@
                 .map(t => `<option value="${escHtml(t.name)}" ${t.name === currentName ? 'selected' : ''}>${escHtml(t.name)}${techWorkState(t) === 'busy' ? ' 🔴' : ''}</option>`).join('');
         }
         async function admAssignFromList(orderId, kind) {
-            const sel = document.querySelector(`.dashAssignSelect[data-id="${orderId}"]`);
+            const sel = pickAssignSelect(orderId);
             if (!sel || !sel.value) { showToast('እባክዎ ቴክኒሻን ይምረጡ', 'error'); return; }
             const o = allOrders.find(x => x.id === orderId);
             if (o && o.technician === sel.value && o.status === 'Assigned' && !confirm(`ይህ ስራ ቀድሞ ለ ${sel.value} ተመድቧል። እንደገና ይላክለት?`)) return;
@@ -4718,6 +4726,7 @@
                     ${o.foundUsText ? `<div>📣 ${escHtml(o.foundUsText)}</div>` : ''}
                     ${o.correctionTechnician ? `<div>🛠️ እርማት የሚጠየቅበት ቴክኒሻን: <strong>${escHtml(o.correctionTechnician)}</strong></div>` : ''}
                     ${o.referredBy ? `<div>🔗 ሪፈራል ከ: <strong>${escHtml(o.referredBy)}</strong></div>` : ''}
+                    ${(o.status === 'Pending' && o.returnedFrom) ? `<div>↩️ የመለሰው ቴክኒሻን: <strong>${escHtml(o.returnedFrom)}</strong></div>` : ''}
                     <div class="text-muted">📅 ${d ? formatEthDate(d) : '—'}${opts.showAge && days > 0 ? ` &nbsp;•&nbsp; <strong style="color:#DC2626;">⏰ ${days} ቀን አድሯል</strong>` : ''}${o.price ? ` &nbsp;•&nbsp; 💰 ${escHtml(o.price)} ብር` : ''}</div>
                     ${!done && reason ? `<div style="color:#B91C1C;">📝 ምክንያት: ${escHtml(reason)}</div>` : ''}
                 </div>
@@ -4783,6 +4792,12 @@
                 title = '⏰ ያደሩ ስራዎች';
                 summary = `${list.length} ያልተጠናቀቁ ስራዎች ከትናንት እና ከዚያ በፊት የቆዩ (ከአሮጌው ይጀምራል)`;
                 rows = list.map(o => orderDetailRowHTML(o, { overdue: true, showAge: true, assignable: 'overdue' }));
+            } else if (kind === 'returned') {
+                const rms = (o) => overnightBaseMs({ returnedAt: o.returnedAt }) || (o.createdAt?.toDate?.().getTime() || 0);
+                const list = allOrders.filter(admIsReturnedJob).sort((a, b) => rms(b) - rms(a));
+                title = '↩️ የተመለሱ ስራዎች';
+                summary = `${list.length} በቴክኒሻን የተመለሱ ገና ያልተመደቡ ስራዎች — ቴክኒሻን መርጠው መመደብ ይቻላል`;
+                rows = list.map(o => orderDetailRowHTML(o, { assignable: 'returned' }));
             } else if (kind === 'income' || kind === 'yesterday') {
                 const y = new Date(); y.setDate(y.getDate() - 1);
                 const list = txOn(kind === 'income' ? todayStr : y.toDateString());
@@ -4857,6 +4872,7 @@
             document.getElementById('statUnfinishedJobs').textContent = todayOrders.filter(o => ADM_UNFINISHED_STATUSES.includes(o.status)).length;
             document.getElementById('statCorrectionJobs').textContent = todayOrders.filter(o => admWorkKind(o) === 'correction').length;
             document.getElementById('statReferralJobs').textContent = todayOrders.filter(o => admWorkKind(o) === 'referral').length;
+            const _sr = document.getElementById('statReturnedJobs'); if (_sr) _sr.textContent = allOrders.filter(admIsReturnedJob).length;
             document.getElementById('statYesterdayIncome').textContent = yesterdayIncome.toFixed(0) + ' ብር';
             // ✅ NEW: orderBadge (sidebar ላይ ያለው ቀይ ቁጥር) ግን ሁሉንም በመጠባበቅ ላይ ያሉ ትዕዛዞች (ታሪክ ጨምሮ)
             // ማሳየት ስላለበት - አድሚን ምንም pending ትዕዛዝ እንዳያመልጠው - ይህ የተለየ ስሌት ያስፈልገዋል
@@ -5483,11 +5499,14 @@
         // ============================================================
         // ASSIGN ORDER - FIXED: trim and validate
         // ============================================================
+        // 🎯 ለአንድ ትዕዛዝ ከሚገኙ select ሁሉ (ትዕዛዞች ትር፣ ካርድ መስኮት) ቴክኒሻን የተመረጠበትን ያገኛል
+        function pickAssignSelect(orderId) {
+            const all = Array.from(document.querySelectorAll(`.dashAssignSelect[data-id="${orderId}"], .assignSelect[data-id="${orderId}"]`));
+            return all.find(x => x.value && x.value.trim()) || all[0] || null;
+        }
         async function assignOrder(orderId) {
             // ✅ NEW: ከ Dashboard ላይ ካለው quick-assign select ወይም ከ Orders ትር ላይ ካለው select ይነበብ
-            const dashSelect = document.querySelector(`.dashAssignSelect[data-id="${orderId}"]`);
-            const ordersSelect = document.querySelector(`.assignSelect[data-id="${orderId}"]`);
-            const select = (dashSelect && dashSelect.value) ? dashSelect : ordersSelect;
+            const select = pickAssignSelect(orderId);
             let techName = select ? select.value.trim() : '';
 
             if (!techName) {
