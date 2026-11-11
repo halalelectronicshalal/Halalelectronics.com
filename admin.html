@@ -4673,8 +4673,9 @@
             return Math.max(f(o && o.createdAt), f(o && o.returnedAt), apMs);
         }
         // ↩️ ቴክኒሻን «ስራ መልስ» ብሎ ወደ አድሚን የመለሰው ገና ያልተመደበ ስራ (ዛሬ የተመለሰ)፤ ያደረ ከሆነ ወደ «ያደሩ ስራዎች» ብቻ ይገባል
-        const admIsReturnedRaw = (o) => !!o && o.status === 'Pending' && !!(o.returnReason || o.returnedAt || o.returnedFrom);
-        const admIsReturnedJob = (o) => admIsReturnedRaw(o) && !(isAdmOvernightJob(o) && overnightBaseMs(o) > 0 && overnightBaseMs(o) < new Date().setHours(0, 0, 0, 0));
+        const admIsReturnedRaw = (o) => !!o && o.status === 'Pending' && !!(o.returnReason || o.returnedAt || o.returnedFrom || o.returnedFromId || o.completionOption === 'return-job');
+        // ✅ FIX: ሁሉም ቴክኒሻን የመለሱት ስራ ይታያል — ያደረ ቢሆንም ከዝርዝሩ አይወጣም
+        const admIsReturnedJob = (o) => admIsReturnedRaw(o);
         const isAdmOvernightJob = (o) => !!o && !o.workTag && !ADM_FINISHED_STATUSES.includes(o.status);
         function orderReasonText(o) {
             return o.notTodayReason || o.returnReason || o.otherReason || o.priceNotAgreedReason || o.phoneNoAnswerNote || o.reason || '';
@@ -4707,7 +4708,7 @@
             setTimeout(() => { try { openStatDetail(kind); } catch (e) {} }, 700);
         }
         function orderDetailRowHTML(o, opts = {}) {
-            const d = o.createdAt?.toDate?.() || null;
+            const _cMs = toMs(o.createdAt); const d = _cMs ? new Date(_cMs) : null;
             const phone = String(o.phone || '').trim();
             const reason = orderReasonText(o);
             const days = opts.showAge ? orderDaysOld(o) : 0;
@@ -4726,7 +4727,7 @@
                     ${o.foundUsText ? `<div>📣 ${escHtml(o.foundUsText)}</div>` : ''}
                     ${o.correctionTechnician ? `<div>🛠️ እርማት የሚጠየቅበት ቴክኒሻን: <strong>${escHtml(o.correctionTechnician)}</strong></div>` : ''}
                     ${o.referredBy ? `<div>🔗 ሪፈራል ከ: <strong>${escHtml(o.referredBy)}</strong></div>` : ''}
-                    ${(o.status === 'Pending' && o.returnedFrom) ? `<div>↩️ የመለሰው ቴክኒሻን: <strong>${escHtml(o.returnedFrom)}</strong></div>` : ''}
+                    ${(o.status === 'Pending' && admIsReturnedRaw(o)) ? `<div>↩️ የመለሰው ቴክኒሻን: <strong>${escHtml(o.returnedFrom || '—')}</strong>${toMs(o.returnedAt) ? ` &nbsp;•&nbsp; 🕒 ${formatEthDateTime(new Date(toMs(o.returnedAt)))}` : ''}</div>` : ''}
                     <div class="text-muted">📅 ${d ? formatEthDate(d) : '—'}${opts.showAge && days > 0 ? ` &nbsp;•&nbsp; <strong style="color:#DC2626;">⏰ ${days} ቀን አድሯል</strong>` : ''}${o.price ? ` &nbsp;•&nbsp; 💰 ${escHtml(o.price)} ብር` : ''}</div>
                     ${!done && reason ? `<div style="color:#B91C1C;">📝 ምክንያት: ${escHtml(reason)}</div>` : ''}
                 </div>
@@ -4793,7 +4794,7 @@
                 summary = `${list.length} ያልተጠናቀቁ ስራዎች ከትናንት እና ከዚያ በፊት የቆዩ (ከአሮጌው ይጀምራል)`;
                 rows = list.map(o => orderDetailRowHTML(o, { overdue: true, showAge: true, assignable: 'overdue' }));
             } else if (kind === 'returned') {
-                const rms = (o) => overnightBaseMs({ returnedAt: o.returnedAt }) || (o.createdAt?.toDate?.().getTime() || 0);
+                const rms = (o) => toMs(o.returnedAt) || toMs(o.createdAt);
                 const list = allOrders.filter(admIsReturnedJob).sort((a, b) => rms(b) - rms(a));
                 title = '↩️ የተመለሱ ስራዎች';
                 summary = `${list.length} በቴክኒሻን የተመለሱ ገና ያልተመደቡ ስራዎች — ቴክኒሻን መርጠው መመደብ ይቻላል`;
@@ -5295,11 +5296,13 @@
             const techOptions = techOptionsHtml();
 
             list.innerHTML = pendingOrders.map(order => {
-                const date = order.createdAt?.toDate?.() || new Date();
+                const _cMs = toMs(order.createdAt); // ✅ FIX: ትዕዛዙ የገባበት እውነተኛ ቀን (ቁጥር/Timestamp/ጽሁፍ ሁሉንም ያነባል) — ወደ «ዛሬ» አይመለስም
+                const date = _cMs ? new Date(_cMs) : null;
                 return `<div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid var(--border-light);">
                     <div style="flex:1; min-width:180px;">
+                        <div style="font-size:0.8rem; font-weight:700; color:var(--primary); margin-bottom:2px;">📅 ትዕዛዝ የገባበት: ${date ? formatEthDateTime(date) : '—'}</div>
                         <div style="font-weight:600;">${order.fullName || '—'} <span class="text-muted" style="font-weight:400; font-size:0.8rem;">• ${order.appliance || '—'}</span></div>
-                        <div class="text-muted" style="font-size:0.78rem;">📱 ${order.phone ? `<a href="tel:${escHtml(order.phone)}" style="color:var(--secondary); font-weight:600;">${escHtml(order.phone)}</a>` : '—'} &nbsp; <i class="fas fa-map-marker-alt"></i> ${escHtml(order.address || '—')} &nbsp; <i class="fas fa-clock"></i> ${formatEthDateTime(date)}</div>
+                        <div class="text-muted" style="font-size:0.78rem;">📱 ${order.phone ? `<a href="tel:${escHtml(order.phone)}" style="color:var(--secondary); font-weight:600;">${escHtml(order.phone)}</a>` : '—'} &nbsp; <i class="fas fa-map-marker-alt"></i> ${escHtml(order.address || '—')} </div>
                         ${order.returnReason ? `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#FEF3C7; color:#92400E; font-size:0.78rem;">↩️ <strong>ተመለሰ${order.returnedFrom ? ' ከ ' + escHtml(order.returnedFrom) : ''}</strong> — ምክንያት: ${escHtml(order.returnReason)}</div>` : ''}
                     </div>
                     <select class="dashAssignSelect" data-id="${order.id}" style="padding:4px 8px; font-size:0.78rem; border:1px solid var(--border); border-radius:6px;">
