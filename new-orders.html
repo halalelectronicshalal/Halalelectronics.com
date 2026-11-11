@@ -50,6 +50,7 @@ html,body{overflow-x:hidden;max-width:100%}.he-wrap,.card,.modal{min-width:0;max
         <div class="stat-card stat-click" onclick="showStatDetail('free')" role="button" tabindex="0"><div class="icon"><i class="fas fa-circle" style="color:var(--success);"></i></div><div class="number" id="statFree" style="color:var(--success);">0</div><div class="label">ነጻ ቴክኒሻኖች</div></div>
         <div class="stat-card stat-click" onclick="showStatDetail('scheduled')" role="button" tabindex="0"><div class="icon"><i class="fas fa-calendar-alt" style="color:#B45309;"></i></div><div class="number" id="statScheduled" style="color:#B45309;">0</div><div class="label">📅 እስከሚደርስ ቀጠሮ</div></div>
         <div class="stat-card stat-click" onclick="showStatDetail('returned')" role="button" tabindex="0"><div class="icon"><i class="fas fa-undo-alt" style="color:#DC2626;"></i></div><div class="number" id="statReturned" style="color:#DC2626;">0</div><div class="label">↩️ የተመለሱ ስራዎች</div></div>
+        <div class="stat-card stat-click" onclick="showStatDetail('overnight')" role="button" tabindex="0"><div class="icon"><i class="fas fa-moon" style="color:#DC2626;"></i></div><div class="number" id="statOvernight" style="color:#DC2626;">0</div><div class="label">⏰ ያደሩ ስራዎች</div></div>
     </div>
 
 
@@ -523,7 +524,7 @@ function viewOrder(orderId) {
         ${mapUrl ? row('🗺️ ካርታ', `<a href="${escHtml(mapUrl)}" target="_blank" rel="noopener">በካርታ ላይ ክፈት</a>`) : ''}
     </table></div>${operatorNotesHtml(o)}`;
     // ዝርዝሩ ከካርድ መስኮት (የተመለሱ/ቀጠሮ) ከተከፈተ «ወደ ዝርዝር ተመለስ» ያሳያል
-    const back = (statModalKind === 'scheduled' || statModalKind === 'returned') ? statModalKind : null;
+    const back = (statModalKind === 'scheduled' || statModalKind === 'returned' || statModalKind === 'overnight') ? statModalKind : null;
     statModalKind = null; // ዝርዝሩ ክፍት ሳለ የካርዱ ዝርዝር በራሱ እንዳይተካ
     let footer = '';
     if (o.status === 'Pending') {
@@ -593,6 +594,19 @@ function showStatDetail(kind, refresh) {
         const opts = techOptionsHtml();
         body = l.length ? l.map(o => orderRowHtml(o, opts)).join('')
             : '<p class="text-muted text-center">የተመለሰ ስራ የለም</p>';
+        if (refresh) {
+            document.getElementById('modalBody').innerHTML = body;
+            document.querySelectorAll('#modalBody .dashAssignSelect').forEach(x => { if (keepSel[x.dataset.id]) x.value = keepSel[x.dataset.id]; });
+            return;
+        }
+    } else if (kind === 'overnight') {
+        title = '⏰ ያደሩ ስራዎች';
+        const l = allOrders.filter(orderIsOvernight).sort((a, b) => overnightBaseMs(a) - overnightBaseMs(b)); // ከአሮጌው ይጀምራል
+        const keepSel = {};
+        document.querySelectorAll('#modalBody .dashAssignSelect').forEach(x => { if (x.value) keepSel[x.dataset.id] = x.value; });
+        const opts = techOptionsHtml();
+        body = l.length ? `<div class="text-muted" style="font-size:.8rem;margin-bottom:6px;">${l.length} ያደሩ ስራዎች — መድብ ሲሉ ለአዲሱ ቴክኒሻን ይመደባል</div>` + l.map(o => orderRowHtml(o, opts)).join('')
+            : '<p class="text-muted text-center">ያደረ ስራ የለም</p>';
         if (refresh) {
             document.getElementById('modalBody').innerHTML = body;
             document.querySelectorAll('#modalBody .dashAssignSelect').forEach(x => { if (keepSel[x.dataset.id]) x.value = keepSel[x.dataset.id]; });
@@ -699,6 +713,22 @@ function apptTagHtml(o) {
     const color = n > 0 ? '#B45309' : n === 0 ? 'var(--success)' : 'var(--emergency)';
     return `<span class="tag" style="color:${color}; font-weight:700;">📅 ቀጠሮ: ${escHtml(formatEthDate(d, true))} (${when})</span>`;
 }
+/** ⏰ «ያደረ» ስራ = ዛሬ ያልተፈጠረ/ያልተመለሰ/ቀጠሮው ያላለፈ ያልተጠናቀቀ ስራ (ያልተመደበ ወይም የተመደበ ክፍት) — ከአድሚን ገጽ ጋር አንድ ደንብ */
+function overnightBaseMs(o) {
+    const ap = (o && ((o.rescheduledFrom && o.rescheduledDate) || o.appointmentDate)) || '';
+    const d = keyToLocalDate(ap);
+    return Math.max(toMs(o && o.createdAt), toMs(o && o.returnedAt), d ? d.getTime() : 0);
+}
+function orderIsOvernight(o) {
+    if (!o || o.workTag) return false;
+    if (o.status !== 'Pending' && o.status !== 'Assigned') return false;
+    const ms = overnightBaseMs(o);
+    return ms > 0 && ms < startOfTodayMs();
+}
+function overnightDays(o) {
+    const a = new Date(overnightBaseMs(o)); a.setHours(0, 0, 0, 0);
+    return Math.max(0, Math.round((startOfTodayMs() - a.getTime()) / 86400000));
+}
 function orderRowHtml(order, techOptions) {
     const date = order.createdAt && order.createdAt.toDate ? order.createdAt.toDate() : new Date();
     const hl = order.id === highlightOrderId ? ' hl' : '';
@@ -711,6 +741,7 @@ function orderRowHtml(order, techOptions) {
                 <div style="margin-top:3px;"><span class="tag">${srcLabel(order)}</span>
                     ${apptTagHtml(order)}
                     ${order.suggestedWorkerName ? `<span class="tag" style="color:#B45309;">⭐ ${escHtml(order.suggestedWorkerName)}</span>` : ''}</div>
+                ${orderIsOvernight(order) ? `<div style="margin-top:3px; font-size:0.78rem;"><strong style="color:#DC2626;">⏰ ${overnightDays(order)} ቀን አድሯል</strong>${order.status === 'Assigned' && order.technician ? ` &nbsp; 👨‍🔧 አሁን ለ <b>${escHtml(order.technician)}</b> ተመድቧል` : ' &nbsp; (ገና ያልተመደበ)'}</div>` : ''}
                 ${order.returnReason ? `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#FEF3C7; color:#92400E; font-size:0.78rem;">↩️ <strong>ተመለሰ${order.returnedFrom ? ' ከ ' + escHtml(order.returnedFrom) : ''}</strong> — ምክንያት: ${escHtml(order.returnReason)}</div>` : ''}
                 ${(order.orderType === 'correction' || order.orderType === 'referral') ? `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#ECFDF5; color:#065F46; font-size:0.78rem;">${order.orderType === 'correction' ? '🛠️ <strong>እርማት</strong>' + (order.correctionTechnician ? ' — ቴክኒሻን: ' + escHtml(order.correctionTechnician) : '') : '🔗 <strong>ሪፈራል</strong>' + (order.referredBy ? ' — ከ: ' + escHtml(order.referredBy) : '')}</div>` : ''}
                 ${operatorNotesHtml(order)}
@@ -752,6 +783,7 @@ function renderDashNewOrders() {
     document.getElementById('statAssigned').textContent = allOrders.filter(o => o.status === 'Assigned' && !orderHasFutureAppt(o)).length;
     document.getElementById('statScheduled').textContent = scheduled.length + apptAssigned.length;
     document.getElementById('statReturned').textContent = returned.length;
+    const so = document.getElementById('statOvernight'); if (so) so.textContent = allOrders.filter(orderIsOvernight).length;
     document.getElementById('statFree').textContent = fieldTechs().filter(t => techWorkState(t) === 'free').length;
 
     // በግማሽ የተመረጠ ቴክኒሻን እንዳይጠፋ ማስቀመጥ
@@ -772,7 +804,7 @@ function renderDashNewOrders() {
         const el = document.getElementById('ord-' + highlightOrderId);
         if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); highlightOrderId = null; }
     }
-    try { if ((statModalKind === 'scheduled' || statModalKind === 'returned') && document.getElementById('modalOverlay').classList.contains('show')) showStatDetail(statModalKind, true); } catch (e) {}
+    try { if ((statModalKind === 'scheduled' || statModalKind === 'returned' || statModalKind === 'overnight') && document.getElementById('modalOverlay').classList.contains('show')) showStatDetail(statModalKind, true); } catch (e) {}
     try { renderFreeAnnounce(); } catch (e) {} // ስራ ሲመደብ/ሲለወጥ «ነፃ ነኝ» ዝርዝር ይታደሳል
 }
 
