@@ -1540,13 +1540,13 @@
                         <div class="icon"><i class="fas fa-building" style="color:#059669;"></i></div>
                         <div class="number" id="statCompanyToday" style="color:#059669;">0 ብር</div>
                         <div class="label">🏢 ወደ ድርጅቱ የገባ ገቢ (ዛሬ)</div>
-                        <div class="label" style="font-size:0.7rem; opacity:.75;">ከጸደቁ ሪፖርቶች ብቻ</div>
+                        <div class="label" id="statCompanyTodayNote" style="font-size:0.7rem; opacity:.75;">ከጸደቁ ሪፖርቶች ብቻ</div>
                     </div>
                     <div class="stat-card">
                         <div class="icon"><i class="fas fa-building" style="color:#7C3AED;"></i></div>
                         <div class="number" id="statCompanyYesterday" style="color:#7C3AED;">0 ብር</div>
                         <div class="label">🏢 ወደ ድርጅቱ የገባ ገቢ (ትላንት)</div>
-                        <div class="label" style="font-size:0.7rem; opacity:.75;">ከጸደቁ ሪፖርቶች ብቻ</div>
+                        <div class="label" id="statCompanyYesterdayNote" style="font-size:0.7rem; opacity:.75;">ከጸደቁ ሪፖርቶች ብቻ</div>
                     </div>
                     <div class="stat-card stat-clickable" role="button" tabindex="0" onclick="openStatDetail('today')" onkeydown="if(event.key==='Enter')openStatDetail('today')" title="ዝርዝር ለማየት ይጫኑ">
                         <div class="icon"><i class="fas fa-clipboard-list"></i></div>
@@ -4589,16 +4589,37 @@
             const now = bizNow();
             const todayKey = getDateKey(now);
             const yKey = getDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
-            let t = 0, y = 0;
+            const keyOf = (r) => {
+                if (r.dateKey) {
+                    const dk = String(r.dateKey).slice(0, 10);
+                    // 🌙 ያደረ ሪፖርት፦ ሁሉም ስራዎች ከሪፖርቱ ቀን በፊት የተመዘገቡ ከሆነ (ከ2:30 በፊት ለነበረ ስራ ከ2:30 በኋላ የተላከ) በስራው ቀን (ትላንት) ይመዘገባል
+                    const js = Array.isArray(r.jobStatuses) ? r.jobStatuses : [];
+                    const jd = js.map(j => String((j && j.jobDate) || '').slice(0, 10)).filter(Boolean);
+                    if (js.length && jd.length === js.length && jd.every(d => d < dk)) return jd.slice().sort().pop();
+                    return dk;
+                }
+                if (/^\d{4}-\d{2}-\d{2}/.test(String(r.date || ''))) return String(r.date).slice(0, 10);
+                try { const d = r.submittedAt && r.submittedAt.toDate ? r.submittedAt.toDate() : null; return d ? getBizDateKey(d) : ''; } catch (e) { return ''; }
+            };
+            const amtOf = (r) => {
+                let a = parseFloat(r.companyAmount);
+                if (!isFinite(a)) { const p = parseFloat(r.profit), t = parseFloat(r.techShareAmount); a = (isFinite(p) ? p : 0) - (isFinite(t) ? t : 0); }
+                return isFinite(a) ? a : 0;
+            };
+            const S = { t: { ok: 0, wait: 0, n: 0 }, y: { ok: 0, wait: 0, n: 0 } };
             (financeReports() || []).forEach(r => {
-                if (r.approved !== true) return;
-                const amt = parseFloat(r.companyAmount);
-                if (!isFinite(amt)) return;
-                if (r.dateKey === todayKey) t += amt;
-                else if (r.dateKey === yKey) y += amt;
+                const k = keyOf(r);
+                const b = k === todayKey ? S.t : (k === yKey ? S.y : null);
+                if (!b) return;
+                if (r.approved === true) b.ok += amtOf(r);
+                else { b.wait += amtOf(r); b.n++; }
             });
-            elT.textContent = Math.round(t).toLocaleString() + ' ብር';
-            elY.textContent = Math.round(y).toLocaleString() + ' ብር';
+            const fmt = (n) => Math.round(n).toLocaleString() + ' ብር';
+            elT.textContent = fmt(S.t.ok);
+            elY.textContent = fmt(S.y.ok);
+            const noteT = document.getElementById('statCompanyTodayNote'), noteY = document.getElementById('statCompanyYesterdayNote');
+            if (noteT) noteT.textContent = S.t.n ? ('⏳ ' + S.t.n + ' ሪፖርት ማጽደቅ ይጠብቃል (' + fmt(S.t.wait) + ')') : 'ከጸደቁ ሪፖርቶች ብቻ';
+            if (noteY) noteY.textContent = S.y.n ? ('⏳ ' + S.y.n + ' ሪፖርት ማጽደቅ ይጠብቃል (' + fmt(S.y.wait) + ')') : 'ከጸደቁ ሪፖርቶች ብቻ';
         }
         function loadDailyReports() {
             listenRankReset();
@@ -5260,8 +5281,11 @@
                 .filter(t => t && t.id && t.role !== 'admin' && t.status !== 'rejected' && !seen.has(t.id) && seen.add(t.id));
         }
         // "ለሁሉም ላክ" - ንቁ የሆኑት ብቻ (የተዘጉና ያልጸደቁ አይካተቱም)
+        // ⚠️ ቴክኒሻኑ በራሱ ገጽ «በስራ ላይ/ነጻ/አልወጣሁም» ሲል staff.status ወደ working/free/off-duty ይቀየራል፤
+        // ስለዚህ «ንቁ» = አካውንቱ ያልተዘጋ (inactive)፣ ያልተጠባበቀ (pending) እና ያልተከለከለ (rejected) ብቻ ነው።
+        function admAccountOpen(t) { return !!t && ['inactive', 'pending', 'rejected', 'disabled'].indexOf(t.status) === -1; }
         function cpBroadcastTargets() {
-            return cpContacts().filter(t => !t.status || t.status === 'active');
+            return cpContacts().filter(admAccountOpen);
         }
         function cpRoleLabel(t) {
             if (t.status === 'pending') return '⏳ ማጽደቅ ይጠብቃል';
@@ -5561,7 +5585,7 @@
         //  pre-selects whoever has the fewest, so the admin just confirms)
         // ============================================================
         function recommendTechnician(orderId) {
-            const activeTechs = fieldTechs().filter(t => !t.status || t.status === 'active');
+            const activeTechs = fieldTechs().filter(admAccountOpen);
             if (activeTechs.length === 0) {
                 showToast('ንቁ ቴክኒሻን አልተገኘም / No active technician found', 'error');
                 return;
@@ -6599,7 +6623,7 @@ ${locationLine}
         function showSendMessageModal(techId) {
             if (techId) { openAdminChat(techId); return; } // አንድ ቴክኒሻን → ውይይት ሳጥን
             const single = techId ? allTechnicians.find(t => t.id === techId) : null;
-            const everyone = fieldTechs().filter(t => !t.status || t.status === 'active');
+            const everyone = fieldTechs().filter(admAccountOpen);
             const targetHTML = single
                 ? `<p style="margin-bottom:8px;"><strong>👤 ለ: ${escHtml(single.name)}</strong> ${single.chatId ? '<span class="status-badge status-completed">📲 ቴሌግራም ተገናኝቷል</span>' : '<span class="status-badge status-pending">ቴሌግራም አልተገናኘም - በአፑ ውስጥ ብቻ ይታያል</span>'}</p>`
                 : `<p style="margin-bottom:8px;"><strong>📢 ለሁሉም ንቁ ቴክኒሻኖች (${everyone.length})</strong></p>`;
@@ -6627,7 +6651,7 @@ ${locationLine}
             if (!message) { showToast('⚠️ እባክዎ መልእክት ይጻፉ', 'error'); return; }
 
             const targets = targetId === 'all'
-                ? fieldTechs().filter(t => !t.status || t.status === 'active')
+                ? fieldTechs().filter(admAccountOpen)
                 : allTechnicians.filter(t => t.id === targetId);
             if (targets.length === 0) { showToast('⚠️ ተቀባይ ቴክኒሻን አልተገኘም', 'error'); return; }
 
