@@ -1473,6 +1473,19 @@
 
                 <!-- Stats -->
                 <div class="stats-grid" id="dashboardStats">
+                    <!-- 🏢 ወደ ድርጅቱ የገባ ገቢ — ከጸደቁ ሪፖርቶች (companyAmount) ብቻ -->
+                    <div class="stat-card">
+                        <div class="icon"><i class="fas fa-building" style="color:#059669;"></i></div>
+                        <div class="number" id="statCompanyToday" style="color:#059669;">0 ብር</div>
+                        <div class="label">🏢 ወደ ድርጅቱ የገባ ገቢ (ዛሬ)</div>
+                        <div class="label" style="font-size:0.7rem; opacity:.75;">ከጸደቁ ሪፖርቶች ብቻ</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="icon"><i class="fas fa-building" style="color:#7C3AED;"></i></div>
+                        <div class="number" id="statCompanyYesterday" style="color:#7C3AED;">0 ብር</div>
+                        <div class="label">🏢 ወደ ድርጅቱ የገባ ገቢ (ትላንት)</div>
+                        <div class="label" style="font-size:0.7rem; opacity:.75;">ከጸደቁ ሪፖርቶች ብቻ</div>
+                    </div>
                     <div class="stat-card stat-clickable" role="button" tabindex="0" onclick="openStatDetail('today')" onkeydown="if(event.key==='Enter')openStatDetail('today')" title="ዝርዝር ለማየት ይጫኑ">
                         <div class="icon"><i class="fas fa-clipboard-list"></i></div>
                         <div class="number" id="statTotalOrders">0</div>
@@ -4506,6 +4519,25 @@
             }
             if (btn) btn.disabled = false;
         }
+        // 🏢 ወደ ድርጅቱ የገባ ገቢ (ዛሬ / ትላንት) — የጸደቁ ሪፖርቶች companyAmount ድምር፣ በሪፖርቱ dateKey (የስራ ቀን)
+        function admUpdateCompanyIncomeCards() {
+            const elT = document.getElementById('statCompanyToday');
+            const elY = document.getElementById('statCompanyYesterday');
+            if (!elT || !elY) return;
+            const now = bizNow();
+            const todayKey = getDateKey(now);
+            const yKey = getDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
+            let t = 0, y = 0;
+            (financeReports() || []).forEach(r => {
+                if (r.approved !== true) return;
+                const amt = parseFloat(r.companyAmount);
+                if (!isFinite(amt)) return;
+                if (r.dateKey === todayKey) t += amt;
+                else if (r.dateKey === yKey) y += amt;
+            });
+            elT.textContent = Math.round(t).toLocaleString() + ' ብር';
+            elY.textContent = Math.round(y).toLocaleString() + ' ብር';
+        }
         function loadDailyReports() {
             listenRankReset();
             listenCustomerSms();
@@ -4516,6 +4548,7 @@
                     data.id = doc.id;
                     allDailyReports.push(data);
                 });
+                try { admUpdateCompanyIncomeCards(); } catch (e) {}
                 try { updateFinanceStats(); } catch (e) {}
                 try { renderTechnicians(); } catch (e) {}   // 🏅 ራንክ ሪፖርት ሲገባ ይታደሳል
                 updateNotifBell();
@@ -4875,6 +4908,7 @@
             document.getElementById('statReferralJobs').textContent = todayOrders.filter(o => admWorkKind(o) === 'referral').length;
             const _sr = document.getElementById('statReturnedJobs'); if (_sr) _sr.textContent = allOrders.filter(admIsReturnedJob).length;
             document.getElementById('statYesterdayIncome').textContent = yesterdayIncome.toFixed(0) + ' ብር';
+            try { admUpdateCompanyIncomeCards(); } catch (e) {}
             // ✅ NEW: orderBadge (sidebar ላይ ያለው ቀይ ቁጥር) ግን ሁሉንም በመጠባበቅ ላይ ያሉ ትዕዛዞች (ታሪክ ጨምሮ)
             // ማሳየት ስላለበት - አድሚን ምንም pending ትዕዛዝ እንዳያመልጠው - ይህ የተለየ ስሌት ያስፈልገዋል
             const allPending = allOrders.filter(o => o.status === 'Pending').length;
