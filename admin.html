@@ -4842,7 +4842,7 @@
                     <div>📍 ${escHtml(o.address || '—')}</div>
                     <div>🔧 ${escHtml(o.appliance || '—')} &nbsp;•&nbsp; 👷 ${escHtml(o.technician || 'ያልተመደበ')}</div>
                     ${o.foundUsText ? `<div>📣 ${escHtml(o.foundUsText)}</div>` : ''}
-                    ${o.correctionTechnician ? `<div>🛠️ እርማት የሚጠየቅበት ቴክኒሻን: <strong>${escHtml(o.correctionTechnician)}</strong></div>` : ''}
+                    ${o.correctionTechnician ? `<div>🛠️ እርማት የሚጠየቅበት ቴክኒሻን: <strong>${escHtml(o.correctionTechnician)}</strong>${o.correctionDate ? ' · 📅 ' + escHtml(o.correctionDate) : ''}</div>` : ''}
                     ${o.referredBy ? `<div>🔗 ሪፈራል ከ: <strong>${escHtml(o.referredBy)}</strong></div>` : ''}
                     ${(o.status === 'Pending' && admIsReturnedRaw(o)) ? `<div>↩️ የመለሰው ቴክኒሻን: <strong>${escHtml(o.returnedFrom || '—')}</strong>${toMs(o.returnedAt) ? ` &nbsp;•&nbsp; 🕒 ${formatEthDateTime(new Date(toMs(o.returnedAt)))}` : ''}</div>` : ''}
                     <div class="text-muted">📅 ${d ? formatEthDate(d) : '—'}${opts.showAge && days > 0 ? ` &nbsp;•&nbsp; <strong style="color:#DC2626;">⏰ ${days} ቀን አድሯል</strong>` : ''}${o.price ? ` &nbsp;•&nbsp; 💰 ${escHtml(o.price)} ብር` : ''}</div>
@@ -7781,8 +7781,14 @@ ${locationLine}
                     </select>
                 </div>
                 <div class="form-group" id="phoneOrderCorrBox" style="display:none;">
-                    <label>🛠️ እርማት የሚጠየቅበት ቴክኒሻን ስም *</label>
-                    <input type="text" id="phoneOrderCorrTech" maxlength="80" placeholder="ስራውን ሰርቶ የነበረው ቴክኒሻን ስም" />
+                    <label>🛠️ እርማት የሚጠየቅበት ቴክኒሻን *</label>
+                    <select id="phoneOrderCorrTech">
+                        <option value="">— ስራውን የሰራውን ቴክኒሻን ይምረጡ —</option>
+                        ${fieldTechs().map(t => `<option value="${escHtml(t.name)}">${escHtml(t.name)}</option>`).join('')}
+                    </select>
+                    <label style="margin-top:8px; display:block;">📅 ስራው የተሰራበት ቀን</label>
+                    <div style="display:grid; grid-template-columns:1fr 1.5fr 1fr; gap:4px;">${buildEthiopianPickerHTML('phoneOrderCorrDateEth', 'phoneOrderCorrDate', getBizDateKey())}</div>
+                    <input type="date" id="phoneOrderCorrDate" value="${getBizDateKey()}" style="display:none;" />
                 </div>
                 <div class="form-group" id="phoneOrderRefBox" style="display:none;">
                     <label>🔗 ሪፈራሉ ከማን መጣ? *</label>
@@ -7844,8 +7850,9 @@ ${locationLine}
             if (cb) cb.style.display = t === 'correction' ? 'block' : 'none';
             if (rb) rb.style.display = t === 'referral' ? 'block' : 'none';
             if (t !== 'correction') { const i = document.getElementById('phoneOrderCorrTech'); if (i) i.value = ''; }
+            if (t !== 'correction') { const d = document.getElementById('phoneOrderCorrDate'); if (d) d.value = getBizDateKey(); }
             if (t !== 'referral') { const i = document.getElementById('phoneOrderReferredBy'); if (i) i.value = ''; }
-            const f = document.getElementById(t === 'correction' ? 'phoneOrderCorrTech' : t === 'referral' ? 'phoneOrderReferredBy' : '');
+            const f = document.getElementById(t === 'referral' ? 'phoneOrderReferredBy' : '');
             if (f) f.focus();
         }
 
@@ -7861,13 +7868,14 @@ ${locationLine}
             const workType = (document.getElementById('phoneOrderWorkType') || {}).value || 'new';
             const WORK_TYPE_LABELS = { new: '🆕 አዲስ', correction: '🛠️ እርማት', referral: '🔗 ሪፈራል' };
             const corrTech = workType === 'correction' ? ((document.getElementById('phoneOrderCorrTech') || {}).value || '').trim() : '';
+            const corrDate = workType === 'correction' ? ((document.getElementById('phoneOrderCorrDate') || {}).value || '').trim() : '';
             const referredBy = workType === 'referral' ? ((document.getElementById('phoneOrderReferredBy') || {}).value || '').trim() : '';
 
             if (!fullName || !phone || !address || !appliance) {
                 showToast('እባክዎ ስም፣ ስልክ፣ አድራሻ እና መሳሪያ ይሙሉ', 'error');
                 return;
             }
-            if (workType === 'correction' && !corrTech) { showToast('እርማት የሚጠየቅበትን ቴክኒሻን ስም ይጻፉ', 'error'); document.getElementById('phoneOrderCorrTech').focus(); return; }
+            if (workType === 'correction' && !corrTech) { showToast('እርማት የሚጠየቅበትን ቴክኒሻን ይምረጡ', 'error'); document.getElementById('phoneOrderCorrTech').focus(); return; }
             if (workType === 'referral' && !referredBy) { showToast('ሪፈራሉ ከማን እንደመጣ ይጻፉ', 'error'); document.getElementById('phoneOrderReferredBy').focus(); return; }
             if (altPhone && altPhone === phone) { showToast('ተለዋጭ ስልክ ከዋናው የተለየ መሆን አለበት', 'error'); return; }
 
@@ -7881,6 +7889,7 @@ ${locationLine}
                     orderType: workType,                                   // operator.html ጋር አንድ አይነት መስክ
                     orderTypeLabel: WORK_TYPE_LABELS[workType] || WORK_TYPE_LABELS.new,
                     correctionTechnician: corrTech,                        // 🛠️ እርማት የሚጠየቅበት ቴክኒሻን
+                    correctionDate: corrDate,                              // 📅 ስራው የተሰራበት ቀን
                     referredBy: referredBy,                                // 🔗 ሪፈራሉ የመጣው ከማን
                     preferredDay: preferredDay,
                     problem: problem || 'በስልክ የተደወለ ስራ',
