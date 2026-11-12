@@ -68,23 +68,24 @@
         if ((st !== 'Pending' && st !== 'Assigned') && d.technician) txt += ' (ቴክኒሻን: ' + d.technician + ')';
         return { t: Date.now(), by: actor(), text: txt, st: st };
     }
-    function patchUpdate(proto, isBatch) {
+    // ⚠️ ታሪክ መመዝገብ ዋናውን ስራ ፈጽሞ እንዳያግድ፦ ከታሪኩ ጋር ማዘመን ከተከለከለ/ካልተሳካ ያለ ታሪክ እንደገና ይሞክራል
+    function patchUpdate(proto) {
         if (!proto || !proto.update) return;
         var orig = proto.update;
         proto.update = function () {
-            var a = Array.prototype.slice.call(arguments);
+            var a = Array.prototype.slice.call(arguments), self = this, plain = null;
             try {
-                var ref = isBatch ? a[0] : this, i = isBatch ? 1 : 0;
-                if (ref && ref.parent && ref.parent.id === 'orders' && a.length === i + 1 && a[i] && typeof a[i] === 'object' && !('history' in a[i])) {
-                    var e = mk(a[i]);
-                    if (e) a[i] = Object.assign({}, a[i], { history: FV.arrayUnion(e) });
+                if (this && this.parent && this.parent.id === 'orders' && a.length === 1 && a[0] && typeof a[0] === 'object' && !('history' in a[0])) {
+                    var e = mk(a[0]);
+                    if (e) { plain = a.slice(); a[0] = Object.assign({}, a[0], { history: FV.arrayUnion(e) }); }
                 }
-            } catch (err) {}
-            return orig.apply(this, a);
+            } catch (err) { plain = null; }
+            var p = orig.apply(this, a);
+            if (!plain) return p;
+            return p.catch(function (err) { return orig.apply(self, plain); });
         };
     }
-    patchUpdate(firebase.firestore.DocumentReference && firebase.firestore.DocumentReference.prototype, false);
-    patchUpdate(firebase.firestore.WriteBatch && firebase.firestore.WriteBatch.prototype, true);
+    patchUpdate(firebase.firestore.DocumentReference && firebase.firestore.DocumentReference.prototype);
     var CR = firebase.firestore.CollectionReference && firebase.firestore.CollectionReference.prototype;
     if (CR && CR.add) {
         var origAdd = CR.add;
@@ -5025,6 +5026,7 @@
                         <div style="flex:1; min-width:150px;">
                             <strong>👤 ${escHtml(r.technicianName || r.technician || '—')}</strong>${admReportBadges(r)}
                             <div style="font-size:0.8rem; color:var(--text-muted);">📅 ${escHtml(r.date || r.dateKey || '')} · 💰 ${escHtml(income)} ብር${photos ? ' · 📸 ' + photos : ''}</div>
+                            ${admHasCorrection(r) ? `<div style="font-size:0.8rem; color:#DC2626; margin-top:4px; white-space:pre-wrap;">✍️ ${escHtml(r.correctionRequest.text)}</div>` : ''}
                         </div>
                         <button class="btn btn-outline btn-sm" onclick="viewReportDetail('${r.id}')"><i class="fas fa-eye"></i> ተመልከት</button>
                         <button class="btn btn-success btn-sm" onclick="approveReportFromCard('${r.id}')"><i class="fas fa-check"></i> አጽድቅ</button>
@@ -5400,10 +5402,17 @@
         // ============================================================
         // ✅ NEW: DASHBOARD - አዲስ ትዕዛዞች (ገና ያልተመደቡ) QUICK-ASSIGN WIDGET
         // ============================================================
+// 📱 iPhone፦ ድሮፕ ዳውን (select) ክፍት ሆኖ ዝርዝሩ በራሱ እንደገና እንዳይሳል (ወደ ላይ እንዳይመለስ)
+function heSelectOpenIn(el) { var a = document.activeElement; return !!(a && a.tagName === 'SELECT' && el && el.contains(a)); }
+document.addEventListener('focusout', function (e) {
+    if (!e.target || e.target.tagName !== 'SELECT' || !window._heDashDirty) return;
+    setTimeout(function () { if (!(document.activeElement && document.activeElement.tagName === 'SELECT')) { window._heDashDirty = false; try { renderDashNewOrders(); } catch (x) {} } }, 400);
+});
         function renderDashNewOrders() {
             const list = document.getElementById('dashNewOrdersList');
             const badge = document.getElementById('dashNewOrdersBadge');
             if (!list) return;
+            if (heSelectOpenIn(list)) { window._heDashDirty = true; return; }
 
             const pendingOrders = allOrders.filter(o => o.status === 'Pending');
             if (badge) badge.textContent = pendingOrders.length;
@@ -6548,10 +6557,16 @@ ${locationLine}
 
             html += `<h4 style="font-size:0.95rem; margin-bottom:10px;">📋 የዕለት ሪፖርት ታሪክ</h4>`;
 
-            if (reports.length === 0) {
-                html += `<p class="text-center text-muted">ምንም ሪፖርት አልተመዘገበም</p>`;
+            const _showAppr = window._admHistShowApproved === techId;
+            const _apprCount = reports.filter(r => r.approved).length;
+            const _shown = _showAppr ? reports : reports.filter(r => !r.approved);
+            if (_apprCount > 0) {
+                html += `<div style="margin-bottom:8px;"><button class="btn btn-outline btn-sm" onclick="window._admHistShowApproved = ${_showAppr ? 'null' : `'${techId}'`}; viewTechReportHistory('${techId}')">${_showAppr ? '🙈 የጸደቁትን ደብቅ' : '👁️ የጸደቁ ሪፖርቶችን አሳይ (' + _apprCount + ')'}</button></div>`;
+            }
+            if (_shown.length === 0) {
+                html += `<p class="text-center text-muted">${reports.length ? '✅ ያልጸደቀ ሪፖርት የለም' : 'ምንም ሪፖርት አልተመዘገበም'}</p>`;
             } else {
-                reports.forEach(r => {
+                _shown.forEach(r => {
                     html += `
                         <div style="border:1px solid var(--border); border-radius:10px; padding:12px; margin-bottom:10px;">
                             <div class="flex-between">
@@ -6561,7 +6576,8 @@ ${locationLine}
                             <div style="font-size:0.9rem; margin-top:6px; color:var(--text-muted);">
                                 ${r.jobs ? `🔧 የተሰሩ ስራዎች: ${r.jobs}<br>` : ''}
                                 ${r.income ? `💰 ገቢ: ${r.income} ብር<br>` : ''}
-                                ${r.notes ? `📝 ${r.notes}` : ''}
+                                ${r.notes ? `📝 ${r.notes}<br>` : ''}
+                                ${admHasCorrection(r) ? `<span style="color:#DC2626;">✍️ እርማት: ${escHtml(r.correctionRequest.text)}</span>` : ''}
                             </div>
                             ${(r.warrantyPhotoURLs && r.warrantyPhotoURLs.length) ? `<div style="font-size:0.8rem; margin-top:8px; color:var(--text-muted);">📸 ዋራንቲ ካርድ</div><div class="photo-gallery">${r.warrantyPhotoURLs.map(u => `<img src="${u}" alt="ዋራንቲ" onclick="window.open('${u}','_blank')" />`).join('')}</div>` : ''}
                             ${(r.receiptURLs && r.receiptURLs.length) ? `<div style="font-size:0.8rem; margin-top:8px; color:var(--text-muted);">🏦 የባንክ ደረሰኝ</div><div class="photo-gallery">${r.receiptURLs.map(u => `<img src="${u}" alt="ደረሰኝ" onclick="window.open('${u}','_blank')" />`).join('')}</div>` : ''}
