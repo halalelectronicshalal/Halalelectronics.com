@@ -9751,8 +9751,12 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         function techFillCompletePicker() {
             const sel = document.getElementById('completeJobPicker');
             if (!sel) return;
+            if (document.activeElement === sel) return; // 📱 ክፍት ሳለ እንደገና አይሳልም
             const jobs = techOpenJobs();
             const cur = (document.getElementById('completeOrderId').value || '').trim();
+            const _sig = jobs.map(o => o.id + (o.fullName || '') + (o.appliance || '')).join('|') + '#' + cur;
+            if (sel.dataset.sig === _sig) return;
+            sel.dataset.sig = _sig;
             sel.innerHTML = '<option value="">— ስራ ይምረጡ —</option>' + jobs.map(o =>
                 `<option value="${o.id}" ${o.id === cur ? 'selected' : ''}>${(o.fullName || '—')} • ${(o.appliance || '—')} • #${o.id.substring(0, 6)}</option>`).join('');
             if (!cur && jobs.length === 1) {
