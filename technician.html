@@ -2563,7 +2563,7 @@
                                 <input type="text" id="reportProfit" placeholder="0" readonly />
                             </div>
                             <div class="field">
-                                <label>📊 8️⃣ የባለሙያ ድርሻ (%)</label>
+                                <label>📊 8️⃣ የባለሙያ ድርሻ (%) <span style="color:var(--emergency,#dc2626); font-size:0.75rem;">* ገቢ ካለ ግዴታ</span></label>
                                 <input type="text" inputmode="decimal" id="reportTechSharePercent" placeholder="ለም: 50" />
                             </div>
                             <div class="field">
@@ -2575,7 +2575,7 @@
                                 <input type="text" id="reportCompanyAmount" placeholder="0" readonly />
                             </div>
                             <div class="field">
-                                <label>🏦 9️⃣ ወደ ድርጅቱ የገባ ገንዘብ</label>
+                                <label>🏦 9️⃣ ወደ ድርጅቱ የገባ ገንዘብ <span style="color:var(--emergency,#dc2626); font-size:0.75rem;">* ገቢ ካለ ግዴታ</span></label>
                                 <input type="text" inputmode="decimal" id="reportDeposited" placeholder="0" />
                             </div>
                         </div>
@@ -11450,6 +11450,24 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 const _rb = document.querySelector('input[name="readyTomorrow"]');
                 if (_rb && _rb.scrollIntoView) _rb.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
+            }
+
+            // ✅ ግዴታ፦ ገቢ ካለ "የባለሙያ ድርሻ (%)" እና "ወደ ድርጅቱ የገባ ገንዘብ" ቁጥር መግባት አለበት።
+            // ባዶ ከሆነ ሪፖርቱ አይላክም፤ 0 ከተጻፈ ግን በ 0 ይላካል።
+            if (totalIncome > 0) {
+                const _isNum = (id) => { const r = String(document.getElementById(id).value || '').trim().replace(',', '.'); return r !== '' && isFinite(Number(r)); };
+                const _need = [
+                    ['reportTechSharePercent', '“የባለሙያ ድርሻ (%)”'],
+                    ['reportDeposited', '“ወደ ድርጅቱ የገባ ገንዘብ”']
+                ];
+                for (const [id, label] of _need) {
+                    if (!_isNum(id)) {
+                        showToast('⚠️ ገቢ ስላለ ' + label + ' ቁጥር ያስገቡ (ምንም ካልገባ 0 ይጻፉ)', 'error');
+                        const _el = document.getElementById(id);
+                        if (_el) { if (_el.scrollIntoView) _el.scrollIntoView({ behavior: 'smooth', block: 'center' }); _el.focus(); }
+                        return;
+                    }
+                }
             }
 
             // ✅ NEW: "የተላኩ ስራዎች ብዛት" ልክ የተመዘገቡ የስራ አይነቶች
