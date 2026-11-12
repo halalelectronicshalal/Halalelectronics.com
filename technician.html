@@ -68,23 +68,24 @@
         if ((st !== 'Pending' && st !== 'Assigned') && d.technician) txt += ' (ቴክኒሻን: ' + d.technician + ')';
         return { t: Date.now(), by: actor(), text: txt, st: st };
     }
-    function patchUpdate(proto, isBatch) {
+    // ⚠️ ታሪክ መመዝገብ ዋናውን ስራ ፈጽሞ እንዳያግድ፦ ከታሪኩ ጋር ማዘመን ከተከለከለ/ካልተሳካ ያለ ታሪክ እንደገና ይሞክራል
+    function patchUpdate(proto) {
         if (!proto || !proto.update) return;
         var orig = proto.update;
         proto.update = function () {
-            var a = Array.prototype.slice.call(arguments);
+            var a = Array.prototype.slice.call(arguments), self = this, plain = null;
             try {
-                var ref = isBatch ? a[0] : this, i = isBatch ? 1 : 0;
-                if (ref && ref.parent && ref.parent.id === 'orders' && a.length === i + 1 && a[i] && typeof a[i] === 'object' && !('history' in a[i])) {
-                    var e = mk(a[i]);
-                    if (e) a[i] = Object.assign({}, a[i], { history: FV.arrayUnion(e) });
+                if (this && this.parent && this.parent.id === 'orders' && a.length === 1 && a[0] && typeof a[0] === 'object' && !('history' in a[0])) {
+                    var e = mk(a[0]);
+                    if (e) { plain = a.slice(); a[0] = Object.assign({}, a[0], { history: FV.arrayUnion(e) }); }
                 }
-            } catch (err) {}
-            return orig.apply(this, a);
+            } catch (err) { plain = null; }
+            var p = orig.apply(this, a);
+            if (!plain) return p;
+            return p.catch(function (err) { return orig.apply(self, plain); });
         };
     }
-    patchUpdate(firebase.firestore.DocumentReference && firebase.firestore.DocumentReference.prototype, false);
-    patchUpdate(firebase.firestore.WriteBatch && firebase.firestore.WriteBatch.prototype, true);
+    patchUpdate(firebase.firestore.DocumentReference && firebase.firestore.DocumentReference.prototype);
     var CR = firebase.firestore.CollectionReference && firebase.firestore.CollectionReference.prototype;
     if (CR && CR.add) {
         var origAdd = CR.add;
@@ -1074,7 +1075,6 @@
         .completion-options .option-btn.a { border-left: 4px solid var(--success); }
         .completion-options .option-btn.b { border-left: 4px solid var(--warning); }
         .completion-options .option-btn.c { border-left: 4px solid var(--secondary); }
-        .completion-options .option-btn.d { border-left: 4px solid var(--emergency); }
         .completion-options .option-btn.e { border-left: 4px solid #8B5CF6; }
         .completion-options .option-btn.f { border-left: 4px solid #0EA5E9; }
         .completion-options .option-btn.g { border-left: 4px solid #64748B; }
@@ -2384,15 +2384,6 @@
                                 <input type="time" id="anotherDayTime" />
                             </div>
                             <button id="submitAnotherDay" class="btn btn-secondary btn-block"><i class="fas fa-calendar-plus"></i> አስገባ</button>
-                        </div>
-
-                        <!-- D: Not Today -->
-                        <div id="subNotToday" class="sub-content" style="display:none;">
-                            <div class="sub-row">
-                                <label>📝 ምክንያት *</label>
-                                <textarea id="notTodayReason" placeholder="ምክንያቱን ይግለጹ..."></textarea>
-                            </div>
-                            <button id="submitNotToday" class="btn btn-danger btn-block"><i class="fas fa-check"></i> አስገባ</button>
                         </div>
 
                         <!-- E: Other -->
@@ -9698,6 +9689,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     console.log('📋 Orders loaded for ' + technicianName + ':', myOrders.length);
                     try { if (myOrders.some(o => o.status === 'Assigned' && !isFutureAppointment(o))) techFreeLockClear(); } catch (e) {}
                     try { techApplyOpenStatusOnce(); } catch (e) { console.warn('open status failed', e); }
+                    try { techActivateDueAppointments(); } catch (e) {}
                     renderMyJobs();
                     renderAllJobs();
                     techUpdateStats();
@@ -9719,9 +9711,39 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const d = new Date();
             return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
         }
-        function isFutureAppointment(o) {
-            return !!(o && o.rescheduledFrom && o.rescheduledDate && String(o.rescheduledDate) > techLocalTodayKey());
+        // ⏰ የቀጠሮ ጊዜ (ቀን + ሰዓት) በ ms፤ ሰዓቱ ከሌለ የቀኑ መጀመሪያ (00:00)
+        function techApptMs(o) {
+            const d = /^(\d{4})-(\d{2})-(\d{2})/.exec(String((o && o.rescheduledDate) || ''));
+            if (!d) return 0;
+            const t = /^(\d{1,2}):(\d{2})/.exec(String((o && o.rescheduledTime) || ''));
+            return new Date(+d[1], +d[2] - 1, +d[3], t ? +t[1] : 0, t ? +t[2] : 0, 0, 0).getTime();
         }
+        // ቀጠሮው (ቀን እና ሰዓት) ገና አልደረሰም
+        function isFutureAppointment(o) {
+            if (!(o && o.rescheduledFrom && o.rescheduledDate)) return false;
+            const ms = techApptMs(o);
+            return ms > 0 ? ms > Date.now() : String(o.rescheduledDate) > techLocalTodayKey();
+        }
+        // 🔔 ቀጠሮው ሲደርስ ስራው በራሱ «ተመድቧል» ይሆናል፣ ሁኔታውም «✅ በስራ ላይ» ይበራል
+        let techApptActivating = false;
+        async function techActivateDueAppointments() {
+            if (techApptActivating || !technicianId || !Array.isArray(myOrders)) return;
+            const due = myOrders.filter(o => o.status === 'Pending' && o.rescheduledFrom && o.rescheduledDate && o.technician === technicianName && !o.appointmentActivatedAt && !isFutureAppointment(o));
+            if (!due.length) return;
+            techApptActivating = true;
+            try {
+                for (const o of due) {
+                    await db.collection('orders').doc(o.id).update({ status: 'Assigned', assignedAt: new Date(), assignedBy: 'appointment', appointmentActivatedAt: new Date() });
+                    o.status = 'Assigned'; o.appointmentActivatedAt = new Date();
+                }
+                try { techFreeLockClear(); } catch (e) {}
+                if (currentStatus !== 'off-duty') { currentStatus = 'working'; techApplyStatusUI('working'); saveStatus('working'); }
+                showToast('⏰ የቀጠሮ ስራ ጊዜ ደርሷል — «በስራ ላይ» ሆኗል', 'success');
+                try { renderMyJobs(); renderAllJobs(); techUpdateStats(); } catch (e) {}
+            } catch (e) { console.warn('appointment activation failed', e); }
+            finally { techApptActivating = false; }
+        }
+        setInterval(function () { try { techActivateDueAppointments(); } catch (e) {} }, 30000);
         const TECH_CLOSED_STATUSES = ['Completed', 'PriceNotAgreed', 'Rescheduled', 'NotToday', 'Other', 'PhoneNoAnswer'];
         function techOpenJobs() {
             return myOrders.filter(o => !TECH_CLOSED_STATUSES.includes(o.status) && !isFutureAppointment(o));
@@ -9883,7 +9905,6 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         'done': '✅ ሀ. ተሰራ',
                         'price-not-agreed': '💰 ለ. ዋጋ አልተስማሙም',
                         'another-day': '📅 ሐ. ለሌላ ቀን',
-                        'not-today': '📝 መ. ዛሬ አይመቻቸውም',
                         'other': '📌 ሠ. ሌላ',
                         'return-job': '↩️ ረ. ስራ መልስ',
                         'no-answer': '📵 ሰ. ስልክ አይነሳም'
@@ -9895,7 +9916,6 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         'done': 'subDone',
                         'price-not-agreed': 'subPriceNotAgreed',
                         'another-day': 'subAnotherDay',
-                        'not-today': 'subNotToday',
                         'other': 'subOther',
                         'return-job': 'subReturnJob',
                         'no-answer': 'subNoAnswer'
@@ -9916,7 +9936,6 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             updateDoneAutoIncome();
             document.getElementById('submitPriceNotAgreed').addEventListener('click', submitPriceNotAgreed);
             document.getElementById('submitAnotherDay').addEventListener('click', submitAnotherDay);
-            document.getElementById('submitNotToday').addEventListener('click', submitNotToday);
             document.getElementById('submitOther').addEventListener('click', submitOther);
             document.getElementById('submitReturnJob').addEventListener('click', submitReturnJob);
             document.getElementById('submitNoAnswer').addEventListener('click', submitNoAnswer);
@@ -10237,7 +10256,6 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 'done':             { label: 'ሀ. ተሰራ',              enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ የ{መሳሪያ} ጥገናዎ ተጠናቅቋል። ስለመረጡን እናመሰግናለን!' },
                 'price-not-agreed': { label: 'ለ. ዋጋ አልተስማሙም',     enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ስለ ጊዜዎ እናመሰግናለን። በዋጋ ባለመስማማታችን ስራው አልተሰራም። ሀሳብዎን ከቀየሩ ይደውሉልን።' },
                 'another-day':      { label: 'ሐ. ለሌላ ቀን',           enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ የ{መሳሪያ} ጥገናዎ ወደ {ቀን} ሰዓት {ሰዓት} ተቀይሯል። ቴክኒሻን {ቴክኒሻን} ይመጣል። ለጥያቄ፦ {ቢሮ}' },
-                'not-today':        { label: 'መ. ዛሬ አይመቻቸውም',     enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ዛሬ ለእርስዎ እንደማይመች ተረድተናል። ሲመችዎ ቀን ለመቀየር ይደውሉልን።' },
                 'other':            { label: 'ሠ. ሌላ',                enabled: false, text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ስለ {መሳሪያ} ጥገናዎ ቢሯችን በቅርቡ ያነጋግርዎታል።' },
                 'return-job':       { label: 'ረ. ስራ መልስ',           enabled: false, text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ስለ {መሳሪያ} ጥገናዎ ቢሯችን በቅርቡ ያነጋግርዎታል።' },
                 'no-answer':        { label: 'ስልክ አያነሳም',          enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ለጥገና ስንደውልልዎ አላገኘንዎትም። እባክዎ ሲመችዎ ይደውሉልን።' }
@@ -10389,37 +10407,11 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 📅 ${formatEthDateTime(new Date())}
                 `);
                 } catch (tgErr) { console.warn('telegram notify failed', tgErr); }
-                showToast('✅ ለሌላ ቀን ተዘጋጅቷል — ቀኑ ሲደርስ ወደ ስራዎች ይገባል፤ አሁን «ነፃ» ማለት ይችላሉ', 'success');
+                showToast('✅ ለሌላ ቀን ተዘጋጅቷል — ቀኑ እና ሰዓቱ ሲደርስ በራሱ «በስራ ላይ» ይሆናል፤ እስከዚያ «ነፃ» ማለት ይችላሉ', 'success');
                 resetCompletionForm();
                 try { renderMyJobs(); } catch (e) {}
             } catch (error) { showToast('❌ ' + error.message, 'error'); }
             finally { anotherDayBusy = false; if (btn) btn.disabled = false; }
-        }
-
-        async function submitNotToday() {
-            const reason = document.getElementById('notTodayReason').value.trim();
-            if (!reason) { showToast('እባክዎ ሁሉንም መስኮች ይሙሉ', 'error'); return; }
-            const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
-            if (!orderId) return;
-            try {
-                await db.collection('orders').doc(orderId).update({
-                    status: 'NotToday',
-                    completionOption: 'not-today',
-                    notTodayReason: reason,
-                    completedAt: new Date(),
-                    technician: technicianName
-                });
-                sendCustomerSmsFor('not-today', orderId);
-                await tgMuted(`
-                📝 *ዛሬ አይመቻቸውም!*
-                🆔 *ትዕዛዝ:* #${orderId.substring(0,8)}
-                👨‍🔧 *ቴክኒሻን:* ${technicianName}
-                📝 *ምክንያት:* ${reason}
-                📅 ${formatEthDateTime(new Date())}
-                `);
-                showToast('✅ ውጤቱ ተመዝግቧል', 'success');
-                resetCompletionForm();
-            } catch (error) { showToast('❌ ' + error.message, 'error'); }
         }
 
         async function submitOther() {
@@ -10537,7 +10529,6 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             document.querySelectorAll('.sub-content').forEach(el => el.style.display = 'none');
             document.getElementById('subQuestions').classList.remove('active');
             document.getElementById('anotherDayDate').value = new Date().toISOString().split('T')[0];
-            document.getElementById('notTodayReason').value = '';
             document.getElementById('otherReason').value = '';
             const _t = document.getElementById('anotherDayTime'); if (_t) _t.value = '';
             const _pna = document.getElementById('priceNotAgreedCalled'); if (_pna) { _pna.value = ''; updatePriceNotAgreedGate(); }
