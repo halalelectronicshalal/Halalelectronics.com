@@ -7807,18 +7807,19 @@ ${locationLine}
                             <option value="Other">ሌላ</option>
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label>መች ይመቻቻል</label>
-                        <select id="phoneOrderPreferredDay">
-                            <option value="ዛሬውኑ (በፍጥነት)">ዛሬውኑ (በፍጥነት)</option>
-                            <option value="ሰኞ">ሰኞ (Monday)</option>
-                            <option value="ማክሰኞ">ማክሰኞ (Tuesday)</option>
-                            <option value="ረቡዕ">ረቡዕ (Wednesday)</option>
-                            <option value="ሐሙስ">ሐሙስ (Thursday)</option>
-                            <option value="አርብ">አርብ (Friday)</option>
-                            <option value="ቅዳሜ">ቅዳሜ (Saturday)</option>
-                        </select>
+                </div>
+                <div class="form-group">
+                    <label>📅 መች ይመቻቻል (ቀን እና ሰዓት)</label>
+                    <div style="display:grid; grid-template-columns:1fr 1.5fr 1fr; gap:4px;">${buildEthiopianPickerHTML('phoneOrderApptEth', 'phoneOrderApptDate', getBizDateKey())}</div>
+                    <input type="date" id="phoneOrderApptDate" value="${getBizDateKey()}" style="display:none;" />
+                    <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
+                        <label style="margin:0; white-space:nowrap;">🕒 ሰዓት</label>
+                        <input type="time" id="phoneOrderApptTime" style="flex:1;" />
+                        <button type="button" class="btn btn-xs" onclick="document.getElementById('phoneOrderApptTime').value=''">አጽዳ</button>
                     </div>
+                    <label style="display:flex; gap:6px; align-items:center; margin-top:8px; font-weight:400; cursor:pointer;">
+                        <input type="checkbox" id="phoneOrderUrgent" onchange="togglePhoneOrderUrgent()" /> ⚡ ዛሬውኑ (በፍጥነት)
+                    </label>
                 </div>
                 <div class="form-group">
                     <label>ችግር / ማብራሪያ</label>
@@ -7856,13 +7857,26 @@ ${locationLine}
             if (f) f.focus();
         }
 
+        function togglePhoneOrderUrgent() {
+            const u = document.getElementById('phoneOrderUrgent');
+            const on = !!(u && u.checked);
+            document.querySelectorAll('[id^="phoneOrderApptEth_"], #phoneOrderApptTime').forEach(el => { el.disabled = on; });
+        }
+
         async function submitPhoneOrder() {
             const fullName = document.getElementById('phoneOrderName').value.trim();
             const phone = document.getElementById('phoneOrderPhone').value.trim();
             const altPhone = ((document.getElementById('phoneOrderAltPhone') || {}).value || '').trim();
             const address = document.getElementById('phoneOrderAddress').value.trim();
             const appliance = document.getElementById('phoneOrderAppliance').value;
-            const preferredDay = document.getElementById('phoneOrderPreferredDay').value;
+            const urgent = !!(document.getElementById('phoneOrderUrgent') || {}).checked;
+            const todayKey = getBizDateKey();
+            const apptKey = urgent ? todayKey : (((document.getElementById('phoneOrderApptDate') || {}).value || '').trim() || todayKey);
+            const apptTime = urgent ? '' : (((document.getElementById('phoneOrderApptTime') || {}).value || '').trim());
+            const fmtTime12 = (t) => { const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; };
+            const preferredDay = urgent
+                ? 'ዛሬውኑ (በፍጥነት)'
+                : formatEthDate(new Date(apptKey + 'T12:00:00'), true) + (apptTime ? ' ሰዓት ' + fmtTime12(apptTime) : '');
             const problem = document.getElementById('phoneOrderProblem').value.trim();
             const technician = document.getElementById('phoneOrderTechnician').value;
             const workType = (document.getElementById('phoneOrderWorkType') || {}).value || 'new';
@@ -7878,6 +7892,7 @@ ${locationLine}
             if (workType === 'correction' && !corrTech) { showToast('እርማት የሚጠየቅበትን ቴክኒሻን ይምረጡ', 'error'); document.getElementById('phoneOrderCorrTech').focus(); return; }
             if (workType === 'referral' && !referredBy) { showToast('ሪፈራሉ ከማን እንደመጣ ይጻፉ', 'error'); document.getElementById('phoneOrderReferredBy').focus(); return; }
             if (altPhone && altPhone === phone) { showToast('ተለዋጭ ስልክ ከዋናው የተለየ መሆን አለበት', 'error'); return; }
+            if (!urgent && apptKey < todayKey) { showToast('ያለፈ ቀን መምረጥ አይቻልም — ቀኑን ያስተካክሉ', 'error'); return; }
 
             try {
                 const orderData = {
@@ -7891,7 +7906,9 @@ ${locationLine}
                     correctionTechnician: corrTech,                        // 🛠️ እርማት የሚጠየቅበት ቴክኒሻን
                     correctionDate: corrDate,                              // 📅 ስራው የተሰራበት ቀን
                     referredBy: referredBy,                                // 🔗 ሪፈራሉ የመጣው ከማን
-                    preferredDay: preferredDay,
+                    preferredDay: preferredDay,                            // ለማሳያ (ቀን + ሰዓት ጽሁፍ)
+                    appointmentDate: apptKey,                              // 📅 YYYY-MM-DD (ኦፕሬተር ገጽ ጋር አንድ አይነት መስክ)
+                    appointmentTime: apptTime,                             // 🕒 HH:MM (24 ሰዓት፤ ባዶ = ሰዓት አልተመረጠም)
                     problem: problem || 'በስልክ የተደወለ ስራ',
                     status: 'Pending',
                     source: (document.getElementById('phoneOrderChannel') || {}).value || 'phone_admin', // ✅ NEW: ከድህረ ገጽ ሳይሆን አድሚን በእጅ የመዘገበው ስራ መሆኑን ለመለየት
