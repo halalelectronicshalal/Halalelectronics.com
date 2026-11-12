@@ -39,6 +39,68 @@
     </script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js">
     </script>
+<script>
+/* 📜 የስራ እንቅስቃሴ ታሪክ — በ orders ላይ የሚደረግ እያንዳንዱ ለውጥ (መፈጠር፣ መመደብ፣ መመለስ፣ ውጤት) በ order.history ውስጥ ሰዓት እና ማን እንዳደረገው ይመዘገባል። */
+(function () {
+    if (window.__heOrdHist || !window.firebase || !firebase.firestore) return;
+    window.__heOrdHist = true;
+    var FV = firebase.firestore.FieldValue;
+    var PAGE = (location.pathname.split('/').pop() || '').toLowerCase();
+    function actor() {
+        try {
+            if (PAGE.indexOf('technician') === 0) { return (typeof technicianName !== 'undefined' && technicianName) ? technicianName : 'ቴክኒሻን'; }
+            if (PAGE.indexOf('operator') === 0) { return (typeof me !== 'undefined' && me && me.name) ? me.name : 'ኦፕሬተር'; }
+            if (PAGE.indexOf('new-orders') === 0) { var s = (typeof heGetSession === 'function') ? heGetSession() : null; return (s && s.staff && s.staff.name) ? s.staff.name + ' (መዳቢ)' : 'ስራ መዳቢ'; }
+        } catch (e) {}
+        return 'አስተዳዳሪ';
+    }
+    function mk(d) {
+        var st = d.status; if (!st) return null;
+        var txt = '';
+        if (st === 'Assigned') txt = '📋 ለ ' + (d.technician || '—') + ' ተመድቧል';
+        else if (st === 'Pending') txt = d.returnReason ? ('↩️ ከ ' + (d.returnedFrom || 'ቴክኒሻን') + ' ተመለሰ — ምክንያት: ' + d.returnReason) : '⏳ ወደ ያልተመደበ ተመልሷል';
+        else if (st === 'Completed') txt = '✅ ተጠናቋል' + (d.price != null ? ' — ' + d.price + ' ብር' : '');
+        else if (st === 'PriceNotAgreed') txt = '💰 ዋጋ አልተስማሙም';
+        else if (st === 'Rescheduled') txt = '📅 ለሌላ ቀን ተላልፏል' + (d.rescheduledDate ? ' (' + d.rescheduledDate + ')' : '');
+        else if (st === 'NotToday') txt = '📝 ዛሬ አይመቻቸውም' + (d.notTodayReason ? ' — ' + d.notTodayReason : '');
+        else if (st === 'Other') txt = '📌 ሌላ ምክንያት' + (d.otherReason ? ' — ' + d.otherReason : '');
+        else txt = '🔄 ሁኔታ ወደ «' + st + '» ተቀየረ';
+        if ((st !== 'Pending' && st !== 'Assigned') && d.technician) txt += ' (ቴክኒሻን: ' + d.technician + ')';
+        return { t: Date.now(), by: actor(), text: txt, st: st };
+    }
+    function patchUpdate(proto, isBatch) {
+        if (!proto || !proto.update) return;
+        var orig = proto.update;
+        proto.update = function () {
+            var a = Array.prototype.slice.call(arguments);
+            try {
+                var ref = isBatch ? a[0] : this, i = isBatch ? 1 : 0;
+                if (ref && ref.parent && ref.parent.id === 'orders' && a.length === i + 1 && a[i] && typeof a[i] === 'object' && !('history' in a[i])) {
+                    var e = mk(a[i]);
+                    if (e) a[i] = Object.assign({}, a[i], { history: FV.arrayUnion(e) });
+                }
+            } catch (err) {}
+            return orig.apply(this, a);
+        };
+    }
+    patchUpdate(firebase.firestore.DocumentReference && firebase.firestore.DocumentReference.prototype, false);
+    patchUpdate(firebase.firestore.WriteBatch && firebase.firestore.WriteBatch.prototype, true);
+    var CR = firebase.firestore.CollectionReference && firebase.firestore.CollectionReference.prototype;
+    if (CR && CR.add) {
+        var origAdd = CR.add;
+        CR.add = function (data) {
+            try {
+                if (this.id === 'orders' && data && typeof data === 'object' && !data.history) {
+                    var who = data.createdByName || (data.source === 'web' ? 'ደንበኛ (ድህረ ገጽ)' : actor());
+                    var txt = '📦 ትዕዛዝ ተፈጠረ' + (data.rescheduledFrom ? ' (ለሌላ ቀን የተላለፈ)' : '') + (data.source ? ' — ምንጭ: ' + data.source : '');
+                    data = Object.assign({}, data, { history: [{ t: Date.now(), by: who, text: txt, st: 'created' }] });
+                }
+            } catch (err) {}
+            return origAdd.call(this, data);
+        };
+    }
+})();
+</script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js">
     </script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js">
@@ -5604,6 +5666,7 @@
 👤 *ደንበኛ:* ${order.fullName || '—'}
 📱 *ስልክ:* ${order.phone || '—'}${order.altPhone ? '\n☎️ *ተለዋጭ ስልክ:* ' + order.altPhone : ''}
 🔧 *መሳሪያ:* ${order.appliance || '—'}
+🛠️ *ችግር:* ${String(order.problem || '—').replace(/[*_`\[\]]/g, ' ')}
 📍 *አድራሻ:* ${order.address || '—'}
 ${locationLine}
 ⏰ ${formatEthDateTime(new Date())}
@@ -5620,7 +5683,7 @@ ${locationLine}
 
                 // ✅ NEW: ከቴሌግራም/ፑሽ በተጨማሪ ወይም ቴክኒሻኑ ቴሌግራም ባይገናኝም ስራው
                 // ሁልጊዜ በ SMS text ወደ ስልኩ ይድርሰው (ኢንተርኔት ባይኖረውም እንኳ ይደርሰዋል)
-                const smsMessage = `Halal Electronics: አዲስ ስራ ተመድቦልዎታል! ደንበኛ: ${order.fullName || '—'} ስልክ: ${order.phone || '—'} መሳሪያ: ${order.appliance || '—'} አድራሻ: ${order.address || '—'}`;
+                const smsMessage = `Halal Electronics: አዲስ ስራ ተመድቦልዎታል! ደንበኛ: ${order.fullName || '—'} ስልክ: ${order.phone || '—'} መሳሪያ: ${order.appliance || '—'} ችግር: ${order.problem || '—'} አድራሻ: ${order.address || '—'}`;
                 if (assignedTech && assignedTech.phone) {
                     await sendSmsNotification(smsMessage, assignedTech.phone);
                 }
@@ -5770,15 +5833,20 @@ ${locationLine}
             }
 
             // Timeline
-            let timelineHTML = `
+            let timelineHTML = '';
+            const _hist = Array.isArray(order.history) ? order.history.filter(h => h && h.text).slice().sort((a, b) => (a.t || 0) - (b.t || 0)) : [];
+            if (!_hist.some(h => h.st === 'created')) timelineHTML += `
                 <div class="timeline-item"><span>${formatEthDateTime(order.createdAt) || '—'}</span> 📦 ትዕዛዝ ተፈጠረ</div>
             `;
-            if (order.assignedAt) {
+            _hist.forEach(h => {
+                timelineHTML += `<div class="timeline-item"><span>${formatEthDateTime(new Date(h.t || 0))}${h.by ? ' — 👤 ' + admEsc(h.by) : ''}</span> ${admEsc(h.text)}</div>`;
+            });
+            if (!_hist.length && order.assignedAt) {
                 timelineHTML += `
                     <div class="timeline-item"><span>${formatEthDateTime(order.assignedAt) || '—'}</span> 📋 ለቴክኒሻን ተመድቧል</div>
                 `;
             }
-            if (order.completedAt) {
+            if (!_hist.length && order.completedAt) {
                 timelineHTML += `
                     <div class="timeline-item"><span>${formatEthDateTime(order.completedAt) || '—'}</span> ✅ ስራ ተጠናቋል</div>
                 `;
