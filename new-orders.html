@@ -57,23 +57,24 @@ html,body{overflow-x:hidden;max-width:100%}.he-wrap,.card,.modal{min-width:0;max
         if ((st !== 'Pending' && st !== 'Assigned') && d.technician) txt += ' (ቴክኒሻን: ' + d.technician + ')';
         return { t: Date.now(), by: actor(), text: txt, st: st };
     }
-    function patchUpdate(proto, isBatch) {
+    // ⚠️ ታሪክ መመዝገብ ዋናውን ስራ ፈጽሞ እንዳያግድ፦ ከታሪኩ ጋር ማዘመን ከተከለከለ/ካልተሳካ ያለ ታሪክ እንደገና ይሞክራል
+    function patchUpdate(proto) {
         if (!proto || !proto.update) return;
         var orig = proto.update;
         proto.update = function () {
-            var a = Array.prototype.slice.call(arguments);
+            var a = Array.prototype.slice.call(arguments), self = this, plain = null;
             try {
-                var ref = isBatch ? a[0] : this, i = isBatch ? 1 : 0;
-                if (ref && ref.parent && ref.parent.id === 'orders' && a.length === i + 1 && a[i] && typeof a[i] === 'object' && !('history' in a[i])) {
-                    var e = mk(a[i]);
-                    if (e) a[i] = Object.assign({}, a[i], { history: FV.arrayUnion(e) });
+                if (this && this.parent && this.parent.id === 'orders' && a.length === 1 && a[0] && typeof a[0] === 'object' && !('history' in a[0])) {
+                    var e = mk(a[0]);
+                    if (e) { plain = a.slice(); a[0] = Object.assign({}, a[0], { history: FV.arrayUnion(e) }); }
                 }
-            } catch (err) {}
-            return orig.apply(this, a);
+            } catch (err) { plain = null; }
+            var p = orig.apply(this, a);
+            if (!plain) return p;
+            return p.catch(function (err) { return orig.apply(self, plain); });
         };
     }
-    patchUpdate(firebase.firestore.DocumentReference && firebase.firestore.DocumentReference.prototype, false);
-    patchUpdate(firebase.firestore.WriteBatch && firebase.firestore.WriteBatch.prototype, true);
+    patchUpdate(firebase.firestore.DocumentReference && firebase.firestore.DocumentReference.prototype);
     var CR = firebase.firestore.CollectionReference && firebase.firestore.CollectionReference.prototype;
     if (CR && CR.add) {
         var origAdd = CR.add;
@@ -821,8 +822,15 @@ function orderRowHtml(order, techOptions) {
         </div>`;
 }
 
+// 📱 iPhone፦ ድሮፕ ዳውን (select) ክፍት ሆኖ ዝርዝሩ በራሱ እንደገና እንዳይሳል (ወደ ላይ እንዳይመለስ)
+function heSelectOpenIn(el) { var a = document.activeElement; return !!(a && a.tagName === 'SELECT' && el && el.contains(a)); }
+document.addEventListener('focusout', function (e) {
+    if (!e.target || e.target.tagName !== 'SELECT' || !window._heDashDirty) return;
+    setTimeout(function () { if (!(document.activeElement && document.activeElement.tagName === 'SELECT')) { window._heDashDirty = false; try { renderDashNewOrders(); } catch (x) {} } }, 400);
+});
 function renderDashNewOrders() {
     const list = document.getElementById('dashNewOrdersList');
+    if (heSelectOpenIn(list)) { window._heDashDirty = true; return; }
     // ⏰ ሳይመደብ ያደረ ስራ ወደ «ያደሩ ስራዎች» ካርድ ብቻ ይገባል (እዚያም መመደብ ይቻላል) — እዚህ የሚገባው ትክክለኛ ገና ያልተመደበ (ያላደረ) ስራ ብቻ ነው
     const pending = allOrders.filter(o => o.status === 'Pending' && !orderIsOvernight(o))
         .sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
@@ -870,7 +878,7 @@ function renderDashNewOrders() {
         const el = document.getElementById('ord-' + highlightOrderId);
         if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); highlightOrderId = null; }
     }
-    try { if ((statModalKind === 'scheduled' || statModalKind === 'returned' || statModalKind === 'overnight') && document.getElementById('modalOverlay').classList.contains('show')) showStatDetail(statModalKind, true); } catch (e) {}
+    try { if ((statModalKind === 'scheduled' || statModalKind === 'returned' || statModalKind === 'overnight') && document.getElementById('modalOverlay').classList.contains('show') && !heSelectOpenIn(document.getElementById('modalOverlay'))) showStatDetail(statModalKind, true); } catch (e) {}
     try { renderFreeAnnounce(); } catch (e) {} // ስራ ሲመደብ/ሲለወጥ «ነፃ ነኝ» ዝርዝር ይታደሳል
 }
 
