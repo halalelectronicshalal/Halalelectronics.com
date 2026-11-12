@@ -9087,6 +9087,21 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // ============================================================
         let freeLocationBusy = false;
         // 🔒 «ነጻ ነኝ» መቆለፊያ — ስራ ሲመደብለት ይከፈታል (ስራውን ከጨረሰ በኋላ እንደገና መላክ ይችላል)
+        // 🌙 ያደረ ሪፖርት፦ ከዛሬ (የስራ ቀን) በፊት የተጠናቀቀ/የተመዘገበ ስራ ሪፖርት ሳይደረግበት ካደረ «ነጻ ነኝ» ማለት አይቻልም
+        function techOvernightUnreportedJobs() {
+            if (!techSentReportsLoaded) return [];
+            const todayKey = getBizDateKey();
+            const reported = techReportedKeysAll();
+            return (myOrders || []).filter(o => {
+                if (!o || o.convertedInReportId) return false;
+                if (o.status === 'Pending' || o.status === 'Assigned') return false; // ገና ያልተጠናቀቀ — በሌላ ህግ ይፈተሻል
+                const c = o.completedAt && o.completedAt.toDate ? o.completedAt.toDate() : null;
+                if (!c) return false;
+                const k = getBizDateKey(c);
+                if (!k || k >= todayKey) return false;
+                return !reported.has(techJobKey(o));
+            });
+        }
         function techFreeLockKey() { return 'halal_free_sent_' + (technicianId || ''); }
         function techFreeLockGet() { try { return !!localStorage.getItem(techFreeLockKey()); } catch (e) { return false; } }
         function techFreeLockSet() { try { localStorage.setItem(techFreeLockKey(), String(Date.now())); } catch (e) {} }
@@ -9109,6 +9124,12 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         // 🔒 አንዴ «ነጻ» ብሎ ከላከ ድጋሜ መላክ አይችልም — ስራ ተመድቦ እስኪጠናቀቅ ድረስ
                         if (techFreeLockGet()) {
                             showToast('✅ «ነጻ ነኝ» ብለው ቀድሞ ልከዋል። ድጋሜ መላክ የሚችሉት ስራ ከጨረሱ በኋላ ነው', 'info');
+                            return;
+                        }
+                        try { techStartSentReports(); } catch (e) {}
+                        const _ovn = techOvernightUnreportedJobs();
+                        if (_ovn.length) {
+                            showToast('🔒 ያደረ ያልተላከ ሪፖርት አለዎት (' + _ovn.length + ' ስራ)! መጀመሪያ ሪፖርቱን ይላኩ፣ ከዚያ «ነጻ ነኝ» ማለት ይችላሉ', 'error');
                             return;
                         }
                         const hasUnfinishedJob = myOrders.some(o => o.status === 'Assigned' && !isFutureAppointment(o));
@@ -11609,6 +11630,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         //   ✅ «አልተጠናቀቀም» ተብሎ የተላከ ስራ ከቆይታ በኋላ ሲሰራ ከሪፖርቱ ውስጥ ወደ «አጠናቅ» መቀየር (ገቢ/ወጪ ማስገቢያ ይከፈታል)
         // ============================================================
         let techSentReports = [];
+        let techSentReportsLoaded = false;
         let techSentReportsUnsub = null;
         function techStartSentReports() {
             if (!technicianId) return;
@@ -11616,6 +11638,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             techSentReportsUnsub = db.collection('dailyReports').where('technicianId', '==', technicianId).onSnapshot((snap) => {
                 techSentReports = [];
                 snap.forEach(d => { const r = d.data(); r.id = d.id; techSentReports.push(r); });
+                techSentReportsLoaded = true;
                 techSentReports.sort((a, b) => {
                     const ta = a.submittedAt && a.submittedAt.toDate ? a.submittedAt.toDate().getTime() : 0;
                     const tb = b.submittedAt && b.submittedAt.toDate ? b.submittedAt.toDate().getTime() : 0;
