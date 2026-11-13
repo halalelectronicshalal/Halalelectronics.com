@@ -794,7 +794,12 @@ function orderHoldInfo(o) {
     const d = orderApptDate(o);
     return d ? { date: d, key: getDateKey(d) } : null;
 }
+function corrAdminTagHtml(o) {
+    if (!o || !o.needsAdminAssign || o.status !== 'Pending') return '';
+    return `<div style="margin-top:4px; padding:6px 8px; border-radius:6px; background:#FEF3C7; border:2px solid #F59E0B; color:#92400E; font-size:0.8rem; font-weight:700;">⚠️ 🛠️ እርማት — አድሚን ይመድብ${o.correctionTechnician ? ' · ቀድሞ የሰራው: ' + escHtml(o.correctionTechnician) : ''}${o.adminNote ? '<div style="font-weight:600; margin-top:2px;">📝 ' + escHtml(o.adminNote) + '</div>' : ''}</div>`;
+}
 function holdTagHtml(o) {
+    if (o && o.needsAdminAssign && o.status === 'Pending' && !(o.scheduledTechnician && o.scheduledReleaseDate)) return corrAdminTagHtml(o);
     if (!o || !o.scheduledTechnician || !o.scheduledReleaseDate) return '';
     return `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#EFF6FF; color:#1E40AF; font-size:0.78rem;">📌 ለ <b>${escHtml(o.scheduledTechnician)}</b> ተይዟል — ቀኑ (${escHtml(o.scheduledReleaseDate)}) ሲደርስ ለሰራተኛው በራሱ ይላካል</div>`;
 }
