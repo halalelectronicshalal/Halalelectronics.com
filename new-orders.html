@@ -147,6 +147,12 @@ html,body{overflow-x:hidden;max-width:100%}.he-wrap,.card,.modal{min-width:0;max
    STATE
    ============================================================ */
 let allOrders = [];
+
+/* 🔗 ሪፈራል ለመዳቢ አይታይም/አይመደብም — አድሚን ብቻ ይመድባል። (allOrders ሙሉ ሆኖ ይቀራል — የቴክኒሻን «በስራ ላይ» ሁኔታ ለማወቅ፤
+   ለዝርዝር/ቆጠራ የሚውለው visibleOrders() ነው) */
+function isAdminUser() { try { const s = heGetSession(); return !!(s && s.staff && s.staff.role === 'admin'); } catch (e) { return false; } }
+function hiddenFromDispatcher(o) { return !!o && o.orderType === 'referral' && !isAdminUser(); }
+function visibleOrders() { return allOrders.filter(o => !hiddenFromDispatcher(o)); }
 let allTechnicians = [];
 let allDailyReports = [];
 let ordersFirstLoadDone = false;
@@ -408,6 +414,9 @@ async function assignOrder(orderId) {
         if (wanted) {
             let f = null;
             try { const snap = await db.collection('orders').doc(orderId).get(); f = snap.exists ? snap.data() : null; } catch (e) { /* ችላ */ }
+            if (f && f.status === 'Pending' && f.scheduledTechnician && f.scheduledTechnician !== wanted) {
+                if (!confirm(`📌 ይህ ስራ አስቀድሞ ለ ${f.scheduledTechnician} ተይዟል።\n\nወደ ${wanted} ይቀየር?`)) return;
+            }
             if (f && f.status === 'Assigned' && f.technician) {
                 if (f.technician === wanted) { showToast(`ይህ ስራ አስቀድሞ ለ ${wanted} ተመድቧል`, 'error'); return; }
                 if (!confirm(`⚠️ ይህ ስራ አስቀድሞ ለ ${f.technician} ተመድቧል።\n\nለ ${wanted} ቢቀየር ሁለቱም ቴክኒሻኖች መልእክት ይደርሳቸዋል።\n\nቢሆንም ይመድቡት?`)) return;
@@ -436,6 +445,13 @@ async function _assignOrderCore(orderId) {
         return;
     }
 
+    // 🔗 ሪፈራል አድሚን ብቻ ይመድባል  |  📅 ቀጠሮ ያልደረሰ ስራ ይያዛል (ለሰራተኛው አይላክም)
+    let _ord = allOrders.find(x => x.id === orderId) || null;
+    if (!_ord) { try { const s0 = await db.collection('orders').doc(orderId).get(); if (s0.exists) { _ord = s0.data(); _ord.id = orderId; } } catch (e) { /* ችላ */ } }
+    if (_ord && hiddenFromDispatcher(_ord)) { showToast('🔗 ሪፈራልን አድሚን ብቻ ነው የሚመድበው', 'error'); return; }
+    const _hold = _ord ? orderHoldInfo(_ord) : null;
+    if (_hold) { await _holdOrderForDate(orderId, techName, _hold); return; }
+
     // ⚠️ ኦፍላይን / "ዛሬ አይመቸኝም" ያለ / ዋርኒግ ያለበት ከሆነ ከመመደብ በፊት ያስጠነቅቃል
     const _selTech = allTechnicians.find(t => t.name === techName);
     if (_selTech) {
@@ -450,12 +466,14 @@ async function _assignOrderCore(orderId) {
     }
 
     try {
-        await db.collection('orders').doc(orderId).update({
+        const _upd = {
             status: 'Assigned',
             technician: techName,  // store exact name
             assignedAt: new Date(),
             assignedBy: (heGetSession().staff.role === 'admin' ? 'admin' : 'office')
-        });
+        };
+        if (_ord && _ord.scheduledReleaseDate) { _upd.scheduledTechnician = null; _upd.scheduledTechnicianId = null; _upd.scheduledReleaseDate = null; } // ተይዞ የነበረ → አሁን ተመደበ
+        await db.collection('orders').doc(orderId).update(_upd);
         // 🟢 ለቴክኒሻኑ ስራ ተመድቧል → «ነፃ ነኝ» ዝርዝር ውስጥ አይታይም (አዲስ «ነፃ ነኝ» እስከሚልክ)
         try {
             const _at = allTechnicians.find(t => t.name === techName);
@@ -644,15 +662,15 @@ function showStatDetail(kind, refresh) {
     };
     if (kind === 'pending') {
         title = '⏳ ገና ያልተመደቡ';
-        const l = allOrders.filter(o => o.status === 'Pending' && !orderIsOvernight(o)).sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt)); // ያደሩት በ«ያደሩ ስራዎች» ካርድ ውስጥ ናቸው
+        const l = visibleOrders().filter(o => o.status === 'Pending' && !orderIsOvernight(o)).sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt)); // ያደሩት በ«ያደሩ ስራዎች» ካርድ ውስጥ ናቸው
         body = l.length ? l.map(orderItem).join('') : '<p class="text-muted text-center">ምንም የለም</p>';
     } else if (kind === 'assigned') {
         title = '📋 የተመደቡ ክፍት ስራዎች';
-        const l = allOrders.filter(o => o.status === 'Assigned').sort((a, b) => toMs(b.assignedAt || b.createdAt) - toMs(a.assignedAt || a.createdAt));
+        const l = visibleOrders().filter(o => o.status === 'Assigned').sort((a, b) => toMs(b.assignedAt || b.createdAt) - toMs(a.assignedAt || a.createdAt));
         body = l.length ? l.map(orderItem).join('') : '<p class="text-muted text-center">ምንም የለም</p>';
     } else if (kind === 'returned') {
         title = '↩️ የተመለሱ ስራዎች';
-        const l = allOrders.filter(o => o.status === 'Pending' && orderIsReturned(o))
+        const l = visibleOrders().filter(o => o.status === 'Pending' && orderIsReturned(o))
             .sort((a, b) => (toMs(b.returnedAt) || toMs(b.createdAt)) - (toMs(a.returnedAt) || toMs(a.createdAt)));
         const keepSel = {};
         document.querySelectorAll('#modalBody .dashAssignSelect').forEach(x => { if (x.value) keepSel[x.dataset.id] = x.value; });
@@ -666,7 +684,7 @@ function showStatDetail(kind, refresh) {
         }
     } else if (kind === 'overnight') {
         title = '⏰ ያደሩ ስራዎች';
-        const l = allOrders.filter(orderIsOvernight).sort((a, b) => overnightBaseMs(a) - overnightBaseMs(b)); // ከአሮጌው ይጀምራል
+        const l = visibleOrders().filter(orderIsOvernight).sort((a, b) => overnightBaseMs(a) - overnightBaseMs(b)); // ከአሮጌው ይጀምራል
         const keepSel = {};
         document.querySelectorAll('#modalBody .dashAssignSelect').forEach(x => { if (x.value) keepSel[x.dataset.id] = x.value; });
         const opts = techOptionsHtml();
@@ -679,8 +697,8 @@ function showStatDetail(kind, refresh) {
         }
     } else if (kind === 'scheduled') {
         title = '📅 እስከሚደርስ ቀጠሮ';
-        const pend = allOrders.filter(o => o.status === 'Pending' && orderIsScheduled(o));
-        const asg = allOrders.filter(o => o.status === 'Assigned' && orderHasFutureAppt(o));
+        const pend = visibleOrders().filter(o => o.status === 'Pending' && orderIsScheduled(o));
+        const asg = visibleOrders().filter(o => o.status === 'Assigned' && orderHasFutureAppt(o));
         const l = pend.concat(asg).sort((a, b) => orderApptDate(a) - orderApptDate(b) || toMs(b.createdAt) - toMs(a.createdAt));
         const keepSel = {};
         document.querySelectorAll('#modalBody .dashAssignSelect').forEach(x => { if (x.value) keepSel[x.dataset.id] = x.value; });
@@ -770,6 +788,30 @@ function orderIsScheduled(o) {
     const d = orderApptDate(o);
     return !!d && daysUntil(d) > 0;
 }
+/** 📅 ቀጠሮው ያልደረሰ ስራ ሲመደብ → ለሰራተኛው አይላክም፤ Pending ሆኖ ለዚያ ሰራተኛ «ተይዞ» ቀኑ ሲደርስ Worker በራሱ ይልካል */
+function orderHoldInfo(o) {
+    if (!o || !orderIsScheduled(o)) return null;
+    const d = orderApptDate(o);
+    return d ? { date: d, key: getDateKey(d) } : null;
+}
+function holdTagHtml(o) {
+    if (!o || !o.scheduledTechnician || !o.scheduledReleaseDate) return '';
+    return `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#EFF6FF; color:#1E40AF; font-size:0.78rem;">📌 ለ <b>${escHtml(o.scheduledTechnician)}</b> ተይዟል — ቀኑ (${escHtml(o.scheduledReleaseDate)}) ሲደርስ ለሰራተኛው በራሱ ይላካል</div>`;
+}
+async function _holdOrderForDate(orderId, techName, hold) {
+    const t = allTechnicians.find(x => x.name === techName);
+    try {
+        await db.collection('orders').doc(orderId).update({
+            scheduledTechnician: techName,
+            scheduledTechnicianId: (t && t.id) || null,
+            scheduledReleaseDate: hold.key,
+            scheduledBy: (heGetSession().staff.role === 'admin' ? 'admin' : 'office'),
+            scheduledAt: new Date()
+        });
+        try { await db.collection('activity').add({ user: heUserName(), action: 'hold_order', details: `ትዕዛዝ #${orderId.substring(0,8)} ለ ${techName} ተይዟል (ቀጠሮ ${hold.key})`, timestamp: new Date() }); } catch (e) {}
+        showToast(`📅 ቀጠሮ ስለሆነ ለ ${techName} ተይዟል — ${hold.key} ሲደርስ ለሰራተኛው በራሱ ይላካል`, 'success');
+    } catch (error) { showToast('❌ ' + error.message, 'error'); console.error('Hold error:', error); }
+}
 function apptTagHtml(o) {
     const d = orderApptDate(o);
     if (!d) return o.preferredDay ? `<span class="tag" style="color:var(--primary);">📅 ${escHtml(o.preferredDay)}</span>` : '';
@@ -810,6 +852,7 @@ function orderRowHtml(order, techOptions) {
                 ${orderIsOvernight(order) ? `<div style="margin-top:3px; font-size:0.78rem;"><strong style="color:#DC2626;">⏰ ${overnightDays(order)} ቀን አድሯል</strong>${order.status === 'Assigned' && order.technician ? ` &nbsp; 👨‍🔧 አሁን ለ <b>${escHtml(order.technician)}</b> ተመድቧል` : ' &nbsp; (ገና ያልተመደበ)'}</div>` : ''}
                 ${order.returnReason ? `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#FEF3C7; color:#92400E; font-size:0.78rem;">↩️ <strong>ተመለሰ${order.returnedFrom ? ' ከ ' + escHtml(order.returnedFrom) : ''}</strong> — ምክንያት: ${escHtml(order.returnReason)}</div>` : ''}
                 ${(order.orderType === 'correction' || order.orderType === 'referral') ? `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#ECFDF5; color:#065F46; font-size:0.78rem;">${order.orderType === 'correction' ? '🛠️ <strong>እርማት</strong>' + (order.correctionTechnician ? ' — ቴክኒሻን: ' + escHtml(order.correctionTechnician) : '') : '🔗 <strong>ሪፈራል</strong>' + (order.referredBy ? ' — ከ: ' + escHtml(order.referredBy) : '')}</div>` : ''}
+                ${holdTagHtml(order)}
                 ${operatorNotesHtml(order)}
             </div>
             <div class="order-actions">
@@ -832,7 +875,7 @@ function renderDashNewOrders() {
     const list = document.getElementById('dashNewOrdersList');
     if (heSelectOpenIn(list)) { window._heDashDirty = true; return; }
     // ⏰ ሳይመደብ ያደረ ስራ ወደ «ያደሩ ስራዎች» ካርድ ብቻ ይገባል (እዚያም መመደብ ይቻላል) — እዚህ የሚገባው ትክክለኛ ገና ያልተመደበ (ያላደረ) ስራ ብቻ ነው
-    const pending = allOrders.filter(o => o.status === 'Pending' && !orderIsOvernight(o))
+    const pending = visibleOrders().filter(o => o.status === 'Pending' && !orderIsOvernight(o))
         .sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
 
     // ማጣሪያ
@@ -843,7 +886,7 @@ function renderDashNewOrders() {
 
     // 📅 ቀጠሯቸው የደረሰ (ዛሬ/ያለፈ/ቀጠሮ የሌለው) ከፊት፤ ቀጠሯቸው ያልደረሰ ወደ «እስከሚደርስ ቀጠሮ»
     // ↩️ የተመለሱ ስራዎች ወደ «የተመለሱ ስራዎች» ካርድ ይገባሉ (ከአዲስ ትዕዛዞች ዝርዝር ይወጣሉ)
-    const returned = allOrders.filter(o => o.status === 'Pending' && orderIsReturned(o))
+    const returned = visibleOrders().filter(o => o.status === 'Pending' && orderIsReturned(o))
         .sort((a, b) => (toMs(b.returnedAt) || toMs(b.createdAt)) - (toMs(a.returnedAt) || toMs(a.createdAt)));
     const fresh = pending.filter(o => !orderIsReturned(o));
     const due = fresh.filter(o => !orderIsScheduled(o));
@@ -853,11 +896,11 @@ function renderDashNewOrders() {
     // ስታቲስቲክስ
     ['dashNewOrdersBadge', 'topBadge'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = due.length; });
     const sp = document.getElementById('statPending'); if (sp) sp.textContent = pending.length; // ጠቅላላ ያልተመደቡ (ቀጠሮ ያላቸውንም ጨምሮ)
-    const apptAssigned = allOrders.filter(o => o.status === 'Assigned' && orderHasFutureAppt(o));
-    document.getElementById('statAssigned').textContent = allOrders.filter(o => o.status === 'Assigned' && !orderHasFutureAppt(o)).length;
+    const apptAssigned = visibleOrders().filter(o => o.status === 'Assigned' && orderHasFutureAppt(o));
+    document.getElementById('statAssigned').textContent = visibleOrders().filter(o => o.status === 'Assigned' && !orderHasFutureAppt(o)).length;
     document.getElementById('statScheduled').textContent = scheduled.length + apptAssigned.length;
     document.getElementById('statReturned').textContent = returned.length;
-    const so = document.getElementById('statOvernight'); if (so) so.textContent = allOrders.filter(orderIsOvernight).length;
+    const so = document.getElementById('statOvernight'); if (so) so.textContent = visibleOrders().filter(orderIsOvernight).length;
     document.getElementById('statFree').textContent = fieldTechs().filter(t => techWorkState(t) === 'free').length;
 
     // በግማሽ የተመረጠ ቴክኒሻን እንዳይጠፋ ማስቀመጥ
@@ -893,7 +936,7 @@ function loadOrders() {
         snapshot.forEach(doc => { const d = doc.data(); d.id = doc.id; allOrders.push(d); });
         if (ordersFirstLoadDone) {
             snapshot.docChanges().forEach(change => {
-                if (change.type === 'added' && change.doc.data().status === 'Pending') notifyNewOrder(change.doc.data());
+                if (change.type === 'added' && change.doc.data().status === 'Pending' && !hiddenFromDispatcher(change.doc.data())) notifyNewOrder(change.doc.data());
             });
         } else { ordersFirstLoadDone = true; }
         renderDashNewOrders();
