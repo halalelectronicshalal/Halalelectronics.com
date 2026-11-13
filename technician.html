@@ -4408,7 +4408,10 @@
                 customersFromDB = {};
                 snapshot.forEach(doc => {
                     const data = doc.data();
-                    if (data.phone) customersFromDB[data.phone] = data;
+                    if (data.phone) {
+                        const _k = custKey(data.phone), _p = customersFromDB[_k];
+                        customersFromDB[_k] = _p ? Object.assign({}, _p, data, { phone: _k, history: (_p.history || []).concat(data.history || []) }) : Object.assign({}, data, { phone: _k });
+                    }
                 });
                 mergeAndRenderCustomers();
             });
@@ -4418,12 +4421,12 @@
                 snapshot.forEach(doc => {
                     const data = doc.data();
                     if (data.fullName && data.phone) {
-                        const key = data.phone;
+                        const key = custKey(data.phone);
                         if (!customersMap[key]) {
                             customersMap[key] = {
                                 id: key,
                                 name: data.fullName,
-                                phone: data.phone,
+                                phone: key,
                                 address: data.address || '—',
                                 orders: 0,
                                 lastOrder: data.createdAt || null
@@ -6258,12 +6261,19 @@ ${locationLine}
                     textOk = await techSendTelegramNotification(text);
                     if (!textOk) { await new Promise(x => setTimeout(x, 1500)); textOk = await techSendTelegramNotification(text); }
                 }
-                let photosOk = true;
+                // 📸 አዲስ ሪፖርት (tgPhotosEarly) → የባንክ ደረሰኝ + ዋራንቲ ፎቶ ቴክኒሻኑ ሪፖርት ሲያደርግ ወዲያውኑ ወደ ቴሌግራም ተልኳል፤
+                //    አሁን (ሲጸድቅ) የሚላከው ጽሁፉ ብቻ ነው። ፎቶ እንደገና የሚላከው ቀድሞ ሳይደርስ ከቀረ (tgPhotosOk === false) እና አድሚን «ላክ» ሲጫን ብቻ።
+                //    የቀድሞ (tgPhotosEarly የሌለው) ሪፖርት → እንደ ድሮው ፎቶ ከጽሁፉ ጋር ሲጸድቅ ይላካል።
+                const early = !!r.tgPhotosEarly;
+                let photosOk = early ? (r.tgPhotosOk !== false) : true;
                 if (textOk) {
                     const cap = `${r.technicianName || r.technician || ''} — ${r.date || r.dateKey || ''}`;
                     const w = r.warrantyPhotoURLs || [], rc = r.receiptURLs || [];
-                    if (w.length) photosOk = (await reportSendPhotoUrls(w, `📸 ዋራንቲ ካርድ — ${cap}`)) && photosOk;
-                    if (rc.length) photosOk = (await reportSendPhotoUrls(rc, `🏦 የባንክ ደረሰኝ — ${cap}`)) && photosOk;
+                    if (!early || (force && r.tgPhotosOk === false)) {
+                        photosOk = true;
+                        if (w.length) photosOk = (await reportSendPhotoUrls(w, `📸 ዋራንቲ ካርድ — ${cap}`)) && photosOk;
+                        if (rc.length) photosOk = (await reportSendPhotoUrls(rc, `🏦 የባንክ ደረሰኝ — ${cap}`)) && photosOk;
+                    }
                     await db.collection('dailyReports').doc(reportId).update({ tgSentAt: textDone ? r.tgSentAt : new Date(), tgPhotosOk: photosOk });
                 }
                 return { textOk, photosOk };
@@ -6289,7 +6299,7 @@ ${locationLine}
                 const report = allDailyReports.find(r => r.id === reportId);
                 if (!techId && report) techId = report.technicianId;
                 // 📸 ፎቶዎች ገና እየተጫኑ ከሆነ (ቴክኒሻኑ ገጹን ገና ካልጨረሰ) ያስጠነቅቃል — ከጸደቀ በኋላ ፎቶ ወደ ቴሌግራም አይደርስም
-                if (report && report.tgDeferred && !report.tgSentAt && report.photosPending && !confirm('📸 የቴክኒሻኑ ፎቶዎች ገና እየተጫኑ ነው።\n\nጥቂት ቆይተው ቢያጸድቁ ፎቶዎቹ ከሪፖርቱ ጋር ወደ ቴሌግራም ይላካሉ።\n\nቢሆንም አሁን ይጽደቅ?')) return;
+                if (report && report.tgDeferred && !report.tgPhotosEarly && !report.tgSentAt && report.photosPending && !confirm('📸 የቴክኒሻኑ ፎቶዎች ገና እየተጫኑ ነው።\n\nጥቂት ቆይተው ቢያጸድቁ ፎቶዎቹ ከሪፖርቱ ጋር ወደ ቴሌግራም ይላካሉ።\n\nቢሆንም አሁን ይጽደቅ?')) return;
                 await db.collection('dailyReports').doc(reportId).update({
                     approved: true,
                     approvedAt: new Date()
@@ -6894,24 +6904,10 @@ ${locationLine}
         }
 
         function viewCustomer(phone) {
-            const customer = allCustomers.find(c => c.id === phone);
+            phone = custKey(phone);
+            const customer = allCustomers.find(c => c.id === phone || custKey(c.phone) === phone);
             if (!customer) return;
-            const orders = allOrders.filter(o => o.phone === phone);
-
-            let ordersHTML = '';
-            if (orders.length === 0) {
-                ordersHTML = '<p class="text-muted">ምንም ትዕዛዝ የለም</p>';
-            } else {
-                ordersHTML = '<ul style="list-style:none;">';
-                orders.forEach(o => {
-                    const date = o.createdAt?.toDate?.() || new Date();
-                    ordersHTML += `<li style="padding:4px 0; border-bottom:1px solid var(--border-light);">
-                        ${formatEthDate(date)} - ${o.appliance} - <span class="status-badge ${getStatusClass(o.status)}">${o.status}</span>
-                        ${o.price ? `- ${o.price} ብር` : ''}
-                    </li>`;
-                });
-                ordersHTML += '</ul>';
-            }
+            const ordersHTML = custHistoryHtml(phone);
 
             const bodyHTML = `
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
@@ -6922,7 +6918,7 @@ ${locationLine}
                     <div><strong>📅 የመጨረሻ:</strong> ${formatEthDate(customer.lastOrder) || '—'}</div>
                 </div>
                 <hr style="border:none; border-top:2px solid var(--border); margin:12px 0;" />
-                <h4>📋 የትዕዛዝ ታሪክ</h4>
+                <h4>📋 የደንበኛ ታሪክ (ስራ በጠየቀበት ቀን በዝርዝር)</h4>
                 ${ordersHTML}
             `;
             openModal(`👤 ${customer.name}`, bodyHTML);
@@ -6951,6 +6947,79 @@ ${locationLine}
 
         // ✅ FIX: ስልክ ቁጥሮች በተለያየ ፎርማት (+251..., 251..., 0...) ስለሚገቡ፣
         // ደንበኛ ሲመዘገብ ደንበኛው በ "ትዕዛዝ ይከታተሉ" ሲፈልግ እንዲገኝ ወደ አንድ ወጥ ፎርማት (0XXXXXXXXX) እንቀይራለን።
+        // ============================================================
+        // 📁 ደንበኛ ፋይል + ታሪክ — ደንበኛው ቀድሞ ከተመዘገበ እንደ አዲስ አይመዘገብም፤ በስልኩ (ፋይሉ) ላይ ታሪክ ይጨመራል
+        //   • ስልክ በተለያየ ፎርማት (09.., +2519.., 2519..) ቢገባ አንድ ደንበኛ ነው (ቁልፍ = 0 + የመጨረሻ 9  አሃዞች)
+        //   • ደንበኛው አዲስ ስራ ሲጠይቅ ስራው በጠየቀበት ቀን ይመዘገባል፤ ዝርዝሩ (መሳሪያ፣ ችግር፣ ቀጠሮ፣ የስራ አይነት...) በታሪክ ውስጥ ይቀመጣል
+        // ============================================================
+        function custKey(raw) {
+            const d = String(raw == null ? '' : raw).replace(/\D/g, '');
+            return d.length >= 9 ? '0' + d.slice(-9) : String(raw || '').trim();
+        }
+        async function custUpsertWithHistory(o) {
+            const key = custKey(o.phone);
+            if (!key) return { existing: false };
+            const ref = db.collection('customers').doc(key);
+            let snap = null;
+            try { snap = await ref.get(); } catch (e) { console.warn('customer read failed', e); }
+            const existing = !!(snap && snap.exists);
+            const now = new Date();
+            const entry = {
+                orderId: o.orderId || '',
+                requestedAt: now,
+                requestedDate: now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0'),
+                appointmentDate: o.appointmentDate || '',
+                appliance: o.appliance || '',
+                problem: o.problem || '',
+                workType: o.workType || 'new',
+                source: o.source || '',
+                address: o.address || '',
+                technician: o.technician || ''
+            };
+            const upd = {
+                phone: key,
+                lastOrderId: o.orderId || '',
+                lastOrderAt: now,
+                updatedAt: now,
+                totalOrders: firebase.firestore.FieldValue.increment(1),
+                history: firebase.firestore.FieldValue.arrayUnion(entry)
+            };
+            const cur = existing ? (snap.data() || {}) : null;
+            if (!existing && snap) { upd.name = o.name || ''; upd.address = o.address || '—'; upd.createdAt = now; }   // አዲስ ደንበኛ ብቻ ይመዘገባል
+            else if (existing && (!cur.address || cur.address === '—') && o.address) upd.address = o.address;          // ነባሩን ስም/አድራሻ አይተካም
+            await ref.set(upd, { merge: true });
+            return { existing, name: cur ? cur.name : '' };
+        }
+        function custHistoryHtml(phoneKey) {
+            const typeLbl = { new: '🆕 አዲስ', correction: '🛠️ እርማት', referral: '🔗 ሪፈራል' };
+            const ms = (v) => { const d = v && v.toDate ? v.toDate() : (v ? new Date(v) : null); return d && !isNaN(d) ? d.getTime() : 0; };
+            const rows = [];
+            const seen = new Set();
+            (allOrders || []).filter(o => custKey(o.phone) === phoneKey || custKey(o.altPhone) === phoneKey).forEach(o => {
+                seen.add(o.id);
+                rows.push({ t: ms(o.createdAt), id: o.id, appliance: o.appliance, problem: o.problem, type: o.orderType || 'new', appt: o.appointmentDate || o.rescheduledDate || '', tech: o.technician || o.scheduledTechnician || '', status: o.status, price: o.price, address: o.address });
+            });
+            const c = (typeof customersFromDB !== 'undefined' && customersFromDB[phoneKey]) || null;
+            ((c && c.history) || []).forEach(h => {
+                if (h.orderId && seen.has(h.orderId)) return;
+                rows.push({ t: ms(h.requestedAt), id: h.orderId, appliance: h.appliance, problem: h.problem, type: h.workType || 'new', appt: h.appointmentDate || '', tech: h.technician || '', status: '', price: null, address: h.address, fromHistory: true });
+            });
+            rows.sort((a, b) => b.t - a.t);
+            if (!rows.length) return '<p class="text-muted">ምንም ትዕዛዝ የለም</p>';
+            return rows.map(r => {
+                const d = r.t ? new Date(r.t) : null;
+                const when = d ? `${formatEthDate(d)} · ${d.toLocaleTimeString('am-ET', { hour: '2-digit', minute: '2-digit' })}` : '—';
+                return `<div style="padding:8px 0; border-bottom:1px solid var(--border-light); font-size:0.88rem; line-height:1.55;">
+                    <div><strong>📅 ጥያቄ የቀረበበት ቀን: ${escHtml(when)}</strong> ${r.status ? `<span class="status-badge ${getStatusClass(r.status)}">${escHtml(r.status)}</span>` : ''} <span style="font-size:0.75rem;">${escHtml(typeLbl[r.type] || '')}</span></div>
+                    <div>🔌 ${escHtml(r.appliance || '—')}${r.problem ? ' — 🛠️ ' + escHtml(r.problem) : ''}</div>
+                    ${r.appt && r.appt !== (d ? (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')) : '') ? `<div>🗓️ ቀጠሮ: ${escHtml(r.appt)}</div>` : ''}
+                    ${r.tech ? `<div>👨‍🔧 ቴክኒሻን: ${escHtml(r.tech)}</div>` : ''}
+                    ${r.address ? `<div>📍 ${escHtml(r.address)}</div>` : ''}
+                    ${r.price ? `<div>💰 ${escHtml(r.price)} ብር</div>` : ''}
+                </div>`;
+            }).join('');
+        }
+
         function normalizePhone(raw) {
             if (!raw) return '';
             let p = raw.toString().trim().replace(/[\s\-()]/g, '');
@@ -6973,8 +7042,14 @@ ${locationLine}
                 return;
             }
 
+            // 📁 ቀድሞ የተመዘገበ ደንበኛ እንደ አዲስ አይመዘገብም — ፋይሉ (ታሪኩ) ይከፈታል
+            if (customersFromDB[custKey(phone)] || customersFromOrders[custKey(phone)]) {
+                showToast('📁 ይህ ደንበኛ ቀድሞ ተመዝግቧል — እንደ አዲስ አይመዘገብም፣ ታሪኩ ይታያል', 'error');
+                viewCustomer(custKey(phone));
+                return;
+            }
             try {
-                await db.collection('customers').doc(phone).set({
+                await db.collection('customers').doc(custKey(phone)).set({
                     name: name,
                     phone: phone,
                     address: address || '—',
@@ -7106,6 +7181,10 @@ ${locationLine}
                 };
 
                 const docRef = await db.collection('orders').add(orderData);
+
+                // 📁 ደንበኛው ቀድሞ ከተመዘገበ ስልኩ ላይ ታሪክ ይጨመራል (እንደ አዲስ አይመዘገብም)
+                try { await custUpsertWithHistory({ phone, name: fullName, address, orderId: docRef.id, appliance, problem: orderData.problem, workType, source: orderData.source, appointmentDate: apptKey, technician }); }
+                catch (custErr) { console.warn('customer history failed (non-fatal)', custErr); }
 
                 await db.collection('activity').add({
                     user: 'አስተዳዳሪ',
@@ -11831,7 +11910,9 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 receiptURLs: receiptURLs,
                 photoCount: warrantyCompressed.length + receiptCompressed.length,
                 photosPending: (warrantyCompressed.length + receiptCompressed.length) > 0,
-                tgDeferred: true,   // 📌 ወደ ቴሌግራም የሚላከው አድሚን ሲያጸድቅ ብቻ ነው
+                tgDeferred: true,   // 📌 የሪፖርቱ ጽሁፍ ወደ ቴሌግራም የሚላከው አድሚን ሲያጸድቅ ብቻ ነው
+                tgPhotosEarly: true, // 📸 የባንክ ደረሰኝ + ዋራንቲ ፎቶ ግን ሪፖርት እንደተደረገ ወዲያውኑ ወደ ቴሌግራም ይላካል
+                tgPhotosOk: null,
                 tgSentAt: null,
                 submittedAt: new Date()
             };
@@ -11843,14 +11924,21 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
                 const repRef = await db.collection('dailyReports').add(reportData);
 
-                // 📌 ሪፖርቱ ወደ ቴሌግራም የሚላከው አድሚን ሲያጸድቀው ብቻ ነው (ጽሁፍ + ፎቶዎች አብረው)።
-                // ፎቶዎች አሁን ወደ Firebase Storage ይጫናሉ፤ አድሚን ሲያጸድቅ Worker ከዚያ ወስዶ ወደ ቴሌግራም ይልካል።
+                // 📌 የባንክ ደረሰኝ + የዋራንቲ ፎቶ፦ ሪፖርት እንደተደረገ ወዲያውኑ ወደ ቴሌግራም ይላካሉ (ከ Firebase Storage መጫን ጋር በአንድ ጊዜ)።
+                //    የሪፖርቱ ጽሁፍ ግን ወደ ቴሌግራም የሚላከው አድሚን ሲያጸድቀው ብቻ ነው።
                 const repCap = `${technicianName} — ${reportData.date}`;
                 let storageJob = Promise.resolve({ failed: 0, total: 0, failedFiles: { warranty: [], receipt: [] } });
+                let tgPhotoJob = Promise.resolve(true);
                 if (warrantyCompressed.length || receiptCompressed.length) {
-                    showToast('✅ ሪፖርት ተመዝግቧል! ፎቶዎች በመጫን ላይ ናቸው - ገጹን አይዝጉ', 'success');
-                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ፎቶ በመጫን ላይ... (ገጹን አይዝጉ)';
+                    showToast('✅ ሪፖርት ተመዝግቧል! ፎቶዎች በመላክ ላይ ናቸው - ገጹን አይዝጉ', 'success');
+                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ፎቶ በመላክ ላይ... (ገጹን አይዝጉ)';
                     storageJob = uploadReportPhotosToStorage(repRef, warrantyCompressed, receiptCompressed, technicianName);
+                    tgPhotoJob = (async () => {
+                        let ok = true;
+                        if (receiptCompressed.length) ok = (await techSendPhotosToTelegram(receiptCompressed, `🏦 የባንክ ደረሰኝ (ሪፖርት ተደርጓል — ገና አልጸደቀም) — ${repCap}`)) && ok;
+                        if (warrantyCompressed.length) ok = (await techSendPhotosToTelegram(warrantyCompressed, `📸 ዋራንቲ ካርድ (ሪፖርት ተደርጓል — ገና አልጸደቀም) — ${repCap}`)) && ok;
+                        return ok;
+                    })();
                 }
 
                 // ✅ ወደ አድሚኖች ስልክ ፑሽ ማሳወቂያም (ቴሌግራም ቢዘገይ/ባይደርስ እንኳ)
@@ -11869,16 +11957,14 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 try { callWorker('notifyDispatchers', { audience: 'finance', text: '📋 አዲስ ሪፖርት ማጽደቅ ይጠይቃል', smsText: 'አዲስ ሪፖርት ማጽደቅ ይጠይቃል' }).catch(() => {}); } catch (e) {}
 
                 const storageRes = await storageJob;
+                const tgPhotosOk = await tgPhotoJob;
                 if (storageRes.failed > 0) {
-                    // አንዳንድ ፎቶ Firebase ላይ ባይጫን እንኳ እንዳይጠፋ በቀጥታ ወደ ቴሌግራም ይላካል (ሪፖርቱ ገና ያልጸደቀ መሆኑ ይጻፋል)
-                    const ff = storageRes.failedFiles || { warranty: [], receipt: [] };
-                    let rescued = true;
-                    if (ff.warranty.length) rescued = (await techSendPhotosToTelegram(ff.warranty, `📸 ዋራንቲ ካርድ (ሪፖርቱ ገና ያልጸደቀ) — ${repCap}`)) && rescued;
-                    if (ff.receipt.length) rescued = (await techSendPhotosToTelegram(ff.receipt, `🏦 የባንክ ደረሰኝ (ሪፖርቱ ገና ያልጸደቀ) — ${repCap}`)) && rescued;
-                    showToast(`⚠️ ${storageRes.failed} ፎቶ በአፑ ውስጥ (Firebase) አልተቀመጠም${rescued ? '፣ በቀጥታ ወደ ቴሌግራም ተልኳል' : '፣ ወደ ቴሌግራምም አልደረሰም — እባክዎ ፎቶውን ለአድሚን በቴሌግራም ይላኩ'}።`, 'error');
+                    showToast(`⚠️ ${storageRes.failed} ፎቶ በአፑ ውስጥ (Firebase) አልተቀመጠም${tgPhotosOk ? ' — ወደ ቴሌግራም ግን ተልኳል' : ''}።`, 'error');
                 }
+                try { await repRef.update({ tgPhotosOk: tgPhotosOk, tgPhotosSentAt: new Date() }); } catch (e) { console.warn('tgPhotosOk update failed', e); }
+                if (!tgPhotosOk) showToast('⚠️ አንዳንድ ፎቶዎች ወደ ቴሌግራም አልደረሱም — እባክዎ ለአድሚን በቴሌግራም ይላኩ', 'error');
 
-                showToast('✅ ሪፖርት ተልኳል! አድሚን ሲያጸድቀው ወደ ቴሌግራም ይላካል። አመሰግናለሁ!', 'success');
+                showToast('✅ ሪፖርት ተልኳል! ፎቶዎች ወደ ቴሌግራም ተልከዋል፤ የሪፖርቱ ጽሁፍ አድሚን ሲያጸድቀው ይላካል። አመሰግናለሁ!', 'success');
 
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-paper-plane"></i> ሪፖርት አስገባ';
