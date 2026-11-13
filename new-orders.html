@@ -151,7 +151,7 @@ let allOrders = [];
 /* 🔗 ሪፈራል ለመዳቢ አይታይም/አይመደብም — አድሚን ብቻ ይመድባል። (allOrders ሙሉ ሆኖ ይቀራል — የቴክኒሻን «በስራ ላይ» ሁኔታ ለማወቅ፤
    ለዝርዝር/ቆጠራ የሚውለው visibleOrders() ነው) */
 function isAdminUser() { try { const s = heGetSession(); return !!(s && s.staff && s.staff.role === 'admin'); } catch (e) { return false; } }
-function hiddenFromDispatcher(o) { return !!o && o.orderType === 'referral' && !isAdminUser(); }
+function hiddenFromDispatcher(o) { return !!o && !isAdminUser() && (o.orderType === 'referral' || (o.orderType === 'correction' && o.needsAdminAssign === true && (o.status || 'Pending') === 'Pending')); } // 🔗 ሪፈራል እና ከኦፕሬተር የመጣ ያልተመደበ 🛠️ እርማት → አድሚን ብቻ
 function visibleOrders() { return allOrders.filter(o => !hiddenFromDispatcher(o)); }
 let allTechnicians = [];
 let allDailyReports = [];
@@ -490,6 +490,7 @@ async function _assignOrderCore(orderId) {
 
         const orderSnap = await db.collection('orders').doc(orderId).get();
         const order = orderSnap.data();
+        try { const _lk = (() => { const d = String(order.phone || '').replace(/\D/g, ''); return d.length >= 9 ? '0' + d.slice(-9) : ''; })(); if (_lk) await db.collection('customers').doc(_lk).update({ lastTechnician: techName, lastTechnicianAt: new Date() }); } catch (e) { /* ደንበኛ ፋይል ከሌለ ችላ */ } // 📁 ለእርማት ጥቆማ — ደንበኛው የመጨረሻ የተመደበለትን ቴክኒሻን ያስታውሳል
 
         // ✅ FIX: ማሳወቂያው ወደ አድሚን group ሳይሆን ቀጥታ ለ ተመደበው ቴክኒሻን ራሱ ይላካል
         const assignedTech = allTechnicians.find(t => t.name === techName);
