@@ -5788,6 +5788,7 @@ document.addEventListener('focusout', function (e) {
 
                 const orderSnap = await db.collection('orders').doc(orderId).get();
                 const order = orderSnap.data();
+                try { const _lk = custKey(order.phone); if (_lk) await db.collection('customers').doc(_lk).update({ lastTechnician: techName, lastTechnicianAt: new Date() }); } catch (e) { /* ደንበኛ ፋይል ከሌለ ችላ */ } // 📁 ለእርማት ጥቆማ — ደንበኛው የመጨረሻ የተመደበለትን ቴክኒሻን ያስታውሳል
 
                 // ✅ FIX: ማሳወቂያው ወደ አድሚን group ሳይሆን ቀጥታ ለ ተመደበው ቴክኒሻን ራሱ ይላካል
                 const assignedTech = allTechnicians.find(t => t.name === techName);
@@ -8047,12 +8048,12 @@ ${locationLine}
                     </div>
                     <div class="form-group">
                         <label>ስልክ ቁጥር *</label>
-                        <input type="tel" id="phoneOrderPhone" placeholder="ስልክ ቁጥር" />
+                        <input type="tel" id="phoneOrderPhone" placeholder="ስልክ ቁጥር" onchange="phoneOrderCorrSuggest()" />
                     </div>
                 </div>
                 <div class="form-group">
                     <label>☎️ ተለዋጭ ስልክ <span style="font-weight:400; color:var(--text-muted,#64748B);">(አማራጭ)</span></label>
-                    <input type="tel" id="phoneOrderAltPhone" placeholder="ተለዋጭ ስልክ ቁጥር" />
+                    <input type="tel" id="phoneOrderAltPhone" placeholder="ተለዋጭ ስልክ ቁጥር" onchange="phoneOrderCorrSuggest()" />
                 </div>
                 <div class="form-group">
                     <label>አድራሻ (ክፍለ ከተማ እና ሰፈር) *</label>
@@ -8072,6 +8073,7 @@ ${locationLine}
                         <option value="">— ስራውን የሰራውን ቴክኒሻን ይምረጡ —</option>
                         ${fieldTechs().map(t => `<option value="${escHtml(t.name)}">${escHtml(t.name)}</option>`).join('')}
                     </select>
+                    <div id="phoneOrderCorrHint" style="display:none; margin-top:6px; padding:6px 8px; border-radius:6px; background:#ECFDF5; border:1px solid #A7F3D0; font-size:0.82rem; line-height:1.5;"></div>
                     <label style="margin-top:8px; display:block;">📅 ስራው የተሰራበት ቀን</label>
                     <div style="display:grid; grid-template-columns:1fr 1.5fr 1fr; gap:4px;">${buildEthiopianPickerHTML('phoneOrderCorrDateEth', 'phoneOrderCorrDate', getBizDateKey())}</div>
                     <input type="date" id="phoneOrderCorrDate" value="${getBizDateKey()}" style="display:none;" />
@@ -8139,6 +8141,7 @@ ${locationLine}
             if (t !== 'correction') { const i = document.getElementById('phoneOrderCorrTech'); if (i) i.value = ''; }
             if (t !== 'correction') { const d = document.getElementById('phoneOrderCorrDate'); if (d) d.value = getBizDateKey(); }
             if (t !== 'referral') { const i = document.getElementById('phoneOrderReferredBy'); if (i) i.value = ''; }
+            if (t === 'correction') phoneOrderCorrSuggest();
             const f = document.getElementById(t === 'referral' ? 'phoneOrderReferredBy' : '');
             if (f) f.focus();
         }
@@ -8164,7 +8167,7 @@ ${locationLine}
                         const o = d.data();
                         if (o.orderType === 'referral') return;
                         if (!customer && (o.fullName || o.address)) customer = { name: o.fullName || '', address: o.address || '' };
-                        const t = (o.status === 'Completed' || o.status === 'Assigned') ? (o.technician || '') : '';
+                        const t = o.technician || o.scheduledTechnician || '';
                         if (t && (!best || rank(o) > rank(best))) best = o;
                     });
                 } catch (e) { console.warn('orders lookup', field, e); }
@@ -8174,6 +8177,52 @@ ${locationLine}
                 if (c.exists) { const x = c.data(); customer = { name: x.name || (customer && customer.name) || '', address: (x.address && x.address !== '—' ? x.address : '') || (customer && customer.address) || '' }; }
             } catch (e) { /* ችላ */ }
             return { tech: best ? best.technician : '', customer };
+        }
+
+        // 🛠️ እርማት — ከሚታወቁት ትዕዛዞች (allOrders) በማንኛውም የስልክ ፎርማት ቀድሞ የሰራውን ቴክኒሻን ያገኛል (ከሰርቨር ፍለጋ ሳይጠብቅ፣ ወዲያውኑ)
+        function findPrevTechLocal(phones) {
+            const keys = phones.map(custKey).filter(k => k && k.length >= 9);
+            if (!keys.length) return { tech: '', customer: null };
+            const ms = (v) => { const d = v && v.toDate ? v.toDate() : (v ? new Date(v) : null); return d && !isNaN(d) ? d.getTime() : 0; };
+            let best = null, customer = null;
+            (allOrders || []).forEach(o => {
+                if (o.orderType === 'referral') return;
+                if (!(keys.includes(custKey(o.phone)) || keys.includes(custKey(o.altPhone)))) return;
+                if (!customer && (o.fullName || o.address)) customer = { name: o.fullName || '', address: o.address || '' };
+                const t = o.technician || o.scheduledTechnician || '';
+                if (!t) return;
+                const rk = (o.status === 'Completed' ? 1e15 : 0) + ms(o.completedAt || o.assignedAt || o.createdAt);
+                if (!best || rk > best.rk) best = { rk, tech: t };
+            });
+            const c = keys.map(k => customersFromDB[k]).find(Boolean);
+            if (c) { customer = { name: c.name || (customer && customer.name) || '', address: (c.address && c.address !== '—' ? c.address : '') || (customer && customer.address) || '' }; }
+            let tech = best ? best.tech : '';
+            if (!tech && c && c.lastTechnician) tech = c.lastTechnician;
+            return { tech, customer };
+        }
+        async function findPrevTechAny(phones) {
+            let r = findPrevTechLocal(phones);
+            if (!r.tech) { try { const r2 = await findPreviousTechnicianByPhone(phones); if (r2.tech) r = { tech: r2.tech, customer: r2.customer || r.customer }; } catch (e) { /* ችላ */ } }
+            return r;
+        }
+        /** ስልክ ሲገባ / «እርማት» ሲመረጥ — ቀድሞ የሰራውን ቴክኒሻን ወዲያውኑ ይጠቁማል (ዝርዝሩ ውስጥ ይመርጣል) */
+        async function phoneOrderCorrSuggest() {
+            const hint = document.getElementById('phoneOrderCorrHint');
+            const sel = document.getElementById('phoneOrderCorrTech');
+            const t = (document.getElementById('phoneOrderWorkType') || {}).value;
+            if (!hint || !sel || t !== 'correction') return;
+            const phone = (document.getElementById('phoneOrderPhone') || {}).value || '';
+            const alt = (document.getElementById('phoneOrderAltPhone') || {}).value || '';
+            if (String(phone).replace(/\D/g, '').length < 9) { hint.style.display = 'none'; return; }
+            const r = await findPrevTechAny([phone, alt]);
+            hint.style.display = 'block';
+            if (!r.tech) {
+                hint.innerHTML = r.customer ? `📁 የደንበኛ ፋይል አለ: <b>${escHtml(r.customer.name)}</b> — ቀድሞ የሰራው ቴክኒሻን አልተገኘም፤ ይምረጡ` : 'ℹ️ ይህ ስልክ በፋይል ውስጥ አልተገኘም — ቴክኒሻኑን ይምረጡ';
+                return;
+            }
+            const has = Array.from(sel.options).some(o => o.value === r.tech);
+            if (has && !sel.value) sel.value = r.tech;
+            hint.innerHTML = `${r.customer ? `📁 የደንበኛ ፋይል: <b>${escHtml(r.customer.name)}</b>${r.customer.address ? ' · ' + escHtml(r.customer.address) : ''}<br>` : ''}🛠️ ቀድሞ ስራውን የሰራው: <b>${escHtml(r.tech)}</b>${has ? ' — ተመርጧል (መቀየር ከፈለጉ ሌላ ይምረጡ)' : ' — (አሁን በቴክኒሻን ዝርዝር ውስጥ የለም)'}`;
         }
 
         async function submitPhoneOrder() {
@@ -8206,7 +8255,7 @@ ${locationLine}
             // (ቀጠሮው የወደፊት ቀን ከሆነ ለቴክኒሻኑ ይያዛል፤ «እስከሚደርስ ቀጠሮ» ካርድ ውስጥ ብቻ ይገባል፣ ቀኑ ሲደርስ በራሱ ይላካል)
             if (workType === 'correction') {
                 let prev = { tech: '', customer: null };
-                try { prev = await findPreviousTechnicianByPhone([phone, altPhone]); } catch (e) { console.warn('prev tech lookup failed', e); }
+                try { prev = await findPrevTechAny([phone, altPhone]); } catch (e) { console.warn('prev tech lookup failed', e); }
                 if (prev.tech) {
                     if (!corrTech) {
                         corrTech = prev.tech;
