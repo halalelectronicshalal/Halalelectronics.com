@@ -5107,6 +5107,7 @@
 
                 const orderSnap = await db.collection('orders').doc(orderId).get();
                 const order = orderSnap.data();
+                try { const _lk = custKey(order.phone); if (_lk) await db.collection('customers').doc(_lk).update({ lastTechnician: techName, lastTechnicianAt: new Date() }); } catch (e) { /* ደንበኛ ፋይል ከሌለ ችላ */ } // 📁 ለእርማት ጥቆማ — ደንበኛው የመጨረሻ የተመደበለትን ቴክኒሻን ያስታውሳል
 
                 // ✅ FIX: ማሳወቂያው ወደ አድሚን group ሳይሆን ቀጥታ ለ ተመደበው ቴክኒሻን ራሱ ይላካል
                 const assignedTech = allTechnicians.find(t => t.name === techName);
@@ -7183,7 +7184,7 @@ ${locationLine}
                 const docRef = await db.collection('orders').add(orderData);
 
                 // 📁 ደንበኛው ቀድሞ ከተመዘገበ ስልኩ ላይ ታሪክ ይጨመራል (እንደ አዲስ አይመዘገብም)
-                try { await custUpsertWithHistory({ phone, name: fullName, address, orderId: docRef.id, appliance, problem: orderData.problem, workType, source: orderData.source, appointmentDate: apptKey, technician }); }
+                try { await custUpsertWithHistory({ phone, name: fullName, address, orderId: docRef.id, appliance, problem: orderData.problem, workType, source: orderData.source, appointmentDate: '', technician }); }
                 catch (custErr) { console.warn('customer history failed (non-fatal)', custErr); }
 
                 await db.collection('activity').add({
