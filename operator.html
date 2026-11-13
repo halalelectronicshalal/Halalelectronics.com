@@ -208,15 +208,15 @@ h3.phone{color:var(--phone)}h3.shop{color:var(--shop)}
       <h3 class="phone"><i class="fas fa-phone"></i> 📞 በስልክ</h3>
       <div class="field"><label>ስም</label><input id="phName" placeholder="ሙሉ ስም" /></div>
       <div class="field"><label>አድራሻ</label><input id="phAddress" placeholder="አድራሻ" /></div>
-      <div class="field"><label>ስልክ</label><input id="phPhone" type="tel" inputmode="tel" placeholder="09XXXXXXXX" /></div>
-      <div class="field"><label>☎️ ተለዋጭ ስልክ <span class="muted">(አማራጭ)</span></label><input id="phAltPhone" type="tel" inputmode="tel" placeholder="09XXXXXXXX" /></div>
+      <div class="field"><label>ስልክ</label><input id="phPhone" type="tel" inputmode="tel" placeholder="09XXXXXXXX" onchange="corrLookup('ph')" /></div>
+      <div class="field"><label>☎️ ተለዋጭ ስልክ <span class="muted">(አማራጭ)</span></label><input id="phAltPhone" type="tel" inputmode="tel" placeholder="09XXXXXXXX" onchange="corrLookup('ph')" /></div>
       <div class="field"><label>🗂️ የስራ አይነት</label>
         <select id="phWorkType" onchange="toggleWorkType('ph')">
           <option value="new" selected>🆕 አዲስ</option>
           <option value="correction">🛠️ እርማት</option>
           <option value="referral">🔗 ሪፈራል</option>
         </select></div>
-      <div class="field" id="phCorrBox" style="display:none;"><label>🛠️ እርማት የሚጠየቅበት ቴክኒሻን ስም</label><input id="phCorrTech" maxlength="80" placeholder="ስራውን ሰርቶ የነበረው ቴክኒሻን ስም" /></div>
+      <div class="field" id="phCorrBox" style="display:none;"><label>🛠️ እርማት የሚጠየቅበት ቴክኒሻን ስም</label><input id="phCorrTech" maxlength="80" placeholder="ስራውን ሰርቶ የነበረው ቴክኒሻን ስም" /><div id="phCorrInfo" style="display:none; margin-top:8px; padding:8px 10px; border-radius:8px; background:#ECFDF5; border:1px solid #A7F3D0; font-size:0.85rem; line-height:1.6;"></div></div>
       <div class="field" id="phRefBox" style="display:none;"><label>🔗 ሪፈራሉ ከማን መጣ?</label><input id="phReferredBy" maxlength="80" placeholder="ሪፈራል ያመጣው ሰው/ድርጅት ስም" /></div>
       <div class="field"><label>መሳሪያ</label>
         <select id="phAppliance" onchange="toggleApplianceOther('ph')">
@@ -247,15 +247,15 @@ h3.phone{color:var(--phone)}h3.shop{color:var(--shop)}
       <h3 class="shop"><i class="fas fa-store"></i> 🏪 ከሾፕ</h3>
       <div class="field"><label>ስም</label><input id="shName" placeholder="ሙሉ ስም" /></div>
       <div class="field"><label>አድራሻ</label><input id="shAddress" placeholder="አድራሻ" /></div>
-      <div class="field"><label>ስልክ</label><input id="shPhone" type="tel" inputmode="tel" placeholder="09XXXXXXXX" /></div>
-      <div class="field"><label>☎️ ተለዋጭ ስልክ <span class="muted">(አማራጭ)</span></label><input id="shAltPhone" type="tel" inputmode="tel" placeholder="09XXXXXXXX" /></div>
+      <div class="field"><label>ስልክ</label><input id="shPhone" type="tel" inputmode="tel" placeholder="09XXXXXXXX" onchange="corrLookup('sh')" /></div>
+      <div class="field"><label>☎️ ተለዋጭ ስልክ <span class="muted">(አማራጭ)</span></label><input id="shAltPhone" type="tel" inputmode="tel" placeholder="09XXXXXXXX" onchange="corrLookup('sh')" /></div>
       <div class="field"><label>🗂️ የስራ አይነት</label>
         <select id="shWorkType" onchange="toggleWorkType('sh')">
           <option value="new" selected>🆕 አዲስ</option>
           <option value="correction">🛠️ እርማት</option>
           <option value="referral">🔗 ሪፈራል</option>
         </select></div>
-      <div class="field" id="shCorrBox" style="display:none;"><label>🛠️ እርማት የሚጠየቅበት ቴክኒሻን ስም</label><input id="shCorrTech" maxlength="80" placeholder="ስራውን ሰርቶ የነበረው ቴክኒሻን ስም" /></div>
+      <div class="field" id="shCorrBox" style="display:none;"><label>🛠️ እርማት የሚጠየቅበት ቴክኒሻን ስም</label><input id="shCorrTech" maxlength="80" placeholder="ስራውን ሰርቶ የነበረው ቴክኒሻን ስም" /><div id="shCorrInfo" style="display:none; margin-top:8px; padding:8px 10px; border-radius:8px; background:#ECFDF5; border:1px solid #A7F3D0; font-size:0.85rem; line-height:1.6;"></div></div>
       <div class="field" id="shRefBox" style="display:none;"><label>🔗 ሪፈራሉ ከማን መጣ?</label><input id="shReferredBy" maxlength="80" placeholder="ሪፈራል ያመጣው ሰው/ድርጅት ስም" /></div>
       <div class="field"><label>መሳሪያ</label>
         <select id="shAppliance" onchange="toggleApplianceOther('sh')">
@@ -505,8 +505,73 @@ function toggleWorkType(pfx) {
   const t = $(pfx + 'WorkType').value;
   $(pfx + 'CorrBox').style.display = t === 'correction' ? 'block' : 'none';
   $(pfx + 'RefBox').style.display = t === 'referral' ? 'block' : 'none';
-  if (t !== 'correction') $(pfx + 'CorrTech').value = '';
+  if (t !== 'correction') { $(pfx + 'CorrTech').value = ''; $(pfx + 'CorrInfo').style.display = 'none'; delete _corrState[pfx]; }
   if (t !== 'referral') $(pfx + 'ReferredBy').value = '';
+  if (t === 'correction') corrLookup(pfx);
+}
+
+// ================= 🛠️ እርማት — የደንበኛ ፋይል + ቀድሞ የሰራው ቴክኒሻን =================
+// እርማት ሲመረጥ ስልኩ ቀድሞ በሰርቨር (orders / customers) ውስጥ ካለ፦ የደንበኛው ፋይል እና ስራውን የሰራው ቴክኒሻን ይጠቆማል።
+// ኦፕሬተር እርማትን መመደብ አይችልም → ቴክኒሻን መምረጫ ባዶ ይዘለላል፤ ትዕዛዙ በልዩ ምልክት + ማስታወሻ ለአድሚን ይደርሳል።
+const _corrState = {};      // pfx -> { key, tech, customer }
+function phoneVariants(raw) {
+  const d = String(raw || '').replace(/\D/g, '');
+  if (d.length < 9) return [];
+  const n9 = d.slice(-9);
+  return ['0' + n9, n9, '251' + n9, '+251' + n9];
+}
+async function findPreviousTechnician(phones) {
+  const vars = []; phones.forEach(p => phoneVariants(p).forEach(v => { if (!vars.includes(v)) vars.push(v); }));
+  if (!vars.length) return { tech: '', customer: null };
+  await authReady;
+  let customer = null, best = null;
+  const rank = o => { const c = toDate(o.completedAt) || toDate(o.assignedAt) || toDate(o.createdAt); return (o.status === 'Completed' ? 1e15 : 0) + (c ? c.getTime() : 0); };
+  for (const field of ['phone', 'altPhone']) {
+    try {
+      const snap = await db.collection('orders').where(field, 'in', vars).get();
+      snap.forEach(d => {
+        const o = d.data();
+        if (o.orderType === 'referral') return;
+        if (!customer && (o.fullName || o.address)) customer = { name: o.fullName || '', address: o.address || '' };
+        const t = o.status === 'Completed' || o.status === 'Assigned' ? (o.technician || '') : '';
+        if (t && (!best || rank(o) > rank(best))) best = o;
+      });
+    } catch (e) { console.warn('orders lookup', field, e); }
+  }
+  try {
+    for (const v of vars.slice(0, 1)) {
+      const c = await db.collection('customers').doc(v).get();
+      if (c.exists) { const x = c.data(); customer = { name: x.name || (customer && customer.name) || '', address: (x.address && x.address !== '—' ? x.address : '') || (customer && customer.address) || '' }; }
+    }
+  } catch (e) { /* ችላ */ }
+  return { tech: best ? best.technician : '', customer };
+}
+async function corrLookup(pfx) {
+  const box = $(pfx + 'CorrInfo');
+  if (!box) return;
+  if ($(pfx + 'WorkType').value !== 'correction') { box.style.display = 'none'; delete _corrState[pfx]; return; }
+  const phone = $(pfx + 'Phone').value.trim(), alt = ($(pfx + 'AltPhone').value || '').trim();
+  const key = phoneVariants(phone)[0] || '';
+  if (!key) { box.style.display = 'none'; delete _corrState[pfx]; return; }
+  box.style.display = 'block'; box.textContent = '⏳ የደንበኛው ፋይል እየተፈለገ ነው...';
+  try {
+    const res = await findPreviousTechnician([phone, alt]);
+    if ($(pfx + 'WorkType').value !== 'correction' || ((phoneVariants($(pfx + 'Phone').value.trim())[0]) || '') !== key) return; // ስልኩ ተቀይሯል
+    if (!res.tech) {
+      delete _corrState[pfx];
+      box.innerHTML = res.customer
+        ? `📁 የደንበኛ ፋይል አለ፦ <b>${esc(res.customer.name)}</b>${res.customer.address ? ' · ' + esc(res.customer.address) : ''}<br>ℹ️ ቀድሞ የሰራው ቴክኒሻን አልተገኘም — ስሙን ከላይ ይጻፉ፤ አድሚን ይመድባል።`
+        : 'ℹ️ ይህ ስልክ በፋይል ውስጥ አልተገኘም — ቴክኒሻኑን ስም ከላይ ይጻፉ፤ አድሚን ይመድባል።';
+      return;
+    }
+    _corrState[pfx] = { key, tech: res.tech, customer: res.customer };
+    $(pfx + 'CorrTech').value = res.tech;
+    box.innerHTML = (res.customer ? `📁 የደንበኛ ፋይል፦ <b>${esc(res.customer.name)}</b>${res.customer.address ? ' · ' + esc(res.customer.address) : ''}<br>` : '')
+      + `🛠️ ቀድሞ ስራውን የሰራው ቴክኒሻን፦ <b>${esc(res.tech)}</b><br>⚠️ እርማትን ኦፕሬተር መመደብ አይችልም — ቴክኒሻን መምረጫ ባዶ ይቀራል፤ አድሚን በልዩ ምልክት አይቶ ይመድባል።`;
+  } catch (e) {
+    console.warn('corrLookup failed', e); delete _corrState[pfx];
+    box.innerHTML = 'ℹ️ የደንበኛ ፋይል ማግኘት አልተቻለም — ቴክኒሻኑን ስም ከላይ ይጻፉ፤ አድሚን ይመድባል።';
+  }
 }
 function toggleFoundOther(pfx) {
   const on = $(pfx + 'FoundUs').value === 'Other';
@@ -544,6 +609,13 @@ async function submitOrder(pfx) {
   const btn = $(pfx + 'Btn'); btn.disabled = true;
   try {
     await authReady;
+    // 🛠️ እርማት — ኦፕሬተር አይመድብም፤ ቀድሞ የሰራው ቴክኒሻን (ከተገኘ) እንደ መረጃ ብቻ ይመዘገባል፣ አድሚን በልዩ ምልክት አይቶ ይመድባል
+    let prevTech = '';
+    if (workType === 'correction') {
+      if (!_corrState[pfx] || _corrState[pfx].key !== (phoneVariants(phone)[0] || '')) { await corrLookup(pfx); }
+      const st = _corrState[pfx];
+      if (st && st.key === (phoneVariants(phone)[0] || '')) prevTech = st.tech;
+    }
     const order = {
       fullName, phone, address,
       altPhone: altPhone,
@@ -551,6 +623,10 @@ async function submitOrder(pfx) {
       orderType: workType,
       orderTypeLabel: workTypeLabel,
       correctionTechnician: corrTech,       // 🛠️ እርማት የሚጠየቅበት ቴክኒሻን
+      ...(workType === 'correction' ? {
+        needsAdminAssign: true,             // ⚠️ ለአድሚን ልዩ ምልክት — ኦፕሬተር እርማትን መመደብ አይችልም
+        adminNote: `ኦፕሬተር ${me.name} መዝግቧል — ቴክኒሻን አልተመደበም${prevTech ? '፤ በፋይል ቀድሞ የሰራው: ' + prevTech : ''}${corrTech && corrTech !== prevTech ? '፤ ኦፕሬተሩ የጻፈው: ' + corrTech : ''}። አድሚን ይመድብ።`
+      } : {}),
       referredBy: referredBy,               // 🔗 ሪፈራሉ የመጣው ከማን
       foundUs: foundUsSel,
       foundUsText: foundUsText,
@@ -565,6 +641,24 @@ async function submitOrder(pfx) {
       createdAt: new Date()
     };
     const ref = await db.collection('orders').add(order);
+    // 📁 ደንበኛው ቀድሞ ከተመዘገበ እንደ አዲስ አይመዘገብም — በስልኩ (ፋይሉ) ላይ ታሪክ ይጨመራል (ስራው በጠየቀበት ቀን በዝርዝር)
+    try {
+      const _d = String(phone).replace(/\D/g, ''), _key = _d.length >= 9 ? '0' + _d.slice(-9) : phone;
+      const _cref = db.collection('customers').doc(_key);
+      let _snap = null; try { _snap = await _cref.get(); } catch (e) {}
+      const _now = new Date();
+      const _upd = {
+        phone: _key, lastOrderId: ref.id, lastOrderAt: _now, updatedAt: _now,
+        totalOrders: firebase.firestore.FieldValue.increment(1),
+        history: firebase.firestore.FieldValue.arrayUnion({
+          orderId: ref.id, requestedAt: _now, requestedDate: dateKey(_now), appointmentDate: dateKey(appt),
+          appliance: appliance || '', problem: order.problem || '', workType: workType, source: order.source, address: address || '', technician: ''
+        })
+      };
+      if (_snap && !_snap.exists) { _upd.name = fullName; _upd.address = address || '—'; _upd.createdAt = _now; }
+      else if (_snap && _snap.exists) { const _c = _snap.data() || {}; if ((!_c.address || _c.address === '—') && address) _upd.address = address; }
+      await _cref.set(_upd, { merge: true });
+    } catch (e) { console.warn('customer history failed (non-fatal)', e); }
     // 🔔 ለስራ መዳቢ (አዲስ ትዕዛዞች ገጽ) እና ለአድሚን ማሳወቂያ (ገጹ ዝግ ቢሆንም)
     if (window.hePushNotify) hePushNotify(workType === 'referral' ? ['admins'] : ['newOrders', 'admins'], (workType === 'referral' ? '🔗 አዲስ ሪፈራል — ' : '🆕 አዲስ ትዕዛዝ — ') + (isPhone ? '📞 በስልክ' : '🏪 ከሾፕ'), fullName + ' — ' + (appliance || '') + ' (' + me.name + ')', 'new-orders.html');
     try {
@@ -586,7 +680,7 @@ async function submitOrder(pfx) {
     toggleApplianceOther(pfx);
     toggleFoundOther(pfx);
     resetPicker(pfx);
-    toast('✅ ወደ አድሚን ተልኳል');
+    toast(workType === 'correction' ? '✅ ወደ አድሚን ተልኳል — እርማት ስለሆነ አድሚን ይመድባል' : '✅ ወደ አድሚን ተልኳል');
   } catch (ex) { toast('❌ ' + ex.message); }
   btn.disabled = false;
 }
