@@ -566,7 +566,7 @@ async function submitOrder(pfx) {
     };
     const ref = await db.collection('orders').add(order);
     // 🔔 ለስራ መዳቢ (አዲስ ትዕዛዞች ገጽ) እና ለአድሚን ማሳወቂያ (ገጹ ዝግ ቢሆንም)
-    if (window.hePushNotify) hePushNotify(['newOrders', 'admins'], '🆕 አዲስ ትዕዛዝ — ' + (isPhone ? '📞 በስልክ' : '🏪 ከሾፕ'), fullName + ' — ' + (appliance || '') + ' (' + me.name + ')', 'new-orders.html');
+    if (window.hePushNotify) hePushNotify(workType === 'referral' ? ['admins'] : ['newOrders', 'admins'], (workType === 'referral' ? '🔗 አዲስ ሪፈራል — ' : '🆕 አዲስ ትዕዛዝ — ') + (isPhone ? '📞 በስልክ' : '🏪 ከሾፕ'), fullName + ' — ' + (appliance || '') + ' (' + me.name + ')', 'new-orders.html');
     try {
       await db.collection('activity').add({
         user: me.name, action: isPhone ? 'add_phone_order' : 'add_shop_order',
