@@ -4744,7 +4744,7 @@
                     ${gallery(r.receiptURLs, '🏦 የባንክ ደረሰኝ')}
                 </div>`;
             const footer = r.approved
-                ? '<button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>'
+                ? reportTgResendBtn(r) + ' <button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>'
                 : `<button class="btn btn-success" onclick="approveReport('${r.id}','${r.technicianId || ''}', true)"><i class="fas fa-check"></i> አጽድቅ</button> <button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>`;
             openModal('📋 የሪፖርት ዝርዝር', html, footer);
         }
@@ -6148,10 +6148,148 @@ ${locationLine}
             return n;
         }
 
+
+        // ============================================================
+        // 📤 ሪፖርት ወደ ቴሌግራም የሚላከው አድሚን ሲያጸድቀው ብቻ ነው (ጽሁፍ + ፎቶዎች አብረው)
+        //   • አዲስ ሪፖርቶች (tgDeferred: true) ብቻ — የድሮ ሪፖርቶች ቀድሞ ተልከዋል፣ አይደገሙም
+        //   • ፎቶዎች በቴክኒሻኑ ሲላክ ወደ Firebase Storage ይጫናሉ፤ ሲጸድቅ Worker ከዚያ ወስዶ ወደ ቴሌግራም ይልካል
+        //   • አድሚን ያስተካከለው (አርም) የመጨረሻው ሪፖርት ነው ወደ ቴሌግራም የሚሄደው
+        // ============================================================
+        const _repTgBusy = new Set();
+        function reportTgText(r) {
+            const sub = r.submittedAt && r.submittedAt.toDate ? r.submittedAt.toDate() : new Date();
+            const repDate = r.date ? new Date(r.date + 'T12:00:00') : sub;
+            const jobs = Array.isArray(r.jobStatuses) ? r.jobStatuses : [];
+            const num = (v) => { const n = Number(v); return isFinite(n) ? n : 0; };
+            const jobLinesArr = jobs.map((j, i) => {
+                const done = j.status === 'completed';
+                const tagTxt = j.tagLabel ? `[${tgEsc(j.tagLabel)}${j.count > 1 ? ' ×' + j.count : ''}] ` : '';
+                const head = `${i + 1}. ${tagTxt}${tgEsc(j.appliance || j.customer || '—')} — ${done ? '✅' : '❌'}`;
+                const cust = [
+                    j.customer && j.customer !== '—' ? `👤 ${tgEsc(j.customer)}` : '',
+                    j.phone ? `📱 ${tgEsc(j.phone)}` : '',
+                    j.address ? `📍 ${tgEsc(j.address)}` : ''
+                ].filter(Boolean).join(' | ');
+                return cust ? `${head}\n${cust}` : head;
+            });
+            let jobLines = jobLinesArr.join('\n\n');
+            if (jobLines.length > 3300) jobLines = jobLines.slice(0, 3300) + '\n…';
+            let reasonList = jobs.filter(j => j.status !== 'completed' && j.reason).map(j => j.reason);
+            if (!reasonList.length) reasonList = Array.isArray(r.notCompletedReasons) ? r.notCompletedReasons.slice() : [];
+            const reasonLines = reasonList.map(x => `ካልተጠናቀቀ ምክንያቱ: ${tgEsc(x)}`).join('\n');
+            const expLines = (Array.isArray(r.expenseItems) ? r.expenseItems : []).filter(x => x.location || x.amount)
+                .map(x => `${tgEsc(x.location || '—')} ${x.amount} ብር`).join('፣ ') || '—';
+            const ex = (k) => ({ count: num(r[k + 'Count']), income: num(r[k + 'Income']), expense: num(r[k + 'Expense']), staffShare: num(r[k + 'StaffShare']) });
+            const extraLines = [['referral', '🔗 ሪፈራል'], ['correction', '🛠️ እርማት']].map(([k, l]) => [ex(k), l]).filter(([e]) => e.count > 0)
+                .map(([e, l]) => `${l}: ${e.count} ስራ | ገቢ ${e.income} ብር | ወጪ ${e.expense} ብር | ለሠራተኛ ${e.staffShare} ብር`).join('\n');
+            const wN = (r.warrantyPhotoURLs || []).length, rN = (r.receiptURLs || []).length;
+            const lateN = num(r.photosFailed);
+            const _blk = (...lines) => lines.filter(l => l !== '' && l != null).join('\n');
+            const totalIncome = r.totalIncome != null ? r.totalIncome : (r.income || 0);
+            return [
+                _blk(
+                    '📋 የሀላል ዕለታዊ የባለሙያ ሪፖርት',
+                    '✅ በአስተዳዳሪ ጸድቋል',
+                    `👷 የባለሙያ ስም: ${tgEsc(r.technicianName || r.technician || '')}`,
+                    `📅 ቀን: ${formatEthDate(repDate)} ዓ.ም (${tgEsc(r.date || r.dateKey || '')})`,
+                    `🕐 የተላከበት ሰዓት: ${techEthTimeStr(sub)}`,
+                    `📆 ዕለት: ${tgEsc(r.day || '')}`
+                ),
+                _blk(
+                    `1️⃣ የተላኩ ስራዎች ብዛት: ${num(r.totalSent != null ? r.totalSent : r.jobs)}`,
+                    `2️⃣ የተጠናቀቁ ስራዎች ብዛት: ${num(r.completedCount)}`,
+                    `3️⃣ ያልተጠናቀቁ ስራዎች ብዛት: ${num(r.notCompletedCount)}`
+                ),
+                _blk('📋 የስራ ዝርዝር', jobLines || '—', reasonLines, extraLines),
+                _blk(
+                    `💰 5️⃣ ጠቅላላ ገቢ: ${totalIncome} ብር`,
+                    `🧾 6️⃣ ጠቅላላ ወጪ: ${num(r.totalExpense)} ብር`
+                ),
+                `የወጪ ዝርዝር: ${expLines}`,
+                _blk(
+                    `💵 7️⃣ ጠቅላላ ትርፍ: ${num(r.profit)} ብር`,
+                    `📊 8️⃣ የባለሙያ ድርሻ (%): ${num(r.techSharePercent)}%`,
+                    `🏦 9️⃣ ወደ ድርጅቱ የገባ ገንዘብ: ${num(r.deposited)} ብር`,
+                    '🎤 🔟 ተጨማሪ ማብራሪያ / አስተያየት:'
+                ),
+                tgEsc([r.expenseDetails, r.remarks].filter(Boolean).join(' — ') || '—'),
+                _blk('የድርጅቱ ጊዜያዊ የገቢ አካውንት', '1000422578068', 'Fuad Museyd Hassen'),
+                '📌 ተጨማሪ ማያያዝ ወይም መላክ ያለባቸው',
+                _blk(
+                    wN ? `✅ ተያይዟል (${wN} ፎቶ) — የዋራንቲ ካርድ እና ሎጎ ፎቶ` : '❌ አልተያያዘም — የዋራንቲ ካርድ እና ሎጎ ፎቶ',
+                    rN ? `✅ ተያይዟል (${rN} ፎቶ) — የባንክ ደረሰኝ` : '❌ አልተያያዘም — የባንክ ደረሰኝ',
+                    lateN ? `ℹ️ ${lateN} ፎቶ በቀጥታ ቀድሞ ተልኳል` : ''
+                )
+            ].filter(x => x !== '').join('\n\n');
+        }
+        async function reportSendPhotoUrls(urls, caption) {
+            const list = (urls || []).filter(u => typeof u === 'string' && u);
+            let failed = 0;
+            const call = async (chunk, start) => {
+                const payload = { urls: chunk, captions: chunk.map((_, k) => `${caption} (${start + k + 1}/${list.length})`) };
+                for (let a = 0; a < 2; a++) {
+                    try { const res = await callWorker('sendTelegramPhotoUrls', payload); if (res && res.ok) return true; } catch (e) { console.warn('photo url send failed', e); }
+                    await new Promise(r => setTimeout(r, 1200));
+                }
+                return false;
+            };
+            for (let i = 0; i < list.length; i += 5) {
+                const chunk = list.slice(i, i + 5);
+                if (await call(chunk, i)) continue;
+                if (chunk.length > 1) { for (let k = 0; k < chunk.length; k++) { if (!(await call([chunk[k]], i + k))) failed++; } }
+                else failed++;
+            }
+            return failed === 0;
+        }
+        /** ሪፖርቱ ሲጸድቅ ጽሁፍ + ፎቶ ወደ ቴሌግራም (force=true → ያልደረሰውን እንደገና) */
+        async function reportTgOnApprove(reportId, force) {
+            if (_repTgBusy.has(reportId)) return { skipped: true };
+            _repTgBusy.add(reportId);
+            try {
+                const snap = await db.collection('dailyReports').doc(reportId).get(); // የመጨረሻው (በአድሚን የተስተካከለው) ስሪት
+                if (!snap.exists) return { skipped: true };
+                const r = snap.data(); r.id = reportId;
+                if (!r.tgDeferred) return { skipped: true };                     // የድሮ ሪፖርት — ቀድሞ ተልኳል
+                const textDone = !!r.tgSentAt;
+                if (textDone && !(force && r.tgPhotosOk === false)) return { skipped: true };
+                let textOk = textDone;
+                if (!textDone) {
+                    const text = reportTgText(r);
+                    textOk = await techSendTelegramNotification(text);
+                    if (!textOk) { await new Promise(x => setTimeout(x, 1500)); textOk = await techSendTelegramNotification(text); }
+                }
+                let photosOk = true;
+                if (textOk) {
+                    const cap = `${r.technicianName || r.technician || ''} — ${r.date || r.dateKey || ''}`;
+                    const w = r.warrantyPhotoURLs || [], rc = r.receiptURLs || [];
+                    if (w.length) photosOk = (await reportSendPhotoUrls(w, `📸 ዋራንቲ ካርድ — ${cap}`)) && photosOk;
+                    if (rc.length) photosOk = (await reportSendPhotoUrls(rc, `🏦 የባንክ ደረሰኝ — ${cap}`)) && photosOk;
+                    await db.collection('dailyReports').doc(reportId).update({ tgSentAt: textDone ? r.tgSentAt : new Date(), tgPhotosOk: photosOk });
+                }
+                return { textOk, photosOk };
+            } finally { _repTgBusy.delete(reportId); }
+        }
+        function reportTgToast(tg) {
+            if (!tg || tg.skipped) return;
+            if (!tg.textOk) showToast('⚠️ ሪፖርቱ ጸድቋል፣ ነገር ግን ወደ ቴሌግራም አልደረሰም — በሪፖርቱ ዝርዝር «📤 ወደ ቴሌግራም ላክ» ይጫኑ', 'error');
+            else if (!tg.photosOk) showToast('⚠️ ሪፖርቱ ወደ ቴሌግራም ደርሷል፣ ፎቶዎች ግን አልደረሱም — በሪፖርቱ ዝርዝር «📤 ወደ ቴሌግራም ላክ» ይጫኑ', 'error');
+            else showToast('📤 ሪፖርቱ (ከፎቶዎች ጋር) ወደ ቴሌግራም ተልኳል', 'success');
+        }
+        async function resendReportTelegram(reportId) {
+            try { showToast('📤 በመላክ ላይ...', 'success'); reportTgToast(await reportTgOnApprove(reportId, true)); closeModal(); }
+            catch (e) { showToast('❌ ' + (e && e.message ? e.message : e), 'error'); }
+        }
+        function reportTgResendBtn(r) {
+            return (r && r.approved && r.tgDeferred && (!r.tgSentAt || r.tgPhotosOk === false))
+                ? ` <button class="btn btn-primary" onclick="resendReportTelegram('${r.id}')"><i class="fab fa-telegram-plane"></i> 📤 ወደ ቴሌግራም ላክ</button>` : '';
+        }
+
         async function approveReport(reportId, techId, fromCard) {
             try {
                 const report = allDailyReports.find(r => r.id === reportId);
                 if (!techId && report) techId = report.technicianId;
+                // 📸 ፎቶዎች ገና እየተጫኑ ከሆነ (ቴክኒሻኑ ገጹን ገና ካልጨረሰ) ያስጠነቅቃል — ከጸደቀ በኋላ ፎቶ ወደ ቴሌግራም አይደርስም
+                if (report && report.tgDeferred && !report.tgSentAt && report.photosPending && !confirm('📸 የቴክኒሻኑ ፎቶዎች ገና እየተጫኑ ነው።\n\nጥቂት ቆይተው ቢያጸድቁ ፎቶዎቹ ከሪፖርቱ ጋር ወደ ቴሌግራም ይላካሉ።\n\nቢሆንም አሁን ይጽደቅ?')) return;
                 await db.collection('dailyReports').doc(reportId).update({
                     approved: true,
                     approvedAt: new Date()
@@ -6170,6 +6308,9 @@ ${locationLine}
                     timestamp: new Date()
                 });
                 showToast('✅ ሪፖርት ጸድቋል!', 'success');
+                // 📤 ወደ ቴሌግራም (ጽሁፍ + ፎቶዎች) — ሲጸድቅ ብቻ
+                try { reportTgToast(await reportTgOnApprove(reportId)); }
+                catch (tgErr) { console.warn('approve → telegram failed', tgErr); showToast('⚠️ ሪፖርቱ ጸድቋል፣ ወደ ቴሌግራም መላክ ግን አልተቻለም — በሪፖርቱ ዝርዝር «📤 ወደ ቴሌግራም ላክ» ይጫኑ', 'error'); }
                 if (fromCard) closeModal(); else viewTechReportHistory(techId);
             } catch (error) {
                 showToast('❌ ' + error.message, 'error');
@@ -8517,26 +8658,83 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 r.readAsDataURL(file);
             });
         }
+        // ✅ FIX (ፎቶ ከመሃል ይቀር ነበር)፦ ቀድሞ ሁሉም ፎቶዎች (እስከ 10) በአንድ ትልቅ ጥያቄ ይላኩ ነበር፤ አንዱ ፎቶ
+        // ልክ ካልሆነ (ለምሳሌ HEIC / ከ2.5MB በላይ) ወይም ጥያቄው ከተቋረጠ ሙሉው ቡድን ይወድቅ ነበር፣ ድጋሚ ሙከራም አልነበረም።
+        // አሁን፦ (1) ልክ ያልሆነ ፎቶ እንደገና ይጨመቃል  (2) በ5 ፎቶ ቡድን ይላካል  (3) ቡድን ካልተሳካ እያንዳንዱ ፎቶ በተናጠል ይላካል
+        // (4) እያንዳንዱ ሙከራ አንድ ጊዜ ይደገማል  (5) ያልደረሱ ፎቶዎች ቁጥር ወደ ቴሌግራም በጽሁፍ ይነገራል።
+        const TG_OK_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
+        const TG_MAX_BYTES = 2.2 * 1024 * 1024;
+        let _tgPhotoBusy = 0;
+        window.addEventListener('beforeunload', function (ev) {
+            if (_tgPhotoBusy > 0) { ev.preventDefault(); ev.returnValue = ''; }
+        });
+        async function tgWorkerOk(name, payload) {
+            try {
+                const res = await callWorker(name, payload);
+                return !!(res && res.ok);
+            } catch (e) { console.warn('⚠️ ' + name + ' failed:', e); return false; }
+        }
+        async function techPrepPhotoForTelegram(f) {
+            let file = f;
+            if (!file) return null;
+            if (!TG_OK_MIMES.includes((file.type || '').toLowerCase()) || file.size > TG_MAX_BYTES) {
+                try { file = await compressImageFile(file, 1024, 0.6); } catch (e) {}
+            }
+            if (!file || !TG_OK_MIMES.includes((file.type || '').toLowerCase()) || file.size > TG_MAX_BYTES) return null;
+            return file;
+        }
         async function techSendPhotosToTelegram(files, captionText) {
             const list = Array.from(files || []).filter(Boolean);
             if (list.length === 0) return true;
-            let allOk = true;
+            _tgPhotoBusy++;
+            let failedCount = 0;
             try {
-                const dataUrls = [];
-                for (const f of list) dataUrls.push(await fileToDataUrl(f));
-                if (dataUrls.length === 1) {
-                    const res = await callWorker('sendTelegramPhoto', { dataUrl: dataUrls[0], caption: captionText, bot: 'admin' });
-                    if (!(res && res.ok)) allOk = false;
-                } else {
-                    for (let i = 0; i < dataUrls.length; i += 10) {
-                        const chunk = dataUrls.slice(i, i + 10);
-                        const captions = chunk.map((_, k) => `${captionText} (${i + k + 1}/${dataUrls.length})`);
-                        const res = await callWorker('sendTelegramMediaGroup', { images: chunk, captions, bot: 'admin' });
-                        if (!(res && res.ok)) allOk = false;
+                const items = [];
+                for (const f of list) {
+                    const ready = await techPrepPhotoForTelegram(f);
+                    if (!ready) { failedCount++; continue; }
+                    try { items.push(await fileToDataUrl(ready)); } catch (e) { failedCount++; }
+                }
+                const total = list.length;
+                const sendOne = async (dataUrl, n) => {
+                    const payload = { dataUrl: dataUrl, caption: `${captionText} (${n}/${total})`, bot: 'admin' };
+                    if (await tgWorkerOk('sendTelegramPhoto', payload)) return true;
+                    await new Promise(r => setTimeout(r, 1200));
+                    return await tgWorkerOk('sendTelegramPhoto', payload);
+                };
+                const CH = 5;
+                for (let i = 0; i < items.length; i += CH) {
+                    const chunk = items.slice(i, i + CH);
+                    let ok = false;
+                    if (chunk.length === 1) {
+                        ok = await sendOne(chunk[0], i + 1);
+                        if (!ok) failedCount++;
+                        continue;
+                    }
+                    const captions = chunk.map((_, k) => `${captionText} (${i + k + 1}/${total})`);
+                    ok = await tgWorkerOk('sendTelegramMediaGroup', { images: chunk, captions: captions, bot: 'admin' });
+                    if (!ok) {
+                        await new Promise(r => setTimeout(r, 1200));
+                        ok = await tgWorkerOk('sendTelegramMediaGroup', { images: chunk, captions: captions, bot: 'admin' });
+                    }
+                    if (!ok) { // ቡድኑ አልተሳካም → እያንዳንዱን ፎቶ በተናጠል ሞክር (አንድ መጥፎ ፎቶ ሌሎቹን እንዳያስቀር)
+                        for (let k = 0; k < chunk.length; k++) {
+                            if (!(await sendOne(chunk[k], i + k + 1))) failedCount++;
+                        }
                     }
                 }
-            } catch (e) { console.warn('⚠️ Telegram photo send failed:', e); return false; }
-            return allOk;
+            } catch (e) {
+                console.warn('⚠️ Telegram photo send failed:', e);
+                _tgPhotoBusy--;
+                return false;
+            }
+            _tgPhotoBusy--;
+            if (failedCount > 0) {
+                console.warn('⚠️ ' + failedCount + ' photo(s) not delivered to Telegram');
+                try { await techSendTelegramNotification(`⚠️ ${tgEsc(captionText)}\n${failedCount} ከ ${list.length} ፎቶ ወደ ቴሌግራም አልደረሰም (በአፑ ውስጥ ይገኛል)።`); } catch (e) {}
+                return false;
+            }
+            return true;
         }
         // Telegram (Markdown) ልዩ ምልክቶችን (_ * ` [) በተጠቃሚ በተጻፈ ጽሁፍ ውስጥ ማምለጥ
         function tgEsc(v) { return String(v == null ? '' : v).replace(/([_*`\[])/g, '\\$1'); }
@@ -8819,14 +9017,26 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
             // File previews
             safe(() => {
-                document.getElementById('reportWarrantyPhotos').addEventListener('change', function(e) {
-                    previewFiles(e.target.files, 'warrantyPreview');
-                    e.target.value = ''; // ተመሳሳይ ፎቶ እንደገና መምረጥ እንዲቻል
-                });
-                document.getElementById('reportBankReceipts').addEventListener('change', function(e) {
-                    previewFiles(e.target.files, 'receiptPreview');
-                    e.target.value = '';
-                });
+                // ✅ FIX (ፎቶ ከመሃል ይጠፋ ነበር)፦ አንዳንድ የስልክ ብራውዘር/webview ውስጥ input.value = '' ሲደረግ
+                // የተመረጠው ፋይል (content:// ማጣቀሻ) ይሰረዛል → ሪፖርት ሲላክ ፎቶው ባዶ/ያልተነበበ ይሆን ነበር።
+                // አሁን ፋይሉ መጀመሪያ ወደ ሜሞሪ ይገለበጣል፤ ከዚያ በኋላ ብቻ input ባዶ ይደረጋል።
+                const bindPhotoInput = function(inputId, previewId) {
+                    document.getElementById(inputId).addEventListener('change', function(e) {
+                        const input = e.target;
+                        const picked = Array.from(input.files || []);
+                        Promise.all(picked.map(async (f) => {
+                            try {
+                                const buf = await f.arrayBuffer();
+                                return new File([buf], f.name, { type: f.type, lastModified: f.lastModified });
+                            } catch (err) { return f; }
+                        })).then((copies) => {
+                            previewFiles(copies, previewId);
+                            input.value = ''; // ተመሳሳይ ፎቶ እንደገና መምረጥ እንዲቻል
+                        });
+                    });
+                };
+                bindPhotoInput('reportWarrantyPhotos', 'warrantyPreview');
+                bindPhotoInput('reportBankReceipts', 'receiptPreview');
             }, 'file previews');
 
             // ✅ FIX: type="number" ላይ አንዳንድ የስልክ ኪቦርዶች/webview (ለምሳሌ TikTok in-app browser)
@@ -9042,10 +9252,18 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const total = warrantyFiles.length + receiptFiles.length;
             if (total === 0) return { failed: 0, total: 0 };
             try { storage.setMaxUploadRetryTime(45000); storage.setMaxOperationRetryTime(30000); } catch (_) {}
-            const uploadOne = async (file) => {
+            const uploadOnce = async (file) => {
                 const ref = storage.ref(`reports/${techName}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}_${file.name}`);
                 await putWithTimeout(ref, file, 75000);
                 return await ref.getDownloadURL();
+            };
+            // ✅ ፎቶዎች ወደ ቴሌግራም የሚሄዱት ከዚህ Storage ስለሆነ እስከ 3 ጊዜ ይሞከራል
+            const uploadOne = async (file) => {
+                let lastErr;
+                for (let a = 0; a < 3; a++) {
+                    try { return await uploadOnce(file); } catch (e) { lastErr = e; await new Promise(r => setTimeout(r, 1500 * (a + 1))); }
+                }
+                throw lastErr;
             };
             const [w, r] = await Promise.all([
                 Promise.allSettled(warrantyFiles.map(uploadOne)),
@@ -9054,11 +9272,15 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const pick = (arr) => arr.filter(x => x.status === 'fulfilled').map(x => x.value);
             const wUrls = pick(w), rUrls = pick(r);
             [...w, ...r].filter(x => x.status === 'rejected').forEach(x => console.warn('Photo upload failed:', x.reason));
+            const failedFiles = {
+                warranty: warrantyFiles.filter((_, i) => w[i].status === 'rejected'),
+                receipt: receiptFiles.filter((_, i) => r[i].status === 'rejected')
+            };
             const failed = total - wUrls.length - rUrls.length;
             try {
                 await repRef.update({ warrantyPhotoURLs: wUrls, receiptURLs: rUrls, photosPending: false, photosFailed: failed });
             } catch (e) { console.warn('Report photo URL update failed:', e); }
-            return { failed, total };
+            return { failed, total, failedFiles };
         }
 
         // ✅ NEW: የተመረጡ ፎቶዎች ዝርዝር (ሪፖርት ከመላኩ በፊት ማየት እና ✕ ን ነክቶ ማጥፋት ይቻላል)።
@@ -11431,7 +11653,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             });
 
             // Collect totals
-            const totalSent = parseInt(document.getElementById('reportTotalSent').value) || 0;
+            let totalSent = parseInt(document.getElementById('reportTotalSent').value) || 0;
             const completedCount = parseInt(document.getElementById('reportCompletedCount').value) || 0;
             const notCompletedCount = parseInt(document.getElementById('reportNotCompletedCount').value) || 0;
             const totalIncome = parseFloat(document.getElementById('reportTotalIncome').value) || 0;
@@ -11450,6 +11672,42 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 const _rb = document.querySelector('input[name="readyTomorrow"]');
                 if (_rb && _rb.scrollIntoView) _rb.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
+            }
+
+            // ✅ FIX: «የተላኩ ስራዎች ብዛት» ባዶ/0 ሆኖ «የተጠናቀቁ» ብቻ እየተላከ ነበር (የተላከ ስራ ሳይኖር የተጠናቀቀ አይኖርም)።
+            // አሁን፦ የተላኩ ስራዎች ከዝርዝሩ ካሉ ቁጥሩ ራሱ ይሞላል (ለማረጋገጥ ይቆማል)፤ ዝርዝር ከሌለ በእጅ እንዲያስገባ ይጠየቃል።
+            // «የተጠናቀቁ» ከ«የተላኩ» መብለጥ አይችልም።
+            {
+                const _jobsSum = jobStatuses.reduce((n, j) => {
+                    const o = myOrders.find(x => x.id === j.orderId);
+                    return n + (o ? techJobCount(o) : 1);
+                }, 0);
+                const _focusEl = (id) => {
+                    const el = document.getElementById(id);
+                    if (el) { if (el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); try { el.focus(); } catch (_) {} }
+                };
+                if (totalSent <= 0 && (_jobsSum > 0 || completedCount > 0 || notCompletedCount > 0)) {
+                    if (_jobsSum > 0) {
+                        totalSent = _jobsSum;
+                        document.getElementById('reportTotalSent').value = totalSent;
+                        renderWorkTypeInputs(totalSent);
+                        showToast('⚠️ «የተላኩ ስራዎች ብዛት» ባዶ ነበር — ከስራ ዝርዝሩ ' + totalSent + ' ተሞልቷል። ቁጥሮቹን አረጋግጠው እንደገና ይላኩ', 'error');
+                    } else {
+                        showToast('⚠️ «የተላኩ ስራዎች ብዛት» ሳያስገቡ የተጠናቀቁ/ያልተጠናቀቁ ስራዎች መላክ አይቻልም — መጀመሪያ የተላኩትን ቁጥር ያስገቡ', 'error');
+                    }
+                    _focusEl('reportTotalSent');
+                    return;
+                }
+                if (completedCount > totalSent) {
+                    showToast('⚠️ የተጠናቀቁ ስራዎች (' + completedCount + ') ከተላኩ ስራዎች (' + totalSent + ') መብለጥ አይችልም — ቁጥሩን ያስተካክሉ', 'error');
+                    _focusEl('reportCompletedCount');
+                    return;
+                }
+                if (completedCount + notCompletedCount > totalSent) {
+                    showToast('⚠️ የተጠናቀቁ (' + completedCount + ') + ያልተጠናቀቁ (' + notCompletedCount + ') ከተላኩ ስራዎች (' + totalSent + ') መብለጥ አይችልም — ቁጥሩን ያስተካክሉ', 'error');
+                    _focusEl('reportNotCompletedCount');
+                    return;
+                }
             }
 
             // ✅ ግዴታ፦ ገቢ ካለ "የባለሙያ ድርሻ (%)" እና "ወደ ድርጅቱ የገባ ገንዘብ" ቁጥር መግባት አለበት።
@@ -11573,6 +11831,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 receiptURLs: receiptURLs,
                 photoCount: warrantyCompressed.length + receiptCompressed.length,
                 photosPending: (warrantyCompressed.length + receiptCompressed.length) > 0,
+                tgDeferred: true,   // 📌 ወደ ቴሌግራም የሚላከው አድሚን ሲያጸድቅ ብቻ ነው
+                tgSentAt: null,
                 submittedAt: new Date()
             };
 
@@ -11583,83 +11843,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
                 const repRef = await db.collection('dailyReports').add(reportData);
 
-                // ✅ ሁሉም የተዘገበ ስራ (የተሰራም ያልተሰራም) በመልእክቱ ውስጥ ይካተታል
-                const _now = new Date();
-                const _repDate = reportData.date ? new Date(reportData.date + 'T12:00:00') : _now;
-                const jobLinesArr = jobStatuses.map((j, i) => {
-                    const done = j.status === 'completed';
-                    const tagTxt = j.tagLabel ? `[${tgEsc(j.tagLabel)}${j.count > 1 ? ' ×' + j.count : ''}] ` : '';
-                    const head = `${i + 1}. ${tagTxt}${tgEsc(j.appliance || j.customer || '—')} — ${done ? '✅' : '❌'}`;
-                    const cust = [
-                        j.customer && j.customer !== '—' ? `👤 ${tgEsc(j.customer)}` : '',
-                        j.phone ? `📱 ${tgEsc(j.phone)}` : '',
-                        j.address ? `📍 ${tgEsc(j.address)}` : ''
-                    ].filter(Boolean).join(' | ');
-                    return cust ? `${head}\n${cust}` : head;
-                });
-                let jobLines = jobLinesArr.join('\n\n'); // በእያንዳንዱ ስራ መካከል የአንድ መስመር ክፍተት
-                if (jobLines.length > 3300) jobLines = jobLines.slice(0, 3300) + '\n…';
-                let reasonList = jobStatuses.filter(j => j.status !== 'completed' && j.reason).map(j => j.reason);
-                if (!reasonList.length) reasonList = notCompletedReasons.slice();
-                const reasonLines = reasonList.map(r => `ካልተጠናቀቀ ምክንያቱ: ${tgEsc(r)}`).join('\n');
-                const expLines = expenseItems.filter(x => x.location || x.amount)
-                    .map(x => `${tgEsc(x.location || '—')} ${x.amount} ብር`).join('፣ ') || '—';
-                const extraLines = [['referral', '🔗 ሪፈራል'], ['correction', '🛠️ እርማት']].filter(([k]) => extraSum[k].count > 0)
-                    .map(([k, l]) => `${l}: ${extraSum[k].count} ስራ | ገቢ ${extraSum[k].income} ብር | ወጪ ${extraSum[k].expense} ብር | ለሠራተኛ ${extraSum[k].staffShare} ብር`).join('\n');
-                const wN = warrantyCompressed.length, rN = receiptCompressed.length;
-                // ክፍሎች በአንድ መስመር ክፍተት ተለይተው ይላካሉ (ለማንበብ እንዲመች)
-                const _blk = (...lines) => lines.filter(l => l !== '' && l != null).join('\n');
-                const reportMsg = [
-                    _blk(
-                        '📋 የሀላል ዕለታዊ የባለሙያ ሪፖርት',
-                        `👷 የባለሙያ ስም: ${tgEsc(technicianName)}`,
-                        `📅 ቀን: ${formatEthDate(_repDate)} ዓ.ም (${tgEsc(reportData.date)})`,
-                        `🕐 ሰዓት: ${techEthTimeStr(_now)}`,
-                        `📆 ዕለት: ${tgEsc(reportData.day)}`
-                    ),
-                    _blk(
-                        `1️⃣ የተላኩ ስራዎች ብዛት: ${totalSent}`,
-                        `2️⃣ የተጠናቀቁ ስራዎች ብዛት: ${completedCount}`,
-                        `3️⃣ ያልተጠናቀቁ ስራዎች ብዛት: ${notCompletedCount}`
-                    ),
-                    _blk('📋 የስራ ዝርዝር', jobLines || '—', reasonLines, extraLines),
-                    _blk(
-                        `💰 5️⃣ ጠቅላላ ገቢ: ${totalIncome} ብር`,
-                        `🧾 6️⃣ ጠቅላላ ወጪ: ${totalExpense} ብር`
-                    ),
-                    `የወጪ ዝርዝር: ${expLines}`,
-                    _blk(
-                        `💵 7️⃣ ጠቅላላ ትርፍ: ${profit} ብር`,
-                        `📊 8️⃣ የባለሙያ ድርሻ (%): ${techSharePercent}%`,
-                        `🏦 9️⃣ ወደ ድርጅቱ የገባ ገንዘብ: ${deposited} ብር`,
-                        '🎤 🔟 ተጨማሪ ማብራሪያ / አስተያየት:'
-                    ),
-                    tgEsc([expenseDetails, remarks].filter(Boolean).join(' — ') || '—'),
-                    _blk('የድርጅቱ ጊዜያዊ የገቢ አካውንት', '1000422578068', 'Fuad Museyd Hassen'),
-                    '📌 ተጨማሪ ማያያዝ ወይም መላክ ያለባቸው',
-                    _blk(
-                        wN ? `✅ ተያይዟል (${wN} ፎቶ) — የዋራንቲ ካርድ እና ሎጎ ፎቶ` : '❌ አልተያያዘም — የዋራንቲ ካርድ እና ሎጎ ፎቶ',
-                        rN ? `✅ ተያይዟል (${rN} ፎቶ) — የባንክ ደረሰኝ` : '❌ አልተያያዘም — የባንክ ደረሰኝ'
-                    )
-                ].filter(x => x !== '').join('\n\n');
-                let tgOk = await techSendTelegramNotification(reportMsg);
-                if (!tgOk) { // አንድ ጊዜ እንደገና ሞክር
-                    await new Promise(r => setTimeout(r, 1500));
-                    tgOk = await techSendTelegramNotification(reportMsg);
-                }
-
-                // ✅ NEW: የዋራንቲ ካርድ እና የባንክ ደረሰኝ ፎቶዎች ወደ ቴሌግራም (ከሪፖርቱ ጽሁፍ ቀጥሎ)
+                // 📌 ሪፖርቱ ወደ ቴሌግራም የሚላከው አድሚን ሲያጸድቀው ብቻ ነው (ጽሁፍ + ፎቶዎች አብረው)።
+                // ፎቶዎች አሁን ወደ Firebase Storage ይጫናሉ፤ አድሚን ሲያጸድቅ Worker ከዚያ ወስዶ ወደ ቴሌግራም ይልካል።
                 const repCap = `${technicianName} — ${reportData.date}`;
-                let tgPhotoJob = Promise.resolve(true), storageJob = Promise.resolve({ failed: 0, total: 0 });
+                let storageJob = Promise.resolve({ failed: 0, total: 0, failedFiles: { warranty: [], receipt: [] } });
                 if (warrantyCompressed.length || receiptCompressed.length) {
-                    showToast('✅ ሪፖርት ተመዝግቧል! ፎቶዎች በመላክ ላይ ናቸው - ገጹን አይዝጉ', 'success');
-                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ፎቶ በመላክ ላይ... (ገጹን አይዝጉ)';
-                    tgPhotoJob = (async () => {
-                        let ok = true;
-                        if (warrantyCompressed.length) ok = (await techSendPhotosToTelegram(warrantyCompressed, `📸 ዋራንቲ ካርድ — ${repCap}`)) && ok;
-                        if (receiptCompressed.length) ok = (await techSendPhotosToTelegram(receiptCompressed, `🏦 የባንክ ደረሰኝ — ${repCap}`)) && ok;
-                        return ok;
-                    })();
+                    showToast('✅ ሪፖርት ተመዝግቧል! ፎቶዎች በመጫን ላይ ናቸው - ገጹን አይዝጉ', 'success');
+                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ፎቶ በመጫን ላይ... (ገጹን አይዝጉ)';
                     storageJob = uploadReportPhotosToStorage(repRef, warrantyCompressed, receiptCompressed, technicianName);
                 }
 
@@ -11678,13 +11868,17 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 // 🔔 ለስራ መዳቢ (ሪፖርት ማጽደቅ የሚጠብቅ) ማሳወቂያ
                 try { callWorker('notifyDispatchers', { audience: 'finance', text: '📋 አዲስ ሪፖርት ማጽደቅ ይጠይቃል', smsText: 'አዲስ ሪፖርት ማጽደቅ ይጠይቃል' }).catch(() => {}); } catch (e) {}
 
-                const photosTgOk = await tgPhotoJob;
                 const storageRes = await storageJob;
-                if (!photosTgOk) showToast('⚠️ ፎቶዎች ወደ ቴሌግራም አልደረሱም።', 'error');
-                if (storageRes.failed > 0) showToast(`⚠️ ${storageRes.failed} ፎቶ በአፑ ውስጥ (Firebase) አልተቀመጠም${photosTgOk ? '፣ በቴሌግራም ግን ደርሷል' : ''}።`, 'error');
-                if (!tgOk) showToast('⚠️ ሪፖርቱ ተመዝግቧል፣ ነገር ግን ወደ ቴሌግራም አልደረሰም። ምክንያት: ' + (window._lastTgError || 'unknown'), 'error');
+                if (storageRes.failed > 0) {
+                    // አንዳንድ ፎቶ Firebase ላይ ባይጫን እንኳ እንዳይጠፋ በቀጥታ ወደ ቴሌግራም ይላካል (ሪፖርቱ ገና ያልጸደቀ መሆኑ ይጻፋል)
+                    const ff = storageRes.failedFiles || { warranty: [], receipt: [] };
+                    let rescued = true;
+                    if (ff.warranty.length) rescued = (await techSendPhotosToTelegram(ff.warranty, `📸 ዋራንቲ ካርድ (ሪፖርቱ ገና ያልጸደቀ) — ${repCap}`)) && rescued;
+                    if (ff.receipt.length) rescued = (await techSendPhotosToTelegram(ff.receipt, `🏦 የባንክ ደረሰኝ (ሪፖርቱ ገና ያልጸደቀ) — ${repCap}`)) && rescued;
+                    showToast(`⚠️ ${storageRes.failed} ፎቶ በአፑ ውስጥ (Firebase) አልተቀመጠም${rescued ? '፣ በቀጥታ ወደ ቴሌግራም ተልኳል' : '፣ ወደ ቴሌግራምም አልደረሰም — እባክዎ ፎቶውን ለአድሚን በቴሌግራም ይላኩ'}።`, 'error');
+                }
 
-                showToast('✅ ሪፖርት ተልኳል! አመሰግናለሁ!', 'success');
+                showToast('✅ ሪፖርት ተልኳል! አድሚን ሲያጸድቀው ወደ ቴሌግራም ይላካል። አመሰግናለሁ!', 'success');
 
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-paper-plane"></i> ሪፖርት አስገባ';
@@ -11924,7 +12118,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 // ከበስተጀርባ፦ ማስታወሻ + አድሚን ማሳወቂያ + ደንበኛ SMS (እንደ መደበኛ «አጠናቅ»)
                 db.collection('activity').add({ user: technicianName, action: 'complete_job_from_report',
                     details: `ስራ #${orderId.substring(0, 8)} ከሪፖርት (${rep.dateKey || ''}) ወደ ተጠናቀቀ ተቀየረ, ዋጋ ${price} - ወጪ ${expense} = ገቢ ${net} ብር`, timestamp: now }).catch(() => {});
-                if (inPlace) try { techSendTelegramNotification(`🔄 ከቆይታ በኋላ የተጠናቀቀ ስራ\n👷 ${tgEsc(technicianName)} — ሪፖርት ${tgEsc(rep.date || rep.dateKey || '')}\n📋 ${tgEsc(job.customer || '—')} - ${tgEsc(job.appliance || '—')} ✅\n💰 ዋጋ ${price} | 🧾 ወጪ ${expense} | 💵 ገቢ ${net} ብር`); } catch (e) {}
+                if (inPlace && !rep.tgDeferred) try { techSendTelegramNotification(`🔄 ከቆይታ በኋላ የተጠናቀቀ ስራ\n👷 ${tgEsc(technicianName)} — ሪፖርት ${tgEsc(rep.date || rep.dateKey || '')}\n📋 ${tgEsc(job.customer || '—')} - ${tgEsc(job.appliance || '—')} ✅\n💰 ዋጋ ${price} | 🧾 ወጪ ${expense} | 💵 ገቢ ${net} ብር`); } catch (e) {}
                 if (inPlace) try { callWorker('notifyDispatchers', { audience: 'finance', text: '🔄 በሪፖርት ውስጥ ያልተጠናቀቀ ስራ ተጠናቀቀ — ማጽደቅ ይጠይቃል', smsText: 'በሪፖርት ውስጥ ያልተጠናቀቀ ስራ ተጠናቀቀ' }).catch(() => {}); } catch (e) {}
                 try { sendCustomerSmsFor('done', orderId); } catch (e) {}
 
