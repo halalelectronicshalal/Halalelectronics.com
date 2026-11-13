@@ -2761,15 +2761,35 @@ orderData.suggestedWorkerName = selectedWorkerName;
                 // በራሱ ያሰላ ስለነበር፣ admin በእጅ የጨመራቸው ደንበኞች (ገና ትዕዛዝ ያልላኩ) ፈጽሞ
                 // አይታዩም ነበር። አሁን ግን ትክክለኛ collection ውስጥ ተመዝግቦ ወዲያውኑ ይታያል።)
                 try {
-                    await db.collection('customers').doc(phone).set({
-                        name: fullName,
-                        phone: phone,
-                        address: address || '—',
+                    // 📁 ደንበኛው ቀድሞ ከተመዘገበ እንደ አዲስ አይመዘገብም — በስልኩ (ፋይሉ) ላይ ታሪክ ይጨመራል፤ ስራው በጠየቀበት ቀን ይመዘገባል
+                    const _d = String(phone).replace(/\D/g, '');
+                    const _key = _d.length >= 9 ? '0' + _d.slice(-9) : phone;
+                    const _ref = db.collection('customers').doc(_key);
+                    let _snap = null;
+                    try { _snap = await _ref.get(); } catch (e) { /* ማንበብ ባይፈቀድ — ነባር ስም አይተካም */ }
+                    const _now = new Date();
+                    const _upd = {
+                        phone: _key,
                         lastOrderId: docRef.id,
-                        lastOrderAt: new Date(),
-                        updatedAt: new Date(),
-                        totalOrders: firebase.firestore.FieldValue.increment(1)
-                    }, { merge: true });
+                        lastOrderAt: _now,
+                        updatedAt: _now,
+                        totalOrders: firebase.firestore.FieldValue.increment(1),
+                        history: firebase.firestore.FieldValue.arrayUnion({
+                            orderId: docRef.id,
+                            requestedAt: _now,
+                            requestedDate: _now.getFullYear() + '-' + String(_now.getMonth() + 1).padStart(2, '0') + '-' + String(_now.getDate()).padStart(2, '0'),
+                            appointmentDate: '',
+                            appliance: appliance || '',
+                            problem: problem || '',
+                            workType: 'new',
+                            source: 'website',
+                            address: address || '',
+                            technician: ''
+                        })
+                    };
+                    if (_snap && !_snap.exists) { _upd.name = fullName; _upd.address = address || '—'; _upd.createdAt = _now; }
+                    else if (_snap && _snap.exists) { const _c = _snap.data() || {}; if ((!_c.address || _c.address === '—') && address) _upd.address = address; }
+                    await _ref.set(_upd, { merge: true });
                 } catch (custErr) {
                     console.warn('customers upsert failed (non-fatal)', custErr);
                 }
