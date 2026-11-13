@@ -4844,6 +4844,7 @@
                     ${o.foundUsText ? `<div>📣 ${escHtml(o.foundUsText)}</div>` : ''}
                     ${o.correctionTechnician ? `<div>🛠️ እርማት የሚጠየቅበት ቴክኒሻን: <strong>${escHtml(o.correctionTechnician)}</strong>${o.correctionDate ? ' · 📅 ' + escHtml(o.correctionDate) : ''}</div>` : ''}
                     ${o.referredBy ? `<div>🔗 ሪፈራል ከ: <strong>${escHtml(o.referredBy)}</strong></div>` : ''}
+                    ${schedHoldTag(o)}
                     ${(o.status === 'Pending' && admIsReturnedRaw(o)) ? `<div>↩️ የመለሰው ቴክኒሻን: <strong>${escHtml(o.returnedFrom || '—')}</strong>${toMs(o.returnedAt) ? ` &nbsp;•&nbsp; 🕒 ${formatEthDateTime(new Date(toMs(o.returnedAt)))}` : ''}</div>` : ''}
                     <div class="text-muted">📅 ${d ? formatEthDate(d) : '—'}${opts.showAge && days > 0 ? ` &nbsp;•&nbsp; <strong style="color:#DC2626;">⏰ ${days} ቀን አድሯል</strong>` : ''}${o.price ? ` &nbsp;•&nbsp; 💰 ${escHtml(o.price)} ብር` : ''}</div>
                     ${!done && reason ? `<div style="color:#B91C1C;">📝 ምክንያት: ${escHtml(reason)}</div>` : ''}
@@ -5226,7 +5227,7 @@
                     ${gallery(r.receiptURLs, '🏦 የባንክ ደረሰኝ')}
                 </div>`;
             const footer = r.approved
-                ? '<button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>'
+                ? reportTgResendBtn(r) + ' <button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>'
                 : `<button class="btn btn-success" onclick="approveReport('${r.id}','${r.technicianId || ''}', true)"><i class="fas fa-check"></i> አጽድቅ</button> <button class="btn btn-outline" onclick="admOpenFullEdit('${r.id}')"><i class="fas fa-pen"></i> አርም</button> <button class="btn btn-danger" onclick="admDeleteReport('${r.id}')"><i class="fas fa-trash"></i> ሰርዝ</button> <button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>`;
             if (!r.approved && admHasCorrection(r)) { window._admEditRep = r; openModal('✏️ ሪፖርት ማረሚያ — እርማት ተጠይቋል', admReportFullEditHtml(r), admFullEditFooter(r)); return; }
             openModal('📋 የሪፖርት ዝርዝር', html, footer);
@@ -5465,6 +5466,7 @@ document.addEventListener('focusout', function (e) {
                         <div style="font-weight:600;">${order.fullName || '—'} <span class="text-muted" style="font-weight:400; font-size:0.8rem;">• ${order.appliance || '—'}</span></div>
                         <div class="text-muted" style="font-size:0.78rem;">📱 ${order.phone ? `<a href="tel:${escHtml(order.phone)}" style="color:var(--secondary); font-weight:600;">${escHtml(order.phone)}</a>` : '—'} &nbsp; <i class="fas fa-map-marker-alt"></i> ${escHtml(order.address || '—')} </div>
                         ${order.returnReason ? `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#FEF3C7; color:#92400E; font-size:0.78rem;">↩️ <strong>ተመለሰ${order.returnedFrom ? ' ከ ' + escHtml(order.returnedFrom) : ''}</strong> — ምክንያት: ${escHtml(order.returnReason)}</div>` : ''}
+                        ${schedHoldTag(order)}
                     </div>
                     <select class="dashAssignSelect" data-id="${order.id}" style="padding:4px 8px; font-size:0.78rem; border:1px solid var(--border); border-radius:6px;">
                         <option value="">ቴክኒሻን ምረጥ</option>
@@ -5668,6 +5670,48 @@ document.addEventListener('focusout', function (e) {
             const all = Array.from(document.querySelectorAll(`.dashAssignSelect[data-id="${orderId}"], .assignSelect[data-id="${orderId}"]`));
             return all.find(x => x.value && x.value.trim()) || all[0] || null;
         }
+        // 📅 ቀጠሮ ያልደረሰ ስራ ሲመደብ ለሰራተኛው አይላክም — Pending ሆኖ «ተይዞ» ቀኑ ሲደርስ Worker በራሱ ይልካል (new-orders.html ጋር አንድ ደንብ)
+        const SCHED_WEEKDAY = { 'እሁድ': 0, 'ሰኞ': 1, 'ማክሰኞ': 2, 'ረቡዕ': 3, 'ሐሙስ': 4, 'አርብ': 5, 'ቅዳሜ': 6 };
+        function schedKeyToDate(k) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(k || '')); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
+        function schedNorm(t) { return String(t || '').replace(/[ኅሕ]/g, 'ህ').replace(/[ሐኀ]/g, 'ሀ').replace(/ሠ/g, 'ሰ').replace(/ዐ/g, 'አ'); }
+        function schedToday() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+        function schedDaysUntil(d) { return Math.round((d.getTime() - schedToday().getTime()) / 86400000); }
+        function schedParseEth(txt) {
+            const t = schedNorm(txt); if (!t) return null;
+            let mi = -1; ETH_MONTHS.forEach((nm, i) => { if (mi < 0 && t.includes(schedNorm(nm))) mi = i; });
+            if (mi < 0) return null;
+            const nums = (t.match(/\d+/g) || []).map(Number);
+            const year4 = nums.find(x => x >= 1900 && x <= 2300), day = nums.find(x => x >= 1 && x <= 30);
+            if (!day) return null;
+            const make = (ey) => { const g = ethiopianToGregorian(ey, mi + 1, day); return new Date(g.getUTCFullYear(), g.getUTCMonth(), g.getUTCDate()); };
+            if (year4) return make(year4);
+            const cur = gregorianToEthiopian(new Date()).year; let d = make(cur);
+            if (schedDaysUntil(d) < -180) d = make(cur + 1);
+            return d;
+        }
+        function schedApptDate(o) {
+            const d = schedKeyToDate(o.appointmentDate) || schedKeyToDate(o.rescheduledDate); if (d) return d;
+            const pd = String(o.preferredDay || '').trim();
+            const ed = schedParseEth(pd); if (ed) return ed;
+            for (const name of Object.keys(SCHED_WEEKDAY)) {
+                if (pd.startsWith(name)) {
+                    const cm = toMs(o.createdAt); const c = cm ? new Date(cm) : new Date();
+                    const base = new Date(c.getFullYear(), c.getMonth(), c.getDate());
+                    base.setDate(base.getDate() + ((SCHED_WEEKDAY[name] - base.getDay() + 7) % 7));
+                    return base;
+                }
+            }
+            return null;
+        }
+        function schedHoldInfo(o) {
+            if (!o) return null;
+            const d = schedApptDate(o);
+            return d && schedDaysUntil(d) > 0 ? { date: d, key: getDateKey(d) } : null;
+        }
+        function schedHoldTag(o) {
+            if (!o || !o.scheduledTechnician || !o.scheduledReleaseDate) return '';
+            return `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#EFF6FF; color:#1E40AF; font-size:0.78rem;">📌 ለ <b>${escHtml(o.scheduledTechnician)}</b> ተይዟል — ቀኑ (${escHtml(o.scheduledReleaseDate)}) ሲደርስ ለሰራተኛው በራሱ ይላካል</div>`;
+        }
         async function assignOrder(orderId) {
             // ✅ NEW: ከ Dashboard ላይ ካለው quick-assign select ወይም ከ Orders ትር ላይ ካለው select ይነበብ
             const select = pickAssignSelect(orderId);
@@ -5685,6 +5729,24 @@ document.addEventListener('focusout', function (e) {
                 return;
             }
 
+            // 📅 ቀጠሮ ያልደረሰ ስራ → ለሰራተኛው አይላክም፤ ይያዛል፣ ቀኑ ሲደርስ Worker በራሱ ይልካል
+            const _ord0 = (allOrders || []).find(x => x.id === orderId) || null;
+            const _hold = _ord0 && _ord0.status === 'Pending' ? schedHoldInfo(_ord0) : null;
+            if (_hold) {
+                const _t0 = allTechnicians.find(t => t.name === techName);
+                try {
+                    await db.collection('orders').doc(orderId).update({
+                        scheduledTechnician: techName, scheduledTechnicianId: (_t0 && _t0.id) || null,
+                        scheduledReleaseDate: _hold.key, scheduledBy: 'admin', scheduledAt: new Date()
+                    });
+                    try { await db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'hold_order', details: `ትዕዛዝ #${orderId.substring(0,8)} ለ ${techName} ተይዟል (ቀጠሮ ${_hold.key})`, timestamp: new Date() }); } catch (e) {}
+                    showToast(`📅 ቀጠሮ ስለሆነ ለ ${techName} ተይዟል — ${_hold.key} ሲደርስ ለሰራተኛው በራሱ ይላካል`, 'success');
+                    try { renderOrders(); } catch (e) {}
+                    try { renderDashNewOrders(); } catch (e) {}
+                } catch (error) { showToast('❌ ' + error.message, 'error'); }
+                return;
+            }
+
             // ⚠️ ኦፍላይን / "ዛሬ አይመቸኝም" ያለ / ዋርኒግ ያለበት ከሆነ ከመመደብ በፊት ያስጠነቅቃል
             const _selTech = allTechnicians.find(t => t.name === techName);
             if (_selTech) {
@@ -5699,12 +5761,14 @@ document.addEventListener('focusout', function (e) {
             }
 
             try {
-                await db.collection('orders').doc(orderId).update({
+                const _upd = {
                     status: 'Assigned',
                     technician: techName,  // store exact name
                     assignedAt: new Date(),
                     assignedBy: 'admin'
-                });
+                };
+                if (_ord0 && _ord0.scheduledReleaseDate) { _upd.scheduledTechnician = null; _upd.scheduledTechnicianId = null; _upd.scheduledReleaseDate = null; } // ተይዞ የነበረ → አሁን ተመደበ
+                await db.collection('orders').doc(orderId).update(_upd);
 
                 await db.collection('activity').add({
                     user: 'አስተዳዳሪ',
@@ -6868,10 +6932,148 @@ ${locationLine}
             return n;
         }
 
+
+        // ============================================================
+        // 📤 ሪፖርት ወደ ቴሌግራም የሚላከው አድሚን ሲያጸድቀው ብቻ ነው (ጽሁፍ + ፎቶዎች አብረው)
+        //   • አዲስ ሪፖርቶች (tgDeferred: true) ብቻ — የድሮ ሪፖርቶች ቀድሞ ተልከዋል፣ አይደገሙም
+        //   • ፎቶዎች በቴክኒሻኑ ሲላክ ወደ Firebase Storage ይጫናሉ፤ ሲጸድቅ Worker ከዚያ ወስዶ ወደ ቴሌግራም ይልካል
+        //   • አድሚን ያስተካከለው (አርም) የመጨረሻው ሪፖርት ነው ወደ ቴሌግራም የሚሄደው
+        // ============================================================
+        const _repTgBusy = new Set();
+        function reportTgText(r) {
+            const sub = r.submittedAt && r.submittedAt.toDate ? r.submittedAt.toDate() : new Date();
+            const repDate = r.date ? new Date(r.date + 'T12:00:00') : sub;
+            const jobs = Array.isArray(r.jobStatuses) ? r.jobStatuses : [];
+            const num = (v) => { const n = Number(v); return isFinite(n) ? n : 0; };
+            const jobLinesArr = jobs.map((j, i) => {
+                const done = j.status === 'completed';
+                const tagTxt = j.tagLabel ? `[${tgEsc(j.tagLabel)}${j.count > 1 ? ' ×' + j.count : ''}] ` : '';
+                const head = `${i + 1}. ${tagTxt}${tgEsc(j.appliance || j.customer || '—')} — ${done ? '✅' : '❌'}`;
+                const cust = [
+                    j.customer && j.customer !== '—' ? `👤 ${tgEsc(j.customer)}` : '',
+                    j.phone ? `📱 ${tgEsc(j.phone)}` : '',
+                    j.address ? `📍 ${tgEsc(j.address)}` : ''
+                ].filter(Boolean).join(' | ');
+                return cust ? `${head}\n${cust}` : head;
+            });
+            let jobLines = jobLinesArr.join('\n\n');
+            if (jobLines.length > 3300) jobLines = jobLines.slice(0, 3300) + '\n…';
+            let reasonList = jobs.filter(j => j.status !== 'completed' && j.reason).map(j => j.reason);
+            if (!reasonList.length) reasonList = Array.isArray(r.notCompletedReasons) ? r.notCompletedReasons.slice() : [];
+            const reasonLines = reasonList.map(x => `ካልተጠናቀቀ ምክንያቱ: ${tgEsc(x)}`).join('\n');
+            const expLines = (Array.isArray(r.expenseItems) ? r.expenseItems : []).filter(x => x.location || x.amount)
+                .map(x => `${tgEsc(x.location || '—')} ${x.amount} ብር`).join('፣ ') || '—';
+            const ex = (k) => ({ count: num(r[k + 'Count']), income: num(r[k + 'Income']), expense: num(r[k + 'Expense']), staffShare: num(r[k + 'StaffShare']) });
+            const extraLines = [['referral', '🔗 ሪፈራል'], ['correction', '🛠️ እርማት']].map(([k, l]) => [ex(k), l]).filter(([e]) => e.count > 0)
+                .map(([e, l]) => `${l}: ${e.count} ስራ | ገቢ ${e.income} ብር | ወጪ ${e.expense} ብር | ለሠራተኛ ${e.staffShare} ብር`).join('\n');
+            const wN = (r.warrantyPhotoURLs || []).length, rN = (r.receiptURLs || []).length;
+            const lateN = num(r.photosFailed);
+            const _blk = (...lines) => lines.filter(l => l !== '' && l != null).join('\n');
+            const totalIncome = r.totalIncome != null ? r.totalIncome : (r.income || 0);
+            return [
+                _blk(
+                    '📋 የሀላል ዕለታዊ የባለሙያ ሪፖርት',
+                    '✅ በአስተዳዳሪ ጸድቋል',
+                    `👷 የባለሙያ ስም: ${tgEsc(r.technicianName || r.technician || '')}`,
+                    `📅 ቀን: ${formatEthDate(repDate)} ዓ.ም (${tgEsc(r.date || r.dateKey || '')})`,
+                    `🕐 የተላከበት ሰዓት: ${techEthTimeStr(sub)}`,
+                    `📆 ዕለት: ${tgEsc(r.day || '')}`
+                ),
+                _blk(
+                    `1️⃣ የተላኩ ስራዎች ብዛት: ${num(r.totalSent != null ? r.totalSent : r.jobs)}`,
+                    `2️⃣ የተጠናቀቁ ስራዎች ብዛት: ${num(r.completedCount)}`,
+                    `3️⃣ ያልተጠናቀቁ ስራዎች ብዛት: ${num(r.notCompletedCount)}`
+                ),
+                _blk('📋 የስራ ዝርዝር', jobLines || '—', reasonLines, extraLines),
+                _blk(
+                    `💰 5️⃣ ጠቅላላ ገቢ: ${totalIncome} ብር`,
+                    `🧾 6️⃣ ጠቅላላ ወጪ: ${num(r.totalExpense)} ብር`
+                ),
+                `የወጪ ዝርዝር: ${expLines}`,
+                _blk(
+                    `💵 7️⃣ ጠቅላላ ትርፍ: ${num(r.profit)} ብር`,
+                    `📊 8️⃣ የባለሙያ ድርሻ (%): ${num(r.techSharePercent)}%`,
+                    `🏦 9️⃣ ወደ ድርጅቱ የገባ ገንዘብ: ${num(r.deposited)} ብር`,
+                    '🎤 🔟 ተጨማሪ ማብራሪያ / አስተያየት:'
+                ),
+                tgEsc([r.expenseDetails, r.remarks].filter(Boolean).join(' — ') || '—'),
+                _blk('የድርጅቱ ጊዜያዊ የገቢ አካውንት', '1000422578068', 'Fuad Museyd Hassen'),
+                '📌 ተጨማሪ ማያያዝ ወይም መላክ ያለባቸው',
+                _blk(
+                    wN ? `✅ ተያይዟል (${wN} ፎቶ) — የዋራንቲ ካርድ እና ሎጎ ፎቶ` : '❌ አልተያያዘም — የዋራንቲ ካርድ እና ሎጎ ፎቶ',
+                    rN ? `✅ ተያይዟል (${rN} ፎቶ) — የባንክ ደረሰኝ` : '❌ አልተያያዘም — የባንክ ደረሰኝ',
+                    lateN ? `ℹ️ ${lateN} ፎቶ በቀጥታ ቀድሞ ተልኳል` : ''
+                )
+            ].filter(x => x !== '').join('\n\n');
+        }
+        async function reportSendPhotoUrls(urls, caption) {
+            const list = (urls || []).filter(u => typeof u === 'string' && u);
+            let failed = 0;
+            const call = async (chunk, start) => {
+                const payload = { urls: chunk, captions: chunk.map((_, k) => `${caption} (${start + k + 1}/${list.length})`) };
+                for (let a = 0; a < 2; a++) {
+                    try { const res = await callWorker('sendTelegramPhotoUrls', payload); if (res && res.ok) return true; } catch (e) { console.warn('photo url send failed', e); }
+                    await new Promise(r => setTimeout(r, 1200));
+                }
+                return false;
+            };
+            for (let i = 0; i < list.length; i += 5) {
+                const chunk = list.slice(i, i + 5);
+                if (await call(chunk, i)) continue;
+                if (chunk.length > 1) { for (let k = 0; k < chunk.length; k++) { if (!(await call([chunk[k]], i + k))) failed++; } }
+                else failed++;
+            }
+            return failed === 0;
+        }
+        /** ሪፖርቱ ሲጸድቅ ጽሁፍ + ፎቶ ወደ ቴሌግራም (force=true → ያልደረሰውን እንደገና) */
+        async function reportTgOnApprove(reportId, force) {
+            if (_repTgBusy.has(reportId)) return { skipped: true };
+            _repTgBusy.add(reportId);
+            try {
+                const snap = await db.collection('dailyReports').doc(reportId).get(); // የመጨረሻው (በአድሚን የተስተካከለው) ስሪት
+                if (!snap.exists) return { skipped: true };
+                const r = snap.data(); r.id = reportId;
+                if (!r.tgDeferred) return { skipped: true };                     // የድሮ ሪፖርት — ቀድሞ ተልኳል
+                const textDone = !!r.tgSentAt;
+                if (textDone && !(force && r.tgPhotosOk === false)) return { skipped: true };
+                let textOk = textDone;
+                if (!textDone) {
+                    const text = reportTgText(r);
+                    textOk = await techSendTelegramNotification(text);
+                    if (!textOk) { await new Promise(x => setTimeout(x, 1500)); textOk = await techSendTelegramNotification(text); }
+                }
+                let photosOk = true;
+                if (textOk) {
+                    const cap = `${r.technicianName || r.technician || ''} — ${r.date || r.dateKey || ''}`;
+                    const w = r.warrantyPhotoURLs || [], rc = r.receiptURLs || [];
+                    if (w.length) photosOk = (await reportSendPhotoUrls(w, `📸 ዋራንቲ ካርድ — ${cap}`)) && photosOk;
+                    if (rc.length) photosOk = (await reportSendPhotoUrls(rc, `🏦 የባንክ ደረሰኝ — ${cap}`)) && photosOk;
+                    await db.collection('dailyReports').doc(reportId).update({ tgSentAt: textDone ? r.tgSentAt : new Date(), tgPhotosOk: photosOk });
+                }
+                return { textOk, photosOk };
+            } finally { _repTgBusy.delete(reportId); }
+        }
+        function reportTgToast(tg) {
+            if (!tg || tg.skipped) return;
+            if (!tg.textOk) showToast('⚠️ ሪፖርቱ ጸድቋል፣ ነገር ግን ወደ ቴሌግራም አልደረሰም — በሪፖርቱ ዝርዝር «📤 ወደ ቴሌግራም ላክ» ይጫኑ', 'error');
+            else if (!tg.photosOk) showToast('⚠️ ሪፖርቱ ወደ ቴሌግራም ደርሷል፣ ፎቶዎች ግን አልደረሱም — በሪፖርቱ ዝርዝር «📤 ወደ ቴሌግራም ላክ» ይጫኑ', 'error');
+            else showToast('📤 ሪፖርቱ (ከፎቶዎች ጋር) ወደ ቴሌግራም ተልኳል', 'success');
+        }
+        async function resendReportTelegram(reportId) {
+            try { showToast('📤 በመላክ ላይ...', 'success'); reportTgToast(await reportTgOnApprove(reportId, true)); closeModal(); }
+            catch (e) { showToast('❌ ' + (e && e.message ? e.message : e), 'error'); }
+        }
+        function reportTgResendBtn(r) {
+            return (r && r.approved && r.tgDeferred && (!r.tgSentAt || r.tgPhotosOk === false))
+                ? ` <button class="btn btn-primary" onclick="resendReportTelegram('${r.id}')"><i class="fab fa-telegram-plane"></i> 📤 ወደ ቴሌግራም ላክ</button>` : '';
+        }
+
         async function approveReport(reportId, techId, fromCard) {
             try {
                 const report = allDailyReports.find(r => r.id === reportId);
                 if (!techId && report) techId = report.technicianId;
+                // 📸 ፎቶዎች ገና እየተጫኑ ከሆነ (ቴክኒሻኑ ገጹን ገና ካልጨረሰ) ያስጠነቅቃል — ከጸደቀ በኋላ ፎቶ ወደ ቴሌግራም አይደርስም
+                if (report && report.tgDeferred && !report.tgSentAt && report.photosPending && !confirm('📸 የቴክኒሻኑ ፎቶዎች ገና እየተጫኑ ነው።\n\nጥቂት ቆይተው ቢያጸድቁ ፎቶዎቹ ከሪፖርቱ ጋር ወደ ቴሌግራም ይላካሉ።\n\nቢሆንም አሁን ይጽደቅ?')) return;
                 await db.collection('dailyReports').doc(reportId).update({
                     approved: true,
                     approvedAt: new Date(),
@@ -6891,6 +7093,9 @@ ${locationLine}
                     timestamp: new Date()
                 });
                 showToast('✅ ሪፖርት ጸድቋል!', 'success');
+                // 📤 ወደ ቴሌግራም (ጽሁፍ + ፎቶዎች) — ሲጸድቅ ብቻ
+                try { reportTgToast(await reportTgOnApprove(reportId)); }
+                catch (tgErr) { console.warn('approve → telegram failed', tgErr); showToast('⚠️ ሪፖርቱ ጸድቋል፣ ወደ ቴሌግራም መላክ ግን አልተቻለም — በሪፖርቱ ዝርዝር «📤 ወደ ቴሌግራም ላክ» ይጫኑ', 'error'); }
                 if (fromCard) closeModal(); else viewTechReportHistory(techId);
             } catch (error) {
                 showToast('❌ ' + error.message, 'error');
