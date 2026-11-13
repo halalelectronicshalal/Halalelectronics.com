@@ -1353,6 +1353,15 @@
             color: #FFFFFF;
             border-color: var(--primary);
         }
+        .apinfo{display:none;margin-top:8px;padding:9px 11px;border-radius:10px;background:#EFF6FF;border:1.5px solid #93C5FD;font-size:.84rem;line-height:1.6;color:#1E3A8A}
+        .apinfo.warn{background:#FFFBEB;border-color:#F59E0B;color:#92400E}
+        .apinfo .po{margin-top:6px;padding:7px 9px;border-radius:8px;background:#fff;border:1px solid #FCD34D}
+        .apinfo .stg{font-weight:700}
+        .apinfo .say{margin-top:5px;padding:6px 8px;border-radius:8px;background:#ECFDF5;border:1px solid #A7F3D0;color:#065F46}
+        .apinfo .pbtn{margin-top:6px;border:0;border-radius:8px;padding:8px 10px;font-weight:700;cursor:pointer;background:#D97706;color:#fff;width:100%}
+        .apinfo .pbtn:disabled{opacity:.6}
+        .apinfo select,.apinfo input{width:100%;margin-top:6px;padding:8px;font-size:.85rem;border:1.5px solid #E2E8F0;border-radius:8px}
+        .apinfo .phint{margin-top:6px;font-size:.78rem;opacity:.9}
     </style>
 <script>window.APP_ROLE = "admin";</script>
     <script src="he-eye.js" defer></script>
@@ -8048,12 +8057,12 @@ ${locationLine}
                     </div>
                     <div class="form-group">
                         <label>ስልክ ቁጥር *</label>
-                        <input type="tel" id="phoneOrderPhone" placeholder="ስልክ ቁጥር" onchange="phoneOrderCorrSuggest()" />
+                        <input type="tel" id="phoneOrderPhone" placeholder="ስልክ ቁጥር" onchange="phoneOrderCorrSuggest()" oninput="admPhoneWatch('phoneOrderPhone')" /><div class="apinfo" id="phoneOrderPhoneInfo"></div>
                     </div>
                 </div>
                 <div class="form-group">
                     <label>☎️ ተለዋጭ ስልክ <span style="font-weight:400; color:var(--text-muted,#64748B);">(አማራጭ)</span></label>
-                    <input type="tel" id="phoneOrderAltPhone" placeholder="ተለዋጭ ስልክ ቁጥር" onchange="phoneOrderCorrSuggest()" />
+                    <input type="tel" id="phoneOrderAltPhone" placeholder="ተለዋጭ ስልክ ቁጥር" onchange="phoneOrderCorrSuggest()" oninput="admPhoneWatch('phoneOrderAltPhone')" /><div class="apinfo" id="phoneOrderAltPhoneInfo"></div>
                 </div>
                 <div class="form-group">
                     <label>አድራሻ (ክፍለ ከተማ እና ሰፈር) *</label>
@@ -8225,6 +8234,137 @@ ${locationLine}
             hint.innerHTML = `${r.customer ? `📁 የደንበኛ ፋይል: <b>${escHtml(r.customer.name)}</b>${r.customer.address ? ' · ' + escHtml(r.customer.address) : ''}<br>` : ''}🛠️ ቀድሞ ስራውን የሰራው: <b>${escHtml(r.tech)}</b>${has ? ' — ተመርጧል (መቀየር ከፈለጉ ሌላ ይምረጡ)' : ' — (አሁን በቴክኒሻን ዝርዝር ውስጥ የለም)'}`;
         }
 
+        // ============================================================
+        // 📁 ስልክ ቁጥሩ ቀድሞ ተመዝግቧል? (ከቁጥሩ መጻፊያ ስር ማሳወቂያ) — ከኦፕሬተር ገጽ ጋር አንድ አይነት
+        // • ያልተጠናቀቀ ስራ ካለ → በምን ደረጃ እንዳለ ያሳያል + ለደንበኛው የሚነገር ጽሁፍ + መልእክት ስራው ወዳለበት (ቴክኒሻን / መዳቢ) ብቻ
+        // • ሌላ ስራ ከሆነ → «ትዕዛዝ አስገባ» እንደቀድሞ፤ ከደንበኛው ታሪክ ጋር ተያይዞ ይመዘገባል
+        // • ቀድሞ የተጠናቀቀ ስራ ካለ → ብዛቱ እና የመጨረሻው ይታያል፤ አዲሱ ስራ በታሪክ ውስጥ ይጨመራል
+        // ============================================================
+        const _admPl = {}, _admPlT = {};
+        function admPhoneWatch(fieldId) {
+            clearTimeout(_admPlT[fieldId]);
+            const box = document.getElementById(fieldId + 'Info');
+            const key = custKey((document.getElementById(fieldId) || {}).value || '');
+            if (!key || key.length < 9) { if (box) { box.style.display = 'none'; box.innerHTML = ''; } delete _admPl[fieldId]; return; }
+            _admPlT[fieldId] = setTimeout(() => admPhoneShow(fieldId, key), 500);
+        }
+        async function admLookupPhone(raw) {
+            const d = String(raw || '').replace(/\D/g, '');
+            const out = { customer: null, orders: [], open: [], done: [], err: null };
+            if (d.length < 9) return out;
+            const n9 = d.slice(-9), vars = ['0' + n9, n9, '251' + n9, '+251' + n9], seen = {};
+            const add = (o) => { if (!o || seen[o.id] || o.orderType === 'referral' || o.workTag) return; seen[o.id] = 1; out.orders.push(o); };
+            (allOrders || []).forEach(o => { if (custKey(o.phone) === '0' + n9 || custKey(o.altPhone) === '0' + n9) add(o); });
+            for (const field of ['phone', 'altPhone']) {
+                try { const snap = await db.collection('orders').where(field, 'in', vars).get(); snap.forEach(x => add(Object.assign({ id: x.id }, x.data()))); }
+                catch (e) { console.warn('phone lookup', field, e); out.err = e; }
+            }
+            try {
+                const c = await db.collection('customers').doc('0' + n9).get();
+                if (c.exists) { const x = c.data() || {}; out.customer = { name: x.name || '', address: (x.address && x.address !== '—') ? x.address : '' }; }
+            } catch (e) { /* ችላ */ }
+            const ms = (v) => { const t = v && v.toDate ? v.toDate() : (v ? new Date(v) : null); return t && !isNaN(t) ? t.getTime() : 0; };
+            out.orders.sort((a, b) => ms(b.completedAt || b.createdAt) - ms(a.completedAt || a.createdAt));
+            out.open = out.orders.filter(o => !['Completed', 'Cancelled', 'Canceled', 'Rescheduled'].includes(o.status || 'Pending'));
+            out.done = out.orders.filter(o => o.status === 'Completed');
+            if (!out.customer) { const f = out.orders.find(o => o.fullName || o.address); if (f) out.customer = { name: f.fullName || '', address: f.address || '' }; }
+            return out;
+        }
+        function admStage(o) {
+            const st = o.status || 'Pending', t = o.technician || '';
+            if (st === 'Pending') {
+                if (o.isAppointment && o.rescheduledDate) return `📅 ቀጠሮ ተይዟል (${o.rescheduledDate}${o.rescheduledTime ? ' ' + o.rescheduledTime : ''})${t ? ' — ቴክኒሻን: ' + t : ''}`;
+                if (!t && o.returnedAt) return '↩️ ከቴክኒሻን ተመልሷል — በአድሚን እጅ ነው (እንደገና አልተመደበም)';
+                return t ? `📋 ለ${t} ተመድቧል (ገና አልጀመረም)` : '⏳ በመጠባበቅ ላይ — ገና ቴክኒሻን አልተመደበም';
+            }
+            if (st === 'Assigned') return `🛠️ ${t ? 'በ' + t + ' እጅ' : 'ተመድቧል'} — በሂደት ላይ`;
+            return `${ADM_STATUS_AM[st] || st} — ያልተጠናቀቀ${t ? ' (ከ' + t + ' ጋር ተይዟል)' : ''}`;
+        }
+        function admSay(o) {
+            const st = o.status || 'Pending', t = o.technician || '';
+            if (st === 'Pending' && o.isAppointment && o.rescheduledDate) return `ቀጠሮዎ ${o.rescheduledDate}${o.rescheduledTime ? ' ' + o.rescheduledTime : ''} ላይ ነው${t ? '፤ ቴክኒሻኑ ' + t + ' ነው' : ''}። አሳውቀናል።`;
+            if (st === 'Pending' && !t) return o.returnedAt ? 'ስራዎ ከቴክኒሻኑ ተመልሷል፤ አሁን ሌላ ቴክኒሻን እንመድባለን።' : 'ስራዎ ተመዝግቧል፤ ቴክኒሻን ለመመደብ በሂደት ላይ ነው። ለመዳቢው አሳውቀናል።';
+            if (st === 'Pending' || st === 'Assigned') return `ስራዎ ለቴክኒሻን ${t} ተመድቧል። አሁን አሳውቀነዋል፤ ተመልሶ ይደውልልዎታል።`;
+            return `ስራዎ ገና አልተጠናቀቀም (${(ADM_STATUS_AM[st] || st).replace(/^\S+\s/, '')})፤ በቴክኒሻን ${t} ጋር ይገኛል። አሳውቀናል።`;
+        }
+        function admJobDest(o) {
+            if (o.technician) return { kind: 'tech', label: 'ለ' + o.technician + ' ላክ' };
+            if (o.returnedAt) return { kind: 'admin', label: 'ከታች ቴክኒሻን መድቡ (ከቴክኒሻን ተመልሷል)' };
+            return { kind: 'dispatcher', label: 'ለመዳቢ ላክ (ገና አልተመደበም)' };
+        }
+        async function admPhoneShow(fieldId, key) {
+            const box = document.getElementById(fieldId + 'Info'); if (!box) return;
+            box.className = 'apinfo'; box.style.display = 'block'; box.innerHTML = '⏳ ስልክ ቁጥሩ እየተፈለገ ነው...';
+            let res;
+            try { res = await admLookupPhone((document.getElementById(fieldId) || {}).value || ''); } catch (e) { box.style.display = 'none'; return; }
+            if (custKey((document.getElementById(fieldId) || {}).value || '') !== key) return;   // ስልኩ ተቀይሯል
+            _admPl[fieldId] = { key, res };
+            if (!res.orders.length && !res.customer) {
+                box.innerHTML = res.err ? 'ℹ️ ታሪክ መፈለግ አልተቻለም' : 'ℹ️ ይህ ስልክ ቁጥር በፋይል ውስጥ አልተገኘም — ሌላ ቁጥር (ተለዋጭ) ካለው ደንበኛውን ይጠይቁ።';
+                return;
+            }
+            const parts = [`📁 <b>ይህ ስልክ ቁጥር ቀድሞ ተመዝግቧል</b>${res.customer && res.customer.name ? ' — ' + escHtml(res.customer.name) : ''}${res.customer && res.customer.address ? ' · ' + escHtml(res.customer.address) : ''}`];
+            if (res.open.length) {
+                box.className = 'apinfo warn';
+                parts.push(`⚠️ <b>ያልተጠናቀቀ ስራ አለ (${res.open.length})</b>`);
+                res.open.slice(0, 5).forEach(o => {
+                    const dt = o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : null;
+                    const dest = admJobDest(o), k = fieldId + '_' + o.id;
+                    parts.push(`<div class="po">🔌 ${escHtml(o.appliance || '—')}${dt ? ' · 📅 ' + escHtml(formatEthDate(dt)) : ''}<br><span class="stg">${escHtml(admStage(o))}</span>
+                        <div class="say">🗣️ <b>ለደንበኛው ይንገሩ፦</b> «${escHtml(admSay(o))}»</div>
+                        ${dest.kind === 'admin' ? `<div class="phint">↩️ ስራው በአድሚን እጅ ነው — ከታች «ወዲያውኑ ለቴክኒሻን መድብ» ላይ ቴክኒሻን መርጠው መመደብ ይችላሉ።</div>` : `
+                        <select id="apr_${k}">
+                            <option value="ደንበኛው ደውሎ ሰራተኛ እንዳልመጣ ተናግሯል">👷 ሰራተኛ አልመጣም</option>
+                            <option value="ደንበኛው ደውሎ ሰራተኛው እንዳልደወለለት ተናግሯል">📵 ሰራተኛ አልደወለም</option>
+                            <option value="ደንበኛው ደውሎ ስራው እንዲፈጠን ጠይቋል">⏩ ስራው ይፍጠን</option>
+                            <option value="ደንበኛው ደውሎ ስለ ስራው ሁኔታ ጠይቋል">❓ ስለ ስራው ሁኔታ ጠየቀ</option>
+                        </select>
+                        <input id="apt_${k}" placeholder="ተጨማሪ መልእክት (አማራጭ)" />
+                        <button type="button" class="pbtn" id="apn_${k}" onclick="admNotifyOpen('${fieldId}','${o.id}')">🔔 ${escHtml(dest.label)} (አዲስ ትዕዛዝ አይፈጠርም)</button>`}</div>`);
+                });
+            }
+            if (res.done.length) {
+                const l = res.done[0], dd = (l.completedAt || l.createdAt), d2 = dd && dd.toDate ? dd.toDate() : null;
+                parts.push(`✅ ቀድሞ የተጠናቀቁ ስራዎች፦ <b>${res.done.length}</b> — የመጨረሻው፦ ${escHtml(l.appliance || '—')}${d2 ? ' (' + escHtml(formatEthDate(d2)) + ')' : ''}${l.technician ? ' · ቴክኒሻን: ' + escHtml(l.technician) : ''}`);
+            }
+            parts.push(`<div class="phint">ℹ️ ሌላ ስራ ከሆነ ፎርሙን ሞልተው «ትዕዛዝ አስገባ» ይጫኑ — ከደንበኛው ታሪክ ጋር ተያይዞ ይመዘገባል${res.done.length ? '፤ የተጠናቀቁት ስራዎች በታሪኩ ውስጥ ይቆያሉ' : ''}።</div>`);
+            box.innerHTML = parts.join('');
+        }
+        // 🔔 መልእክት ስራው ወዳለበት ብቻ (ቴክኒሻን / መዳቢ)፤ አዲስ ትዕዛዝ አይፈጠርም
+        async function admNotifyOpen(fieldId, orderId) {
+            const c = _admPl[fieldId]; const o = c && c.res.orders.find(x => x.id === orderId); if (!o) return;
+            const k = fieldId + '_' + orderId;
+            const reason = ((document.getElementById('apr_' + k) || {}).value) || 'ደንበኛው ደውሎ ስለ ስራው ጠይቋል';
+            const extra = (((document.getElementById('apt_' + k) || {}).value) || '').trim();
+            const text = '📞 ' + reason + (extra ? ' — ' + extra : '');
+            const dest = admJobDest(o);
+            const btn = document.getElementById('apn_' + k); if (btn) btn.disabled = true;
+            let delivered = false;
+            try {
+                try {
+                    await db.collection('orders').doc(orderId).update({
+                        operatorNotes: firebase.firestore.FieldValue.arrayUnion({ text, by: 'አስተዳዳሪ', byId: 'admin', at: new Date() }),
+                        operatorNote: text, operatorNoteAt: new Date(), operatorNoteBy: 'አስተዳዳሪ', hasOperatorNote: true
+                    });
+                    delivered = true;
+                } catch (e) { console.warn('note update failed', e); }
+                const title = '📞 ደንበኛ ደውሏል — ' + (o.fullName || '');
+                const body = `${o.appliance || ''} — ${text.replace('📞 ', '')} (አስተዳዳሪ)`;
+                if (dest.kind === 'tech') {
+                    const t = (allStaff || []).find(x => x.name === o.technician) || (typeof allTechnicians !== 'undefined' ? allTechnicians : []).find(x => x.name === o.technician);
+                    if (t && t.id) { try { await callWorker('pushNotify', { audience: ['staff:' + t.id], title, body, url: new URL('technician.html', location.href).href }); delivered = true; } catch (e) { console.warn('tech push failed', e); } }
+                    if (t && t.chatId) {
+                        try { await callWorker('sendTelegramMessage', { bot: 'tech', targetChatId: t.chatId, text: `📞 *ደንበኛ ደውሏል*\n🆔 #${orderId.substring(0, 8)}\n👤 ${o.fullName || '—'}\n📞 ${o.phone || '—'}\n🔌 ${o.appliance || '—'}\n📌 ደረጃ: ${admStage(o)}\n💬 ${text.replace('📞 ', '')}` }); delivered = true; } catch (e) { console.warn('tech telegram failed', e); }
+                    }
+                } else {
+                    try { await callWorker('pushNotify', { audience: ['newOrders'], title, body, url: new URL('new-orders.html', location.href).href }); delivered = true; } catch (e) { console.warn('dispatcher push failed', e); }
+                }
+                try { await db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'customer_called_again', details: `📞 ደንበኛ ደውሏል — ስራ #${orderId.substring(0, 8)} (${o.fullName || ''}) → ${dest.label}: ${text}`, timestamp: new Date() }); } catch (e) {}
+                if (delivered) { showToast('✅ መልእክቱ ተልኳል (አዲስ ትዕዛዝ አልተፈጠረም)', 'success'); if (btn) btn.textContent = '✅ ተልኳል'; }
+                else { showToast('❌ መልእክት መላክ አልተቻለም', 'error'); if (btn) btn.disabled = false; }
+            } catch (ex) { showToast('❌ ' + ex.message, 'error'); if (btn) btn.disabled = false; }
+        }
+
         async function submitPhoneOrder() {
             const fullName = document.getElementById('phoneOrderName').value.trim();
             const phone = document.getElementById('phoneOrderPhone').value.trim();
@@ -8305,6 +8445,19 @@ ${locationLine}
                     createdByName: 'አስተዳዳሪ',
                     createdAt: new Date()
                 };
+                // 📁 ቀድሞ የተመዘገበ ደንበኛ — ታሪኩ ከአዲሱ ስራ ጋር ይያያዛል
+                try {
+                    const _pc = _admPl.phoneOrderPhone;
+                    const _h = (_pc && _pc.key === custKey(phone)) ? _pc.res : await admLookupPhone(phone);
+                    if (_h && _h.orders.length) {
+                        orderData.returningCustomer = true;
+                        orderData.previousOrdersCount = _h.orders.length;
+                        orderData.previousCompletedCount = _h.done.length;
+                        orderData.previousOpenCount = _h.open.length;
+                        orderData.previousOrderIds = _h.orders.slice(0, 10).map(x => x.id);
+                        if (_h.done[0]) orderData.lastCompletedOrderId = _h.done[0].id;
+                    }
+                } catch (e) { console.warn('history link failed (non-fatal)', e); }
 
                 const docRef = await db.collection('orders').add(orderData);
 
