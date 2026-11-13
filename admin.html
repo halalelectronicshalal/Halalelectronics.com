@@ -4482,7 +4482,10 @@
                 customersFromDB = {};
                 snapshot.forEach(doc => {
                     const data = doc.data();
-                    if (data.phone) customersFromDB[data.phone] = data;
+                    if (data.phone) {
+                        const _k = custKey(data.phone), _p = customersFromDB[_k];
+                        customersFromDB[_k] = _p ? Object.assign({}, _p, data, { phone: _k, history: (_p.history || []).concat(data.history || []) }) : Object.assign({}, data, { phone: _k });
+                    }
                 });
                 mergeAndRenderCustomers();
             }, (err) => {
@@ -4496,12 +4499,12 @@
                 snapshot.forEach(doc => {
                     const data = doc.data();
                     if (data.fullName && data.phone) {
-                        const key = data.phone;
+                        const key = custKey(data.phone);
                         if (!customersMap[key]) {
                             customersMap[key] = {
                                 id: key,
                                 name: data.fullName,
-                                phone: data.phone,
+                                phone: key,
                                 address: data.address || '—',
                                 orders: 0,
                                 lastOrder: data.createdAt || null
@@ -5708,7 +5711,12 @@ document.addEventListener('focusout', function (e) {
             const d = schedApptDate(o);
             return d && schedDaysUntil(d) > 0 ? { date: d, key: getDateKey(d) } : null;
         }
+        function corrAdminTag(o) {
+            if (!o || !o.needsAdminAssign || o.status !== 'Pending') return '';
+            return `<div style="margin-top:4px; padding:6px 8px; border-radius:6px; background:#FEF3C7; border:2px solid #F59E0B; color:#92400E; font-size:0.8rem; font-weight:700;">⚠️ 🛠️ እርማት — አድሚን ይመድብ${o.correctionTechnician ? ' · ቀድሞ የሰራው: ' + escHtml(o.correctionTechnician) : ''}${o.adminNote ? '<div style="font-weight:600; margin-top:2px;">📝 ' + escHtml(o.adminNote) + '</div>' : ''}</div>`;
+        }
         function schedHoldTag(o) {
+            if (o && o.needsAdminAssign && o.status === 'Pending' && !(o.scheduledTechnician && o.scheduledReleaseDate)) return corrAdminTag(o);
             if (!o || !o.scheduledTechnician || !o.scheduledReleaseDate) return '';
             return `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#EFF6FF; color:#1E40AF; font-size:0.78rem;">📌 ለ <b>${escHtml(o.scheduledTechnician)}</b> ተይዟል — ቀኑ (${escHtml(o.scheduledReleaseDate)}) ሲደርስ ለሰራተኛው በራሱ ይላካል</div>`;
         }
@@ -5730,7 +5738,8 @@ document.addEventListener('focusout', function (e) {
             }
 
             // 📅 ቀጠሮ ያልደረሰ ስራ → ለሰራተኛው አይላክም፤ ይያዛል፣ ቀኑ ሲደርስ Worker በራሱ ይልካል
-            const _ord0 = (allOrders || []).find(x => x.id === orderId) || null;
+            let _ord0 = (allOrders || []).find(x => x.id === orderId) || null;
+            if (!_ord0) { try { const _s0 = await db.collection('orders').doc(orderId).get(); if (_s0.exists) { _ord0 = _s0.data(); _ord0.id = orderId; } } catch (e) { /* ችላ */ } } // ገና ወደ ዝርዝሩ ያልገባ አዲስ ትዕዛዝ እንኳ ቀጠሮው ይጠበቃል
             const _hold = _ord0 && _ord0.status === 'Pending' ? schedHoldInfo(_ord0) : null;
             if (_hold) {
                 const _t0 = allTechnicians.find(t => t.name === techName);
@@ -7042,12 +7051,19 @@ ${locationLine}
                     textOk = await techSendTelegramNotification(text);
                     if (!textOk) { await new Promise(x => setTimeout(x, 1500)); textOk = await techSendTelegramNotification(text); }
                 }
-                let photosOk = true;
+                // 📸 አዲስ ሪፖርት (tgPhotosEarly) → የባንክ ደረሰኝ + ዋራንቲ ፎቶ ቴክኒሻኑ ሪፖርት ሲያደርግ ወዲያውኑ ወደ ቴሌግራም ተልኳል፤
+                //    አሁን (ሲጸድቅ) የሚላከው ጽሁፉ ብቻ ነው። ፎቶ እንደገና የሚላከው ቀድሞ ሳይደርስ ከቀረ (tgPhotosOk === false) እና አድሚን «ላክ» ሲጫን ብቻ።
+                //    የቀድሞ (tgPhotosEarly የሌለው) ሪፖርት → እንደ ድሮው ፎቶ ከጽሁፉ ጋር ሲጸድቅ ይላካል።
+                const early = !!r.tgPhotosEarly;
+                let photosOk = early ? (r.tgPhotosOk !== false) : true;
                 if (textOk) {
                     const cap = `${r.technicianName || r.technician || ''} — ${r.date || r.dateKey || ''}`;
                     const w = r.warrantyPhotoURLs || [], rc = r.receiptURLs || [];
-                    if (w.length) photosOk = (await reportSendPhotoUrls(w, `📸 ዋራንቲ ካርድ — ${cap}`)) && photosOk;
-                    if (rc.length) photosOk = (await reportSendPhotoUrls(rc, `🏦 የባንክ ደረሰኝ — ${cap}`)) && photosOk;
+                    if (!early || (force && r.tgPhotosOk === false)) {
+                        photosOk = true;
+                        if (w.length) photosOk = (await reportSendPhotoUrls(w, `📸 ዋራንቲ ካርድ — ${cap}`)) && photosOk;
+                        if (rc.length) photosOk = (await reportSendPhotoUrls(rc, `🏦 የባንክ ደረሰኝ — ${cap}`)) && photosOk;
+                    }
                     await db.collection('dailyReports').doc(reportId).update({ tgSentAt: textDone ? r.tgSentAt : new Date(), tgPhotosOk: photosOk });
                 }
                 return { textOk, photosOk };
@@ -7073,7 +7089,7 @@ ${locationLine}
                 const report = allDailyReports.find(r => r.id === reportId);
                 if (!techId && report) techId = report.technicianId;
                 // 📸 ፎቶዎች ገና እየተጫኑ ከሆነ (ቴክኒሻኑ ገጹን ገና ካልጨረሰ) ያስጠነቅቃል — ከጸደቀ በኋላ ፎቶ ወደ ቴሌግራም አይደርስም
-                if (report && report.tgDeferred && !report.tgSentAt && report.photosPending && !confirm('📸 የቴክኒሻኑ ፎቶዎች ገና እየተጫኑ ነው።\n\nጥቂት ቆይተው ቢያጸድቁ ፎቶዎቹ ከሪፖርቱ ጋር ወደ ቴሌግራም ይላካሉ።\n\nቢሆንም አሁን ይጽደቅ?')) return;
+                if (report && report.tgDeferred && !report.tgPhotosEarly && !report.tgSentAt && report.photosPending && !confirm('📸 የቴክኒሻኑ ፎቶዎች ገና እየተጫኑ ነው።\n\nጥቂት ቆይተው ቢያጸድቁ ፎቶዎቹ ከሪፖርቱ ጋር ወደ ቴሌግራም ይላካሉ።\n\nቢሆንም አሁን ይጽደቅ?')) return;
                 await db.collection('dailyReports').doc(reportId).update({
                     approved: true,
                     approvedAt: new Date(),
@@ -7849,24 +7865,10 @@ ${locationLine}
         }
 
         function viewCustomer(phone) {
-            const customer = allCustomers.find(c => c.id === phone);
+            phone = custKey(phone);
+            const customer = allCustomers.find(c => c.id === phone || custKey(c.phone) === phone);
             if (!customer) return;
-            const orders = allOrders.filter(o => o.phone === phone);
-
-            let ordersHTML = '';
-            if (orders.length === 0) {
-                ordersHTML = '<p class="text-muted">ምንም ትዕዛዝ የለም</p>';
-            } else {
-                ordersHTML = '<ul style="list-style:none;">';
-                orders.forEach(o => {
-                    const date = o.createdAt?.toDate?.() || new Date();
-                    ordersHTML += `<li style="padding:4px 0; border-bottom:1px solid var(--border-light);">
-                        ${formatEthDate(date)} - ${o.appliance} - <span class="status-badge ${getStatusClass(o.status)}">${o.status}</span>
-                        ${o.price ? `- ${o.price} ብር` : ''}
-                    </li>`;
-                });
-                ordersHTML += '</ul>';
-            }
+            const ordersHTML = custHistoryHtml(phone);
 
             const bodyHTML = `
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
@@ -7877,7 +7879,7 @@ ${locationLine}
                     <div><strong>📅 የመጨረሻ:</strong> ${formatEthDate(customer.lastOrder) || '—'}</div>
                 </div>
                 <hr style="border:none; border-top:2px solid var(--border); margin:12px 0;" />
-                <h4>📋 የትዕዛዝ ታሪክ</h4>
+                <h4>📋 የደንበኛ ታሪክ (ስራ በጠየቀበት ቀን በዝርዝር)</h4>
                 ${ordersHTML}
             `;
             openModal(`👤 ${customer.name}`, bodyHTML);
@@ -7906,6 +7908,79 @@ ${locationLine}
 
         // ✅ FIX: ስልክ ቁጥሮች በተለያየ ፎርማት (+251..., 251..., 0...) ስለሚገቡ፣
         // ደንበኛ ሲመዘገብ ደንበኛው በ "ትዕዛዝ ይከታተሉ" ሲፈልግ እንዲገኝ ወደ አንድ ወጥ ፎርማት (0XXXXXXXXX) እንቀይራለን።
+        // ============================================================
+        // 📁 ደንበኛ ፋይል + ታሪክ — ደንበኛው ቀድሞ ከተመዘገበ እንደ አዲስ አይመዘገብም፤ በስልኩ (ፋይሉ) ላይ ታሪክ ይጨመራል
+        //   • ስልክ በተለያየ ፎርማት (09.., +2519.., 2519..) ቢገባ አንድ ደንበኛ ነው (ቁልፍ = 0 + የመጨረሻ 9  አሃዞች)
+        //   • ደንበኛው አዲስ ስራ ሲጠይቅ ስራው በጠየቀበት ቀን ይመዘገባል፤ ዝርዝሩ (መሳሪያ፣ ችግር፣ ቀጠሮ፣ የስራ አይነት...) በታሪክ ውስጥ ይቀመጣል
+        // ============================================================
+        function custKey(raw) {
+            const d = String(raw == null ? '' : raw).replace(/\D/g, '');
+            return d.length >= 9 ? '0' + d.slice(-9) : String(raw || '').trim();
+        }
+        async function custUpsertWithHistory(o) {
+            const key = custKey(o.phone);
+            if (!key) return { existing: false };
+            const ref = db.collection('customers').doc(key);
+            let snap = null;
+            try { snap = await ref.get(); } catch (e) { console.warn('customer read failed', e); }
+            const existing = !!(snap && snap.exists);
+            const now = new Date();
+            const entry = {
+                orderId: o.orderId || '',
+                requestedAt: now,
+                requestedDate: now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0'),
+                appointmentDate: o.appointmentDate || '',
+                appliance: o.appliance || '',
+                problem: o.problem || '',
+                workType: o.workType || 'new',
+                source: o.source || '',
+                address: o.address || '',
+                technician: o.technician || ''
+            };
+            const upd = {
+                phone: key,
+                lastOrderId: o.orderId || '',
+                lastOrderAt: now,
+                updatedAt: now,
+                totalOrders: firebase.firestore.FieldValue.increment(1),
+                history: firebase.firestore.FieldValue.arrayUnion(entry)
+            };
+            const cur = existing ? (snap.data() || {}) : null;
+            if (!existing && snap) { upd.name = o.name || ''; upd.address = o.address || '—'; upd.createdAt = now; }   // አዲስ ደንበኛ ብቻ ይመዘገባል
+            else if (existing && (!cur.address || cur.address === '—') && o.address) upd.address = o.address;          // ነባሩን ስም/አድራሻ አይተካም
+            await ref.set(upd, { merge: true });
+            return { existing, name: cur ? cur.name : '' };
+        }
+        function custHistoryHtml(phoneKey) {
+            const typeLbl = { new: '🆕 አዲስ', correction: '🛠️ እርማት', referral: '🔗 ሪፈራል' };
+            const ms = (v) => { const d = v && v.toDate ? v.toDate() : (v ? new Date(v) : null); return d && !isNaN(d) ? d.getTime() : 0; };
+            const rows = [];
+            const seen = new Set();
+            (allOrders || []).filter(o => custKey(o.phone) === phoneKey || custKey(o.altPhone) === phoneKey).forEach(o => {
+                seen.add(o.id);
+                rows.push({ t: ms(o.createdAt), id: o.id, appliance: o.appliance, problem: o.problem, type: o.orderType || 'new', appt: o.appointmentDate || o.rescheduledDate || '', tech: o.technician || o.scheduledTechnician || '', status: o.status, price: o.price, address: o.address });
+            });
+            const c = (typeof customersFromDB !== 'undefined' && customersFromDB[phoneKey]) || null;
+            ((c && c.history) || []).forEach(h => {
+                if (h.orderId && seen.has(h.orderId)) return;
+                rows.push({ t: ms(h.requestedAt), id: h.orderId, appliance: h.appliance, problem: h.problem, type: h.workType || 'new', appt: h.appointmentDate || '', tech: h.technician || '', status: '', price: null, address: h.address, fromHistory: true });
+            });
+            rows.sort((a, b) => b.t - a.t);
+            if (!rows.length) return '<p class="text-muted">ምንም ትዕዛዝ የለም</p>';
+            return rows.map(r => {
+                const d = r.t ? new Date(r.t) : null;
+                const when = d ? `${formatEthDate(d)} · ${d.toLocaleTimeString('am-ET', { hour: '2-digit', minute: '2-digit' })}` : '—';
+                return `<div style="padding:8px 0; border-bottom:1px solid var(--border-light); font-size:0.88rem; line-height:1.55;">
+                    <div><strong>📅 ጥያቄ የቀረበበት ቀን: ${escHtml(when)}</strong> ${r.status ? `<span class="status-badge ${getStatusClass(r.status)}">${escHtml(r.status)}</span>` : ''} <span style="font-size:0.75rem;">${escHtml(typeLbl[r.type] || '')}</span></div>
+                    <div>🔌 ${escHtml(r.appliance || '—')}${r.problem ? ' — 🛠️ ' + escHtml(r.problem) : ''}</div>
+                    ${r.appt && r.appt !== (d ? (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')) : '') ? `<div>🗓️ ቀጠሮ: ${escHtml(r.appt)}</div>` : ''}
+                    ${r.tech ? `<div>👨‍🔧 ቴክኒሻን: ${escHtml(r.tech)}</div>` : ''}
+                    ${r.address ? `<div>📍 ${escHtml(r.address)}</div>` : ''}
+                    ${r.price ? `<div>💰 ${escHtml(r.price)} ብር</div>` : ''}
+                </div>`;
+            }).join('');
+        }
+
         function normalizePhone(raw) {
             if (!raw) return '';
             let p = raw.toString().trim().replace(/[\s\-()]/g, '');
@@ -7928,8 +8003,14 @@ ${locationLine}
                 return;
             }
 
+            // 📁 ቀድሞ የተመዘገበ ደንበኛ እንደ አዲስ አይመዘገብም — ፋይሉ (ታሪኩ) ይከፈታል
+            if (customersFromDB[custKey(phone)] || customersFromOrders[custKey(phone)]) {
+                showToast('📁 ይህ ደንበኛ ቀድሞ ተመዝግቧል — እንደ አዲስ አይመዘገብም፣ ታሪኩ ይታያል', 'error');
+                viewCustomer(custKey(phone));
+                return;
+            }
             try {
-                await db.collection('customers').doc(phone).set({
+                await db.collection('customers').doc(custKey(phone)).set({
                     name: name,
                     phone: phone,
                     address: address || '—',
@@ -8068,6 +8149,33 @@ ${locationLine}
             document.querySelectorAll('[id^="phoneOrderApptEth_"], #phoneOrderApptTime').forEach(el => { el.disabled = on; });
         }
 
+        // 🛠️ እርማት — ስልኩ ቀድሞ በሰርቨር (orders / customers) ውስጥ ካለ ቀድሞ ስራውን የሰራውን ቴክኒሻን ያገኛል
+        async function findPreviousTechnicianByPhone(phones) {
+            const vars = [];
+            phones.forEach(p => { const d = String(p || '').replace(/\D/g, ''); if (d.length >= 9) { const n9 = d.slice(-9); ['0' + n9, n9, '251' + n9, '+251' + n9].forEach(v => { if (!vars.includes(v)) vars.push(v); }); } });
+            if (!vars.length) return { tech: '', customer: null };
+            const tsOf = (o) => { const c = o.completedAt || o.assignedAt || o.createdAt; const d = c && c.toDate ? c.toDate() : (c ? new Date(c) : null); return d && !isNaN(d) ? d.getTime() : 0; };
+            const rank = (o) => (o.status === 'Completed' ? 1e15 : 0) + tsOf(o);
+            let best = null, customer = null;
+            for (const field of ['phone', 'altPhone']) {
+                try {
+                    const snap = await db.collection('orders').where(field, 'in', vars).get();
+                    snap.forEach(d => {
+                        const o = d.data();
+                        if (o.orderType === 'referral') return;
+                        if (!customer && (o.fullName || o.address)) customer = { name: o.fullName || '', address: o.address || '' };
+                        const t = (o.status === 'Completed' || o.status === 'Assigned') ? (o.technician || '') : '';
+                        if (t && (!best || rank(o) > rank(best))) best = o;
+                    });
+                } catch (e) { console.warn('orders lookup', field, e); }
+            }
+            try {
+                const c = await db.collection('customers').doc(vars[0]).get();
+                if (c.exists) { const x = c.data(); customer = { name: x.name || (customer && customer.name) || '', address: (x.address && x.address !== '—' ? x.address : '') || (customer && customer.address) || '' }; }
+            } catch (e) { /* ችላ */ }
+            return { tech: best ? best.technician : '', customer };
+        }
+
         async function submitPhoneOrder() {
             const fullName = document.getElementById('phoneOrderName').value.trim();
             const phone = document.getElementById('phoneOrderPhone').value.trim();
@@ -8083,16 +8191,43 @@ ${locationLine}
                 ? 'ዛሬውኑ (በፍጥነት)'
                 : formatEthDate(new Date(apptKey + 'T12:00:00'), true) + (apptTime ? ' ሰዓት ' + fmtTime12(apptTime) : '');
             const problem = document.getElementById('phoneOrderProblem').value.trim();
-            const technician = document.getElementById('phoneOrderTechnician').value;
+            let technician = document.getElementById('phoneOrderTechnician').value;
             const workType = (document.getElementById('phoneOrderWorkType') || {}).value || 'new';
             const WORK_TYPE_LABELS = { new: '🆕 አዲስ', correction: '🛠️ እርማት', referral: '🔗 ሪፈራል' };
-            const corrTech = workType === 'correction' ? ((document.getElementById('phoneOrderCorrTech') || {}).value || '').trim() : '';
+            let corrTech = workType === 'correction' ? ((document.getElementById('phoneOrderCorrTech') || {}).value || '').trim() : '';
             const corrDate = workType === 'correction' ? ((document.getElementById('phoneOrderCorrDate') || {}).value || '').trim() : '';
             const referredBy = workType === 'referral' ? ((document.getElementById('phoneOrderReferredBy') || {}).value || '').trim() : '';
 
             if (!fullName || !phone || !address || !appliance) {
                 showToast('እባክዎ ስም፣ ስልክ፣ አድራሻ እና መሳሪያ ይሙሉ', 'error');
                 return;
+            }
+            // 🛠️ እርማት፦ ደንበኛው ቀድሞ በፋይል ውስጥ ካለ ስራውን የሰራውን ቴክኒሻን ይጠቁማል — መቀየር ከፈለጉ ይቀይራሉ፤ ካልሆነ ለዚያው ቴክኒሻን በራሱ ይመደባል
+            // (ቀጠሮው የወደፊት ቀን ከሆነ ለቴክኒሻኑ ይያዛል፤ «እስከሚደርስ ቀጠሮ» ካርድ ውስጥ ብቻ ይገባል፣ ቀኑ ሲደርስ በራሱ ይላካል)
+            if (workType === 'correction') {
+                let prev = { tech: '', customer: null };
+                try { prev = await findPreviousTechnicianByPhone([phone, altPhone]); } catch (e) { console.warn('prev tech lookup failed', e); }
+                if (prev.tech) {
+                    if (!corrTech) {
+                        corrTech = prev.tech;
+                        const _ct = document.getElementById('phoneOrderCorrTech'); if (_ct) _ct.value = prev.tech;
+                    }
+                    if (!technician) {
+                        const known = fieldTechs().some(t => t.name === prev.tech);
+                        const fileLine = prev.customer ? `📁 የደንበኛ ፋይል: ${prev.customer.name || '—'}${prev.customer.address ? ' · ' + prev.customer.address : ''}\n` : '';
+                        if (known) {
+                            if (confirm(`${fileLine}🛠️ ቀድሞ ስራውን የሰራው ቴክኒሻን: ${prev.tech}\n\n✅ OK = ለ ${prev.tech} ይመደብ\n❌ Cancel = ሌላ ቴክኒሻን ልምረጥ`)) {
+                                technician = prev.tech;
+                            } else {
+                                showToast('👨‍🔧 ከታች «ወዲያውኑ ለቴክኒሻን መድብ» ላይ የሚፈልጉትን ቴክኒሻን ይምረጡ፣ ከዚያ እንደገና «ትዕዛዝ አስገባ» ይጫኑ', 'error');
+                                const _sel = document.getElementById('phoneOrderTechnician'); if (_sel) { _sel.scrollIntoView({ behavior: 'smooth', block: 'center' }); _sel.focus(); }
+                                return;
+                            }
+                        } else {
+                            showToast(`ℹ️ ቀድሞ የሰራው ቴክኒሻን (${prev.tech}) አሁን በዝርዝር ውስጥ የለም — ቴክኒሻን ይምረጡ`, 'error');
+                        }
+                    }
+                }
             }
             if (workType === 'correction' && !corrTech) { showToast('እርማት የሚጠየቅበትን ቴክኒሻን ይምረጡ', 'error'); document.getElementById('phoneOrderCorrTech').focus(); return; }
             if (workType === 'referral' && !referredBy) { showToast('ሪፈራሉ ከማን እንደመጣ ይጻፉ', 'error'); document.getElementById('phoneOrderReferredBy').focus(); return; }
@@ -8123,6 +8258,10 @@ ${locationLine}
                 };
 
                 const docRef = await db.collection('orders').add(orderData);
+
+                // 📁 ደንበኛው ቀድሞ ከተመዘገበ ስልኩ ላይ ታሪክ ይጨመራል (እንደ አዲስ አይመዘገብም)
+                try { await custUpsertWithHistory({ phone, name: fullName, address, orderId: docRef.id, appliance, problem: orderData.problem, workType, source: orderData.source, appointmentDate: apptKey, technician }); }
+                catch (custErr) { console.warn('customer history failed (non-fatal)', custErr); }
 
                 await db.collection('activity').add({
                     user: 'አስተዳዳሪ',
