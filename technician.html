@@ -2177,6 +2177,16 @@
                     <div id="locationStatus" style="font-size:0.85rem; color:var(--text-muted); margin-top:4px;"></div>
                 </div>
 
+                <!-- 📦 መጠባበቂያ ስራዎች (ለ፣ ሠ፣ ሰ ተብለው የተጠናቀቁ — ከቴክኒሻኑ ጋር የሚቆዩ) -->
+                <div class="card" id="heldJobsCard" style="display:none; border:2px solid #F59E0B; background:#FFFBEB;">
+                    <div class="card-header">
+                        <h3>📦 መጠባበቂያ ስራዎች</h3>
+                        <span class="text-muted" id="heldJobsCount">0 ስራዎች</span>
+                    </div>
+                    <div style="font-size:0.74rem; color:#92400E; margin-bottom:8px;">ወደ አድሚን አልተመለሱም — ከእርስዎ ጋር ተቀምጠዋል። ስራው ከተሰራ «አጠናቅ» (ሀ) ይጫኑ፤ ለአድሚን መመለስ ከፈለጉ ብቻ «ስራ መልስ» ይጫኑ።</div>
+                    <div id="heldJobsContainer"></div>
+                </div>
+
                 <!-- My Jobs -->
                 <div class="card">
                     <div class="card-header">
@@ -4726,7 +4736,7 @@
             if (!r) return;
             const n = (v) => (v == null || v === '') ? '—' : escHtml(v);
             const jobs = (r.jobStatuses || []).map((j, i) =>
-                `<div style="font-size:0.85rem;">${i + 1}. ${escHtml(j.customer || '—')} — ${j.status === 'completed' ? '✅ ተሰርቷል' : '❌ አልተሰራም' + (j.reason ? ' (' + escHtml(j.reason) + ')' : '')}</div>`).join('');
+                `<div style="font-size:0.85rem;">${i + 1}. ${escHtml(j.customer || '—')} — ${j.status === 'completed' ? '✅ ተሰርቷል' : '❌ አልተሰራም' + (j.reason ? ' (' + escHtml(j.reason) + ')' : '')}${j.onHold ? ' <span style="color:#92400E; font-weight:700;">📦 ያልተጠናቀቀ — ከቴክኒሻኑ ጋር ተይዟል</span>' : ''}${(j.completedAfterHold && j.completedDateEth) ? ' <span style="color:#047857; font-weight:700;">✅ ከመጠባበቂያ የተጠናቀቀው: ' + escHtml(j.completedDateEth) + '</span>' : ''}${j.assignedDateEth ? '<div style="font-size:0.75rem; color:var(--text-muted);">📅 የተመደበበት ቀን: ' + escHtml(j.assignedDateEth) + '</div>' : ''}</div>`).join('');
             const gallery = (urls, label) => (urls && urls.length)
                 ? `<div style="font-size:0.8rem; margin-top:10px; color:var(--text-muted);">${label}</div><div class="photo-gallery">${urls.map(u => `<img src="${u}" alt="" onclick="window.open('${u}','_blank')" />`).join('')}</div>` : '';
             const html = `
@@ -6174,10 +6184,19 @@ ${locationLine}
                     j.phone ? `📱 ${tgEsc(j.phone)}` : '',
                     j.address ? `📍 ${tgEsc(j.address)}` : ''
                 ].filter(Boolean).join(' | ');
-                return cust ? `${head}\n${cust}` : head;
+                const ex = [
+                    j.assignedDateEth ? `📅 ተመድቧል: ${tgEsc(j.assignedDateEth)}` : '',
+                    j.onHold ? '📦 ያልተጠናቀቀ — ከቴክኒሻኑ ጋር ተይዟል' : '',
+                    (j.completedAfterHold && j.completedDateEth) ? `✅ ከመጠባበቂያ የተጠናቀቀው: ${tgEsc(j.completedDateEth)}` : ''
+                ].filter(Boolean).join(' | ');
+                return [head, cust, ex].filter(Boolean).join('\n');
             });
             let jobLines = jobLinesArr.join('\n\n');
             if (jobLines.length > 3300) jobLines = jobLines.slice(0, 3300) + '\n…';
+            if (Array.isArray(r.heldJobs) && r.heldJobs.length) {
+                jobLines += `\n\n📦 ከቴክኒሻኑ ጋር ያሉ ያልተጠናቀቁ ስራዎች (${r.heldJobs.length}):\n` + r.heldJobs.map(h =>
+                    `• ${tgEsc(h.customer || '—')} - ${tgEsc(h.appliance || '—')} (${tgEsc(h.statusLabel || '')}${h.reason ? ': ' + tgEsc(h.reason) : ''}) — 📅 ተመድቧል: ${tgEsc(h.assignedDateEth || '')}`).join('\n');
+            }
             let reasonList = jobs.filter(j => j.status !== 'completed' && j.reason).map(j => j.reason);
             if (!reasonList.length) reasonList = Array.isArray(r.notCompletedReasons) ? r.notCompletedReasons.slice() : [];
             const reasonLines = reasonList.map(x => `ካልተጠናቀቀ ምክንያቱ: ${tgEsc(x)}`).join('\n');
@@ -10050,17 +10069,90 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         function techOpenJobs() {
             return myOrders.filter(o => !TECH_CLOSED_STATUSES.includes(o.status) && !isFutureAppointment(o));
         }
+
+        // ============================================================
+        // 📦 መጠባበቂያ ስራዎች — ለ (ዋጋ አልተስማሙም)፣ ሠ (ሌላ)፣ ሰ (ስልክ አይነሳም) ሲጠናቀቁ
+        // ስራው ወደ አድሚን አይመለስም፤ ከቴክኒሻኑ ጋር በመጠባበቂያ ካርድ ላይ ይቀመጣል።
+        // «ስራ መልስ» (ረ) ሲባል ብቻ ወደ አድሚን ይመለሳል፤ «አጠናቅ» (ሀ) ሲባል ደግሞ ይጠናቀቃል።
+        // ============================================================
+        const TECH_HOLD_STATUSES = ['PriceNotAgreed', 'Other', 'PhoneNoAnswer'];
+        function techIsHeld(o) {
+            return !!(o && o.onHold === true && TECH_HOLD_STATUSES.includes(o.status) && !o.workTag);
+        }
+        function techHeldJobs() {
+            const ms = (v) => (v && v.toDate) ? v.toDate().getTime() : (v ? (new Date(v).getTime() || 0) : 0);
+            return myOrders.filter(techIsHeld).sort((a, b) => ms(b.heldAt) - ms(a.heldAt));
+        }
+        function techHeldLabel(st) {
+            return st === 'PriceNotAgreed' ? '💰 ለ. ዋጋ አልተስማሙም' : st === 'PhoneNoAnswer' ? '📵 ሰ. ስልክ አይነሳም' : '📌 ሠ. ሌላ ምክንያት';
+        }
+        // ስራው የተመደበበት ቀን (ካልተመደበ የተመዘገበበት ቀን)
+        function techAssignedTs(o) { return (o && (o.assignedAt || o.createdAt)) || null; }
+        function techDateKeyOf(ts) {
+            try {
+                const d = ts && ts.toDate ? ts.toDate() : (ts instanceof Date ? ts : (ts ? new Date(ts) : null));
+                return (d && !isNaN(d.getTime())) ? getBizDateKey(d) : '';
+            } catch (e) { return ''; }
+        }
+        function techHeldReasonText(o) {
+            if (!o) return '';
+            if (o.status === 'Other') return o.otherReason || o.heldReason || '';
+            return o.heldReason || '';
+        }
+        function renderHeldJobs() {
+            const card = document.getElementById('heldJobsCard');
+            const box = document.getElementById('heldJobsContainer');
+            if (!card || !box) return;
+            const jobs = techHeldJobs();
+            if (!jobs.length) { card.style.display = 'none'; box.innerHTML = ''; return; }
+            card.style.display = 'block';
+            const cnt = document.getElementById('heldJobsCount'); if (cnt) cnt.textContent = jobs.length + ' ስራዎች';
+            box.innerHTML = jobs.map(o => {
+                const reason = techHeldReasonText(o);
+                return `
+                    <div class="job-card" style="border-left:4px solid #F59E0B; background:#fff;">
+                        <div class="top">
+                            <span class="id">🆔 #${techEsc(o.id.substring(0, 8))}</span>
+                            <span class="status-badge status-pending">${techHeldLabel(o.status)}</span>
+                        </div>
+                        <div class="customer">👤 ${techEsc(o.fullName || '—')} <span>📱 ${techEsc(o.phone || '—')}${o.altPhone ? ' · ☎️ ' + techEsc(o.altPhone) : ''}</span></div>
+                        <div class="details">
+                            <div><span class="label">🔧 መሳሪያ:</span> <span class="value">${techEsc(o.appliance || '—')}</span></div>
+                            <div><span class="label">📍 አድራሻ:</span> <span class="value">${techEsc(o.address || '—')}</span></div>
+                            <div><span class="label">📅 የተመደበበት ቀን:</span> <span class="value">${techEsc(formatEthDate(techAssignedTs(o)))}</span></div>
+                            <div><span class="label">📦 የተቀመጠበት:</span> <span class="value">${techEsc(formatEthDate(o.heldAt))}</span></div>
+                            ${reason ? `<div style="grid-column: span 2;"><span class="label">📝 ምክንያት:</span> <span class="value">${techEsc(reason)}</span></div>` : ''}
+                        </div>
+                        ${(Array.isArray(o.operatorNotes) && o.operatorNotes.length) ? `<div style="background:#EEF2FF; border-radius:8px; padding:8px 10px; margin:6px 0; font-size:0.85rem;"><strong>✍️ ከኦፕሬተር መልእክት:</strong>${o.operatorNotes.map(n => `<div style="margin-top:4px; white-space:pre-wrap;">💬 ${techEsc(n.text || '')} <small style="color:#64748B;">— ${techEsc(n.by || '')}</small></div>`).join('')}</div>` : ''}
+                        <div class="actions">
+                            <a href="tel:${techEsc(o.phone || '')}" class="btn btn-primary btn-sm"><i class="fas fa-phone"></i> ደውል</a>
+                            <button class="btn btn-success btn-sm" onclick="techHeldComplete('${o.id}')"><i class="fas fa-check-circle"></i> አጠናቅ</button>
+                            <button class="btn btn-danger btn-sm" onclick="techHeldReturn('${o.id}')"><i class="fas fa-undo"></i> ስራ መልስ</button>
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+        // ከመጠባበቂያ ካርድ «አጠናቅ» → የአጠናቅ ትር ላይ «ሀ. ተሰራ» (ዋጋ/ወጪ) ይከፈታል
+        window.techHeldComplete = function (orderId) {
+            startCompletion(orderId);
+            const b = document.querySelector('.option-btn[data-value="done"]'); if (b) b.click();
+        };
+        // ከመጠባበቂያ ካርድ «ስራ መልስ» → «ረ. ስራ መልስ» ይከፈታል (ወደ አድሚን የሚመለሰው ይህን ሲያስገቡ ብቻ ነው)
+        window.techHeldReturn = function (orderId) {
+            startCompletion(orderId);
+            const b = document.querySelector('.option-btn[data-value="return-job"]'); if (b) b.click();
+        };
         function techFillCompletePicker() {
             const sel = document.getElementById('completeJobPicker');
             if (!sel) return;
             if (document.activeElement === sel) return; // 📱 ክፍት ሳለ እንደገና አይሳልም
-            const jobs = techOpenJobs();
+            const jobs = techOpenJobs().concat(techHeldJobs());
             const cur = (document.getElementById('completeOrderId').value || '').trim();
-            const _sig = jobs.map(o => o.id + (o.fullName || '') + (o.appliance || '')).join('|') + '#' + cur;
+            const _sig = jobs.map(o => o.id + (o.fullName || '') + (o.appliance || '') + (techIsHeld(o) ? 'H' : '')).join('|') + '#' + cur;
             if (sel.dataset.sig === _sig) return;
             sel.dataset.sig = _sig;
             sel.innerHTML = '<option value="">— ስራ ይምረጡ —</option>' + jobs.map(o =>
-                `<option value="${o.id}" ${o.id === cur ? 'selected' : ''}>${(o.fullName || '—')} • ${(o.appliance || '—')} • #${o.id.substring(0, 6)}</option>`).join('');
+                `<option value="${o.id}" ${o.id === cur ? 'selected' : ''}>${techIsHeld(o) ? '📦 ' : ''}${(o.fullName || '—')} • ${(o.appliance || '—')} • #${o.id.substring(0, 6)}</option>`).join('');
             if (!cur && jobs.length === 1) {
                 sel.value = jobs[0].id;
                 document.getElementById('completeOrderId').value = jobs[0].id;
@@ -10072,6 +10164,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const container = document.getElementById('myJobsContainer');
             const pendingJobs = techOpenJobs();
             try { techFillCompletePicker(); } catch (e) {}
+            try { renderHeldJobs(); } catch (e) { console.warn('held jobs render failed', e); }
 
             const count = pendingJobs.length;
             document.getElementById('jobCount').textContent = count + ' ስራዎች';
@@ -10466,6 +10559,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 // ⏰ ያደረ ስራ በተመዘገበበት ቀን ይመዘገባል (ትላንት የተመዘገበ ዛሬ ቢጠናቀቅ ገቢ/ወጪው በትላንት ቀን ይሆናል)
                 const _jobOrder = myOrders.find(o => o.id === orderId);
                 const jobDay = (_jobOrder && techIsOvernightOrder(_jobOrder)) ? techOrderDateKey(_jobOrder) : today;
+                const _wasHeld = !skipMain && techIsHeld(_jobOrder);
                 const orderUpdate = skipMain ? Promise.resolve() : db.collection('orders').doc(orderId).update({
                     status: 'Completed',
                     price: priceNum,
@@ -10475,7 +10569,10 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     completedAt: new Date(),
                     completionOption: 'done',
                     technicianNotes: notes || '',
-                    jobDateKey: jobDay
+                    jobDateKey: jobDay,
+                    // 📦 ከመጠባበቂያ ካርድ የተጠናቀቀ ከሆነ — ምልክት + የተጠናቀቀበት ቀን በግልጽ ይመዘገባል
+                    onHold: false,
+                    ...(_wasHeld ? { completedAfterHold: true, previousHeldStatus: _jobOrder.status, heldCompletedAt: new Date(), heldCompletedDateKey: today } : {})
                 });
                 const txIncome = skipMain ? Promise.resolve() : db.collection('transactions').add({
                     description: `ክፍያ: ስራ #${orderId.substring(0,8)}`,
@@ -10521,7 +10618,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
                 if (queued) showToast('⏳ ኔትወርክ ደካማ ነው — ተመዝግቧል፣ ሲገናኝ በራሱ ይላካል', 'error');
                 else if (skipMain) showToast(`✅ ${activeExtras.map(x => x.def.label).join(' እና ')} ወደ ሪፖርት ተመዝግቧል`, 'success');
-                else showToast(`✅ ስራ ተጠናቋል! ገቢ ${netIncome} ብር ተመዝግቧል${activeExtras.length ? ' (+ ' + activeExtras.map(x => x.def.label).join('፣ ') + ')' : ''}`, 'success');
+                else showToast(`✅ ${_wasHeld ? 'ከመጠባበቂያ ስራ ተጠናቋል' : 'ስራ ተጠናቋል'}! ገቢ ${netIncome} ብር ተመዝግቧል${activeExtras.length ? ' (+ ' + activeExtras.map(x => x.def.label).join('፣ ') + ')' : ''}`, 'success');
 
                 document.getElementById('donePrice').value = '';
                 document.getElementById('doneExpense').value = '';
@@ -10632,7 +10729,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     completionOption: 'price-not-agreed',
                     calledOffice: called,
                     completedAt: new Date(),
-                    technician: technicianName
+                    technician: technicianName,
+                    onHold: true, heldAt: new Date(), heldReason: 'ዋጋ አልተስማሙም'   // 📦 ወደ አድሚን አይመለስም — በመጠባበቂያ ካርድ ይቀመጣል
                 });
                 sendCustomerSmsFor('price-not-agreed', orderId);
                 await tgMuted(`
@@ -10642,7 +10740,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 📞 *ቢሮ ተደውሏል:* ${called === 'yes' ? '✅ አዎ' : '❌ አይ'}
                 📅 ${formatEthDateTime(new Date())}
                 `);
-                showToast('✅ ውጤቱ ተመዝግቧል', 'success');
+                showToast('✅ ውጤቱ ተመዝግቧል — ስራው በ«📦 መጠባበቂያ ስራዎች» ካርድ ላይ ከእርስዎ ጋር ተቀምጧል (ወደ አድሚን አልተመለሰም)', 'success');
+                try { renderMyJobs(); } catch (e) {}
                 resetCompletionForm();
             } catch (error) { showToast('❌ ' + error.message, 'error'); }
         }
@@ -10731,7 +10830,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     completionOption: 'other',
                     otherReason: reason,
                     completedAt: new Date(),
-                    technician: technicianName
+                    technician: technicianName,
+                    onHold: true, heldAt: new Date(), heldReason: reason   // 📦 ወደ አድሚን አይመለስም — በመጠባበቂያ ካርድ ይቀመጣል
                 });
                 sendCustomerSmsFor('other', orderId);
                 await tgMuted(`
@@ -10741,7 +10841,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 📝 *ማብራሪያ:* ${reason}
                 📅 ${formatEthDateTime(new Date())}
                 `);
-                showToast('✅ ውጤቱ ተመዝግቧል', 'success');
+                showToast('✅ ውጤቱ ተመዝግቧል — ስራው በ«📦 መጠባበቂያ ስራዎች» ካርድ ላይ ከእርስዎ ጋር ተቀምጧል (ወደ አድሚን አልተመለሰም)', 'success');
+                try { renderMyJobs(); } catch (e) {}
                 resetCompletionForm();
             } catch (error) { showToast('❌ ' + error.message, 'error'); }
         }
@@ -10762,6 +10863,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     status: 'Pending',
                     technician: '',
                     completionOption: 'return-job',
+                    onHold: false,   // 📦 ከመጠባበቂያ ካርድ ይወጣል (ወደ አድሚን ተመልሷል)
                     returnedFrom: technicianName,
                     returnedFromId: technicianId || '',
                     returnReason: reason,
@@ -10805,7 +10907,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     completionOption: 'no-answer',
                     calledOffice: called,
                     completedAt: new Date(),
-                    technician: technicianName
+                    technician: technicianName,
+                    onHold: true, heldAt: new Date(), heldReason: 'ስልክ አይነሳም'   // 📦 ወደ አድሚን አይመለስም — በመጠባበቂያ ካርድ ይቀመጣል
                 });
                 sendCustomerSmsFor('no-answer', orderId);
                 db.collection('activity').add({
@@ -10821,7 +10924,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 📞 *ከቢሮ ተደውሏል:* ${called === 'yes' ? '✅ አዎ' : '❌ አይ'}
                 📅 ${formatEthDateTime(new Date())}
                 `);
-                showToast('✅ ውጤቱ ተመዝግቧል', 'success');
+                showToast('✅ ውጤቱ ተመዝግቧል — ስራው በ«📦 መጠባበቂያ ስራዎች» ካርድ ላይ ከእርስዎ ጋር ተቀምጧል (ወደ አድሚን አልተመለሰም)', 'success');
+                try { renderMyJobs(); } catch (e) {}
                 resetCompletionForm();
                 try { renderMyJobs(); } catch (e) {}
             } catch (error) { showToast('❌ ' + error.message, 'error'); }
@@ -11319,8 +11423,26 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // ============================================================
         // LOAD REPORT JOBS (for the daily report form)
         // ============================================================
+        // ⚠️ ሪፖርት ሲያደርጉ ከእርስዎ ጋር ያለ ያልተጠናቀቀ (መጠባበቂያ) ስራ ካለ ምልክት ያደርጋል
+        function techRenderHeldReportBanner() {
+            const container = document.getElementById('reportJobList');
+            if (!container || !container.parentElement) return;
+            let b = document.getElementById('reportHeldBanner');
+            if (!b) {
+                b = document.createElement('div');
+                b.id = 'reportHeldBanner';
+                container.parentElement.insertBefore(b, container);
+            }
+            const held = techHeldJobs();
+            if (!held.length) { b.innerHTML = ''; b.style.display = 'none'; return; }
+            b.style.cssText = 'display:block; margin:6px 0 10px; padding:8px 10px; background:#FFFBEB; border:1.5px solid #F59E0B; border-radius:8px; font-size:0.8rem; color:#92400E;';
+            b.innerHTML = `<strong>📦 ከእርስዎ ጋር ያልተጠናቀቀ ስራ አለ (${held.length})</strong> — በሪፖርቱ ላይ ምልክት ይደረግበታል፦` +
+                held.map(o => `<div style="margin-top:3px;">• ${techEsc(o.fullName || '—')} - ${techEsc(o.appliance || '—')} <span style="font-weight:700;">(${techHeldLabel(o.status)})</span> — 📅 ተመድቧል: ${techEsc(formatEthDate(techAssignedTs(o)))}</div>`).join('');
+        }
+
         function loadReportJobs() {
             const container = document.getElementById('reportJobList');
+            try { techRenderHeldReportBanner(); } catch (e) {}
             const today = techReportDateChosen || new Date().toISOString().split('T')[0]; // 📅 የተመረጠ ቀን ወይም ዛሬ
             try { techStartSentReports(); } catch (e) {}
             // ✅ FIX: ቀድሞ የተጣራው በ 'createdAt' ብቻ ስለነበር፣ ከትናንት/ካለፈ ቀን ተመድቦ ዛሬ የተጠናቀቀ
@@ -11391,7 +11513,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 `;
                 html += `
                     <div class="job-status-row">
-                        <span class="job-info">${index+1}. ${order.fullName || '—'} - ${order.appliance || '—'}${techIsOvernightOrder(order) ? ` <span style="display:inline-block; background:#FEE2E2; color:#B91C1C; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">⏰ ያደረ — ከ${techEsc(techOrderDateKey(order))}</span>` : ''}</span>
+                        <span class="job-info">${index+1}. ${order.fullName || '—'} - ${order.appliance || '—'}${techIsOvernightOrder(order) ? ` <span style="display:inline-block; background:#FEE2E2; color:#B91C1C; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">⏰ ያደረ — ከ${techEsc(techOrderDateKey(order))}</span>` : ''}${techIsHeld(order) ? ` <span style="display:inline-block; background:#FEF3C7; color:#92400E; border:1px solid #F59E0B; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">📦 ያልተጠናቀቀ — ከእኔ ጋር ተይዟል</span>` : ''}${order.completedAfterHold ? ` <span style="display:inline-block; background:#D1FAE5; color:#047857; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">✅ ከመጠባበቂያ የተጠናቀቀው: ${techEsc(formatEthDate(order.completedAt))}</span>` : ''}<br><small style="color:var(--text-muted);">📅 የተመደበበት ቀን: ${techEsc(formatEthDate(techAssignedTs(order)))}</small></span>
                         <select class="job-status-select" data-order-id="${order.id}">
                             ${statusOptions}
                         </select>
@@ -11728,7 +11850,14 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     tagLabel: order && order.workTagLabel ? order.workTagLabel : '',
                     count: order && order.workTag ? techJobCount(order) : 1,
                     jobDate: order ? techOrderDateKey(order) : '',            // ስራው የተመዘገበበት ቀን
-                    overnight: !!(order && techIsOvernightOrder(order))        // ⏰ ያደረ ስራ ምልክት
+                    overnight: !!(order && techIsOvernightOrder(order)),       // ⏰ ያደረ ስራ ምልክት
+                    assignedDate: order ? techDateKeyOf(techAssignedTs(order)) : '',                              // 📅 ስራው የተመደበበት ቀን
+                    assignedDateEth: order && techAssignedTs(order) ? formatEthDate(techAssignedTs(order)) : '',
+                    onHold: !!(order && techIsHeld(order)),                                                          // 📦 ከቴክኒሻኑ ጋር ያለ ያልተጠናቀቀ ስራ
+                    heldStatus: (order && techIsHeld(order)) ? order.status : '',
+                    completedAfterHold: !!(order && order.completedAfterHold),                                       // ✅ ከመጠባበቂያ ቆይቶ የተጠናቀቀ
+                    completedDate: (order && order.completedAfterHold) ? techDateKeyOf(order.completedAt) : '',
+                    completedDateEth: (order && order.completedAfterHold && order.completedAt) ? formatEthDate(order.completedAt) : ''
                 });
             });
 
@@ -11885,6 +12014,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 completedCount: completedCount,
                 notCompletedCount: notCompletedCount,
                 jobStatuses: jobStatuses,
+                heldJobsCount: techHeldJobs().length,   // 📦 ከቴክኒሻኑ ጋር ያሉ ያልተጠናቀቁ ስራዎች
+                heldJobs: techHeldJobs().map(o => ({
+                    orderId: o.id, customer: o.fullName || '—', phone: o.phone || '', appliance: o.appliance || '',
+                    status: o.status, statusLabel: techHeldLabel(o.status), reason: techHeldReasonText(o) || '',
+                    assignedDate: techDateKeyOf(techAssignedTs(o)),
+                    assignedDateEth: techAssignedTs(o) ? formatEthDate(techAssignedTs(o)) : ''
+                })),
                 workTypes: workTypes,
                 notCompletedReasons: notCompletedReasons,
                 totalIncome: totalIncome,
@@ -12023,7 +12159,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     const canConvert = !done;
                     let h = `<div style="padding:8px 0; border-top:1px solid var(--border-light); font-size:0.82rem;">
                         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-                            <span>${i + 1}. ${techEsc(j.customer || '—')} - ${techEsc(j.appliance || '—')}${j.overnight ? ` <span style="background:#FEE2E2; color:#B91C1C; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">⏰ ያደረ — ከ${techEsc(j.jobDate || '')}</span>` : ''}${(!done && j.reason) ? ' <span style="color:var(--text-muted);">(' + techEsc(j.reason) + ')</span>' : ''}</span>
+                            <span>${i + 1}. ${techEsc(j.customer || '—')} - ${techEsc(j.appliance || '—')}${j.overnight ? ` <span style="background:#FEE2E2; color:#B91C1C; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">⏰ ያደረ — ከ${techEsc(j.jobDate || '')}</span>` : ''}${(!done && j.reason) ? ' <span style="color:var(--text-muted);">(' + techEsc(j.reason) + ')</span>' : ''}${j.onHold ? ' <span style="background:#FEF3C7; color:#92400E; border:1px solid #F59E0B; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">📦 ያልተጠናቀቀ — ከእኔ ጋር</span>' : ''}${(j.completedAfterHold && j.completedDateEth) ? ' <span style="color:#047857; font-size:0.72rem; font-weight:700;">✅ ከመጠባበቂያ የተጠናቀቀው: ' + techEsc(j.completedDateEth) + '</span>' : ''}${j.assignedDateEth ? '<br><small style="color:var(--text-muted);">📅 የተመደበበት ቀን: ' + techEsc(j.assignedDateEth) + '</small>' : ''}</span>
                             ${done ? `<span class="status-badge status-completed">✅ ተሰራ${doneLater ? ' — በሚቀጥለው ሪፖርት ይገባል' : ''}</span>`
                                    : `<select onchange="techSentStatusChange(this, '${r.id}', ${i})" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); font-size:0.8rem;"><option value="">❌ አልተጠናቀቀም</option><option value="done">✅ ተሰራ (ሀ)</option></select>`}
                         </div>`;
@@ -12177,7 +12313,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 const orderUpd = {
                     status: 'Completed', price: price, expense: expense, expenseNote: expenseNote, netIncome: net,
                     completedAt: now, completionOption: 'done', technicianNotes: notes || '',
-                    notCompletedReason: '', convertedFromStatus: order.status || '', convertedFromReportId: reportId, jobDateKey: jobDay
+                    notCompletedReason: '', convertedFromStatus: order.status || '', convertedFromReportId: reportId, jobDateKey: jobDay,
+                    onHold: false, ...(techIsHeld(order) ? { completedAfterHold: true, previousHeldStatus: order.status, heldCompletedAt: now, heldCompletedDateKey: today } : {})
                 };
                 if (inPlace) orderUpd.convertedInReportId = reportId;
                 batch.update(orderRef, orderUpd);
