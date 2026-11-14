@@ -1367,8 +1367,8 @@
     <script src="he-eye.js" defer></script>
 <script>
 /* 📸 የሪፖርት ፎቶ፦ ከ Storage ካልተጫነ በሪፖርቱ ውስጥ ራሱ የተቀመጠው ቅጂ (warrantyData / receiptData) ይታያል */
-function phRc(r) { r = r || {}; var u = phRc(r) || []; return u.length ? u : (r.receiptData || []); }
-function phWr(r) { r = r || {}; var u = phWr(r) || []; return u.length ? u : (r.warrantyData || []); }
+function phRc(r) { r = r || {}; var u = r.receiptURLs || []; return u.length ? u : (r.receiptData || []); }
+function phWr(r) { r = r || {}; var u = r.warrantyPhotoURLs || []; return u.length ? u : (r.warrantyData || []); }
 document.addEventListener('click', function (e) {
     var i = e.target;
     if (i && i.tagName === 'IMG' && /^data:image\//.test(i.src || '') && i.closest && i.closest('.photo-gallery')) {
