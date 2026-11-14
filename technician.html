@@ -9463,22 +9463,92 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         let freeLocationBusy = false;
         // 🔒 «ነጻ ነኝ» መቆለፊያ — ስራ ሲመደብለት ይከፈታል (ስራውን ከጨረሰ በኋላ እንደገና መላክ ይችላል)
         // 🌙 ያደረ ሪፖርት፦ ከዛሬ (የስራ ቀን) በፊት የተጠናቀቀ/የተመዘገበ ስራ ሪፖርት ሳይደረግበት ካደረ «ነጻ ነኝ» ማለት አይቻልም
-        function techOvernightUnreportedJobs() {
-            if (!techSentReportsLoaded) return [];
-            const todayKey = getBizDateKey();
+        // 🌙 ስራው «ያደረ» ነው? = (ከዛሬ በፊት የተዘጋ) ወይም (ከተመዘገበበት/ከተመለሰበት/ከተቀጠረበት ቀን በኋላ በሌላ ቀን የተዘጋ)።
+        // የቀጠሮ ስራ በቀጠሮው ቀን ከተሰራ «ያደረ» አይደለም (ቀጠሮው ቀን የስራው መነሻ ቀን ነው)።
+        function techJobBaseKey(o) {
+            const k = (v) => { try { const d = v && v.toDate ? v.toDate() : (v ? new Date(v) : null); return (d && !isNaN(d.getTime())) ? getBizDateKey(d) : ''; } catch (e) { return ''; } };
+            const ap = String((o && ((o.rescheduledFrom && o.rescheduledDate) || o.appointmentDate)) || '').slice(0, 10);
+            const apKey = /^\d{4}-\d{2}-\d{2}$/.test(ap) ? ap : '';
+            return [k(o && o.createdAt), k(o && o.returnedAt), apKey].reduce((m, x) => x > m ? x : m, '');
+        }
+        function techIsOvernightClosed(o) {
+            if (!o || o.convertedInReportId || o.workTag) return false;
+            if (o.status === 'Pending' || o.status === 'Assigned') return false; // ገና ያልተጠናቀቀ — በሌላ ህግ ይፈተሻል
+            if (isFutureAppointment(o)) return false; // ለወደፊት የተቀጠረ ስራ ሪፖርት አይጠበቅበትም
+            const c = o.completedAt && o.completedAt.toDate ? o.completedAt.toDate() : null;
+            const cr = o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : null;
+            const d = c || cr;
+            if (!d) return false;
+            const closeKey = getBizDateKey(d);
+            if (!closeKey) return false;
+            if (closeKey < getBizDateKey()) return true;        // ከዛሬ በፊት የተዘጋ
+            const baseKey = techJobBaseKey(o);
+            return !!baseKey && baseKey < closeKey;              // ዛሬ ተዘግቷል ግን ከትላንት/ከዚያ በፊት የጀመረ
+        }
+        function techApprovedReportedKeys() {
+            const set = new Set();
+            (techSentReports || []).forEach(r => { if (r && r.approved === true) (Array.isArray(r.jobStatuses) ? r.jobStatuses : []).forEach(j => {
+                if (j && j.orderId) set.add(j.orderId + '|' + (j.status === 'completed' ? 'C' : 'N'));
+            }); });
+            return set;
+        }
+        // { unreported: ሪፖርት ያልተላኩ, unapproved: ተልኳል ግን አድሚን ገና ያላጸደቀው } — ሪፖርቶች ካልተጫኑ null
+        function techOvernightBlockers() {
+            if (!techSentReportsLoaded) return null; // fail-closed በጠሪዎች ይያዛል
             const reported = techReportedKeysAll();
-            return (myOrders || []).filter(o => {
-                if (!o || o.convertedInReportId) return false;
-                if (o.status === 'Pending' || o.status === 'Assigned') return false; // ገና ያልተጠናቀቀ — በሌላ ህግ ይፈተሻል
-                const c = o.completedAt && o.completedAt.toDate ? o.completedAt.toDate() : null;
-                if (!c) return false;
-                const k = getBizDateKey(c);
-                if (!k || k >= todayKey) return false;
-                return !reported.has(techJobKey(o));
+            const approved = techApprovedReportedKeys();
+            const out = { unreported: [], unapproved: [], missingDaily: false };
+            // 📋 ስራ ኖረም አልኖረም ዕለታዊ ሪፖርት (በዜሮም ቢሆን) ግዴታ ነው — ከጠዋት 2:30 በኋላ የትላንት (ወይም የዛሬ) ሪፖርት ከሌለ
+            // (ሙሉ አዲስ ቴክኒሻን — ምንም ሪፖርትም ስራም የሌለው — አይቆጠርም)
+            try {
+                const yk = getDateKey(new Date(bizNow().getTime() - 24 * 3600 * 1000));
+                const hasRecent = (techSentReports || []).some(r => String((r && r.dateKey) || '') === yk); // የትላንት (ያደረ) ሪፖርት ብቻ ይፈተሻል — የዛሬ አይጠየቅም
+                const isBrandNew = !(techSentReports || []).length && !(myOrders || []).length;
+                out.missingDaily = !hasRecent && !isBrandNew; // ስራ ባይኖርም ግዴታ ነው — ለአዲስ ሰራተኛ (ምንም ሪፖርት/ስራ የሌለው) ብቻ ይቀራል
+            } catch (e) {}
+            (myOrders || []).forEach(o => {
+                if (!techIsOvernightClosed(o)) return;
+                const key = techJobKey(o);
+                if (approved.has(key)) return;
+                (reported.has(key) ? out.unapproved : out.unreported).push(o);
+            });
+            return out;
+        }
+        function techOvernightUnreportedJobs() {
+            const b = techOvernightBlockers();
+            return b ? b.unreported : null; // ሪፖርት ካደረገ ይበቃል — አድሚን ባያጸድቅም አይከለክልም
+        }
+        // ሪፖርቶች እስኪጫኑ ይጠብቃል (ቢበዛ ~6 ሰከንድ)
+        async function techWaitSentReports() {
+            try { techStartSentReports(); } catch (e) {}
+            for (let i = 0; i < 30 && !techSentReportsLoaded; i++) await new Promise(r => setTimeout(r, 200));
+            return techSentReportsLoaded;
+        }
+        // 🔔 ያደረ ስራ በ ሀ–ረ አማራጭ ሲዘጋ፦ ቴክኒሻኑ ሪፖርት ማድረግ + ማጸደቅ ግዴታ መሆኑን ይነገረዋል፤ አድሚንም ይነገረዋል (አንድ ጊዜ ብቻ)
+        function techNotifyOvernightClosed() {
+            if (!technicianId || !Array.isArray(myOrders)) return;
+            const fresh = Date.now() - 15 * 60 * 1000;
+            myOrders.forEach(o => {
+                const c = o && o.completedAt && o.completedAt.toDate ? o.completedAt.toDate().getTime() : 0;
+                if (!c || c < fresh || !techIsOvernightClosed(o)) return;
+                const nk = 'techOvnNotified_' + o.id + '_' + c;
+                try { if (localStorage.getItem(nk)) return; localStorage.setItem(nk, '1'); } catch (e) { return; }
+                showToast('🌙 ያደረ ስራ ተዘግቷል — ሪፖርት ማድረግ ግዴታ ነው፤ ሪፖርት እስኪልኩ «ነጻ ነኝ» ማለት አይቻልም', 'error');
+                (async () => {
+                    try {
+                        const adminsSnap = await db.collection('staff').where('role', '==', 'admin').where('status', '==', 'active').get();
+                        await Promise.all(adminsSnap.docs.filter(d => d.data().fcmToken).map(d => db.collection('pushQueue').add({
+                            toStaffId: d.id,
+                            title: `🌙 ያደረ ስራ ተዘግቷል - ${technicianName}`,
+                            body: `#${String(o.id).substring(0, 8)} — ሪፖርት ይጠበቃል`,
+                            locationUrl: ADMIN_PAGE_URL(), createdAt: Date.now(), sent: false
+                        })));
+                    } catch (e) { console.warn('overnight admin push failed (non-fatal)', e); }
+                })();
             });
         }
         function techFreeLockKey() { return 'halal_free_sent_' + (technicianId || ''); }
-        function techFreeLockGet() { try { return !!localStorage.getItem(techFreeLockKey()); } catch (e) { return false; } }
+        function techFreeLockGet() { try { const v = localStorage.getItem(techFreeLockKey()); if (!v) return false; const t = parseInt(v, 10); if (t && getBizDateKey(new Date(t)) < getBizDateKey()) { localStorage.removeItem(techFreeLockKey()); return false; } return true; } catch (e) { return false; } }
         function techFreeLockSet() { try { localStorage.setItem(techFreeLockKey(), String(Date.now())); } catch (e) {} }
         function techFreeLockClear() { try { localStorage.removeItem(techFreeLockKey()); } catch (e) {} }
         function setupStatusButtons() {
@@ -9497,14 +9567,24 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     // ይህ በ UI ብቻ ሳይሆን በራሱ በ button click logic ውስጥ ስለሚፈተሽ ማንም ሊያልፈው አይችልም።
                     if (status === 'free') {
                         // 🔒 አንዴ «ነጻ» ብሎ ከላከ ድጋሜ መላክ አይችልም — ስራ ተመድቦ እስኪጠናቀቅ ድረስ
-                        if (techFreeLockGet()) {
-                            showToast('✅ «ነጻ ነኝ» ብለው ቀድሞ ልከዋል። ድጋሜ መላክ የሚችሉት ስራ ከጨረሱ በኋላ ነው', 'info');
+                        // 🌙 ያደረ ሪፖርት ፍተሻ መጀመሪያ (ከ 2:30 በኋላ)፦ ሪፖርት ካልላከ «ነጻ» ማለት አይችልም፤ ከላከ ይቀጥላል
+                        if (!(await techWaitSentReports())) {
+                            showToast('⏳ ሪፖርቶችዎን ማረጋገጥ አልተቻለም። ኢንተርኔትዎን ይፈትሹና ደግመው ይሞክሩ', 'error');
                             return;
                         }
-                        try { techStartSentReports(); } catch (e) {}
-                        const _ovn = techOvernightUnreportedJobs();
-                        if (_ovn.length) {
-                            showToast('🔒 ያደረ ያልተላከ ሪፖርት አለዎት (' + _ovn.length + ' ስራ)! መጀመሪያ ሪፖርቱን ይላኩ፣ ከዚያ «ነጻ ነኝ» ማለት ይችላሉ', 'error');
+                        const _ovb = techOvernightBlockers() || { unreported: [], unapproved: [] };
+                        if (_ovb.missingDaily && !_ovb.unreported.length) {
+                            showToast('🔒 ዕለታዊ ሪፖርት አልላኩም! ስራ ባይኖርዎትም በዜሮ ሪፖርት መላክ ግዴታ ነው፤ መጀመሪያ ሪፖርት ያድርጉ፣ ከዚያ «ነጻ ነኝ» ማለት ይችላሉ', 'error');
+                            try { document.querySelector('[data-tab="report"]').click(); } catch (e) {}
+                            return;
+                        }
+                        if (_ovb.unreported.length) {
+                            showToast('🔒 ያደረ ያልተላከ ሪፖርት አለዎት (' + _ovb.unreported.length + ' ስራ)! መጀመሪያ ሪፖርት ያድርጉ፣ ከዚያ «ነጻ ነኝ» ማለት ይችላሉ', 'error');
+                            try { document.querySelector('[data-tab="report"]').click(); } catch (e) {}
+                            return;
+                        }
+                        if (techFreeLockGet()) {
+                            showToast('✅ «ነጻ ነኝ» ብለው ቀድሞ ልከዋል። ድጋሜ መላክ የሚችሉት ስራ ከጨረሱ በኋላ ነው', 'info');
                             return;
                         }
                         const hasUnfinishedJob = myOrders.some(o => o.status === 'Assigned' && !isFutureAppointment(o));
@@ -9806,6 +9886,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // - ምንም የቴሌግራም መልእክት አይላክም፤ ወደ አድሚን የሚላከው ቦታ ሲላክ ብቻ ነው
         // ============================================================
         let openStatusApplied = false;
+        let techOpenBlockedByReport = false;
         function techApplyStatusUI(status) {
             const statusMap = { 'working': '✅ በስራ ላይ', 'free': '🟢 ነጻ', 'off-duty': '⚪ ዛሬ አልወጣሁም' };
             document.querySelectorAll('.status-btn').forEach(b => b.classList.remove('active'));
@@ -9825,13 +9906,30 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         }
         function techApplyOpenStatusOnce() {
             if (openStatusApplied || !technicianId) return;
+            // 🚫 አፑ ሲከፈት በራስ-ሰር «ነጻ» አይሆንም — ቴክኒሻኑ ራሱ «ነጻ» ሲነካ ብቻ ነው።
+            // የተመደበ ያልተጠናቀቀ ስራ ካለ ብቻ «በስራ ላይ» ይሆናል፤ ያለዚያ ያለው ሁኔታ አይነካም።
+            if (!myOrders.some(o => o.status === 'Assigned' && !isFutureAppointment(o))) return;
             openStatusApplied = true;
-            const status = myOrders.some(o => o.status === 'Assigned' && !isFutureAppointment(o)) ? 'working' : 'free';
-            currentStatus = status;
-            techApplyStatusUI(status);
-            saveStatus(status); // Firestore ብቻ - ምንም ቴሌግራም የለም
+            currentStatus = 'working';
+            techApplyStatusUI('working');
+            saveStatus('working'); // Firestore ብቻ - ምንም ቴሌግራም የለም
         }
 
+        // 🌙 ከጠዋት 2:30 በኋላ (አዲስ የስራ ቀን) ያደረ ሪፖርት ሳይልክ «ነጻ» ሆኖ ከቆየ → ራስ-ሰር «በስራ ላይ» ይሆናል።
+        // ሪፖርት ከላከ ምንም አይነካም። «ዛሬ አልወጣሁም» ያለም አይነካም።
+        function techEnforceOvernightWorking() {
+            try {
+                if (!technicianId || !techSentReportsLoaded || !Array.isArray(myOrders)) return;
+                if (currentStatus !== 'free') return;
+                const b = techOvernightBlockers();
+                if (!b || !(b.unreported.length || b.missingDaily)) return;
+                currentStatus = 'working';
+                techApplyStatusUI('working');
+                saveStatus('working');
+                showToast('🌙 ያልተላከ ሪፖርት አለዎት (ስራ ባይኖርም በዜሮ መላክ ግዴታ ነው) — ሁኔታዎ «በስራ ላይ» ሆኗል። ሪፖርት ካደረጉ በኋላ «ነጻ ነኝ» ይበሉ', 'error');
+            } catch (e) { console.warn('overnight enforce failed', e); }
+        }
+        setInterval(techEnforceOvernightWorking, 60000);
         async function saveStatus(status) {
             if (!technicianId) return;
             try {
@@ -10010,7 +10108,9 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     console.log('📋 Orders loaded for ' + technicianName + ':', myOrders.length);
                     try { if (myOrders.some(o => o.status === 'Assigned' && !isFutureAppointment(o))) techFreeLockClear(); } catch (e) {}
                     try { techApplyOpenStatusOnce(); } catch (e) { console.warn('open status failed', e); }
+                    try { techStartSentReports(); techEnforceOvernightWorking(); } catch (e) {}
                     try { techActivateDueAppointments(); } catch (e) {}
+                    try { techNotifyOvernightClosed(); } catch (e) {}
                     renderMyJobs();
                     renderAllJobs();
                     techUpdateStats();
@@ -11964,8 +12064,10 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
             // ✅ CHANGED: ሪፖርት ከተላከ በኋላ ፎርሙ ንጹህ ስለሚሆን በዚያው ቀን አዲስ ሪፖርት መላክ ይፈቀዳል።
             // ባዶ ሪፖርት (ምንም ስራ/ገቢ/ወጪ/አስተያየት የሌለው) ብቻ ይከለከላል።
-            if (!jobStatuses.length && !totalIncome && !totalExpense && !remarks && !expenseDetails) {
-                showToast('⚠️ የሚላክ ምንም መረጃ የለም። አዲስ ስራ ሲኖር ሪፖርት ያስገቡ።', 'error');
+            // 📋 ዜሮ ሪፖርት (ስራ ባይኖርም) ይፈቀዳል — ለዚያ ቀን ሪፖርት ገና ካልተላከ። ለተመሳሳይ ቀን ባዶ ድርብ ሪፖርት ግን ይከለከላል።
+            const _dupKey = techReportDateChosen || getBizDateKey();
+            if (!jobStatuses.length && !totalIncome && !totalExpense && !remarks && !expenseDetails && (techSentReports || []).some(r => r && r.dateKey === _dupKey)) {
+                showToast('⚠️ ለዚህ ቀን ሪፖርት ቀድሞ ተልኳል። አዲስ ስራ ሲኖር ሪፖርት ያስገቡ።', 'error');
                 btn0.disabled = false;
                 btn0.innerHTML = '<i class="fas fa-paper-plane"></i> ሪፖርት አስገባ';
                 return;
@@ -11999,6 +12101,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             // መስኮችን ተጠቅሞ)። ይህ ፎርም ግን ወደ የተለየ 'daily_reports' collection ይጽፍ ስለነበር
             // የቴክኒሻኑ ሪፖርት አድሚን ገጽ ላይ ፈጽሞ አይታይም ነበር። አሁን ተመሳሳይ collection እና
             // ተመሳሳይ መስኮች ተጠቅሞ ይጽፋል፣ ስለዚህ ወዲያውኑ በአድሚን ገጽ ላይ ይታያል/ያሳውቃል።
+            const ovnCount = (jobStatuses || []).filter(j => { const o = (myOrders || []).find(x => x.id === j.orderId); return o && techIsOvernightClosed(o); }).length;
             const reportData = {
                 technicianId: technicianId,
                 technicianName: technicianName,
@@ -12014,6 +12117,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 completedCount: completedCount,
                 notCompletedCount: notCompletedCount,
                 jobStatuses: jobStatuses,
+                overnightJobs: ovnCount,                 // 🌙 ያደረ ስራ ብዛት (ማጽደቅ ግዴታ)
                 heldJobsCount: techHeldJobs().length,   // 📦 ከቴክኒሻኑ ጋር ያሉ ያልተጠናቀቁ ስራዎች
                 heldJobs: techHeldJobs().map(o => ({
                     orderId: o.id, customer: o.fullName || '—', phone: o.phone || '', appliance: o.appliance || '',
@@ -12083,7 +12187,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     const adminsSnap = await db.collection('staff').where('role', '==', 'admin').where('status', '==', 'active').get();
                     await Promise.all(adminsSnap.docs.filter(d => d.data().fcmToken).map(d => db.collection('pushQueue').add({
                         toStaffId: d.id,
-                        title: `📋 የቀን ሪፖርት - ${technicianName}`,
+                        title: ovnCount ? `🌙 ያደረ ስራ ሪፖርት - ${technicianName} (ማጽደቅ ግዴታ)` : `📋 የቀን ሪፖርት - ${technicianName}`,
                         body: `ተሰርቷል ${completedCount} | አልተሰራም ${notCompletedCount} | ገቢ ${totalIncome} ብር`,
                         locationUrl: ADMIN_PAGE_URL(),
                         createdAt: Date.now(),
@@ -12091,7 +12195,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     })));
                 } catch (pushErr) { console.warn('Report admin push queue failed (non-fatal)', pushErr); }
                 // 🔔 ለስራ መዳቢ (ሪፖርት ማጽደቅ የሚጠብቅ) ማሳወቂያ
-                try { callWorker('notifyDispatchers', { audience: 'finance', text: '📋 አዲስ ሪፖርት ማጽደቅ ይጠይቃል', smsText: 'አዲስ ሪፖርት ማጽደቅ ይጠይቃል' }).catch(() => {}); } catch (e) {}
+                try { callWorker('notifyDispatchers', { audience: 'finance', text: ovnCount ? '🌙 ያደረ ስራ ሪፖርት ማጽደቅ ግዴታ ነው — ' + technicianName : '📋 አዲስ ሪፖርት ማጽደቅ ይጠይቃል', smsText: ovnCount ? 'ያደረ ስራ ሪፖርት ማጽደቅ ግዴታ ነው' : 'አዲስ ሪፖርት ማጽደቅ ይጠይቃል' }).catch(() => {}); } catch (e) {}
 
                 const storageRes = await storageJob;
                 const tgPhotosOk = await tgPhotoJob;
@@ -12132,6 +12236,10 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 techSentReports = [];
                 snap.forEach(d => { const r = d.data(); r.id = d.id; techSentReports.push(r); });
                 techSentReportsLoaded = true;
+                try {
+                    if (!openStatusApplied) techApplyOpenStatusOnce();
+                    techEnforceOvernightWorking();
+                } catch (e) { console.warn('open status after reports', e); }
                 techSentReports.sort((a, b) => {
                     const ta = a.submittedAt && a.submittedAt.toDate ? a.submittedAt.toDate().getTime() : 0;
                     const tb = b.submittedAt && b.submittedAt.toDate ? b.submittedAt.toDate().getTime() : 0;
