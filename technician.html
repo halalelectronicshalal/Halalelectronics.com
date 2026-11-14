@@ -1328,6 +1328,19 @@
     </style>
 <script>window.APP_ROLE = "technician";</script>
     <script src="he-eye.js" defer></script>
+<script>
+/* 📸 የሪፖርት ፎቶ፦ ከ Storage ካልተጫነ በሪፖርቱ ውስጥ ራሱ የተቀመጠው ቅጂ (warrantyData / receiptData) ይታያል */
+function phRc(r) { r = r || {}; var u = phRc(r) || []; return u.length ? u : (r.receiptData || []); }
+function phWr(r) { r = r || {}; var u = phWr(r) || []; return u.length ? u : (r.warrantyData || []); }
+document.addEventListener('click', function (e) {
+    var i = e.target;
+    if (i && i.tagName === 'IMG' && /^data:image\//.test(i.src || '') && i.closest && i.closest('.photo-gallery')) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        var w = window.open('', '_blank');
+        if (w) { w.document.write('<title>ፎቶ</title><body style="margin:0;background:#000"><img src="' + i.src + '" style="max-width:100%;display:block;margin:auto">'); w.document.close(); }
+    }
+}, true);
+</script>
 </head>
 <body>
     <!-- ✅ NEW: Dark/Light mode toggle - ገፁ በሙሉ ላይ ይታያል -->
@@ -4707,7 +4720,7 @@
             if (pending.length === 0) { box.innerHTML = ''; return; }
             const rows = pending.map(r => {
                 const income = r.totalIncome != null ? r.totalIncome : (r.income || 0);
-                const photos = ((r.warrantyPhotoURLs || []).length + (r.receiptURLs || []).length);
+                const photos = ((phWr(r) || []).length + (phRc(r) || []).length);
                 return `
                     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px; background:#fff; border:1px solid var(--border); border-radius:10px; margin-bottom:8px;">
                         <div style="flex:1; min-width:150px;">
@@ -4752,9 +4765,9 @@
                     ${r.expenseDetails ? `<div>🧾 ወጪ: ${escHtml(r.expenseDetails)}</div>` : ''}
                     <div>📝 ${n(r.remarks || r.notes)}</div>
                     ${r.readyTomorrow ? `<div>🚶 ለነገ ስራ ይወጣል: ${r.readyTomorrow === 'yes' ? 'አዎ' : 'አይ'}</div>` : ''}
-                    ${r.photosPending ? '<div style="color:#b45309;">⏳ ፎቶዎች አሁንም እየተጫኑ ሊሆን ይችላል</div>' : ''}
-                    ${gallery(r.warrantyPhotoURLs, '📸 ዋራንቲ ካርድ')}
-                    ${gallery(r.receiptURLs, '🏦 የባንክ ደረሰኝ')}
+                    ${(r.photosPending && !phRc(r).length && !phWr(r).length) ? '<div style="color:#b45309;">⏳ ፎቶዎች አሁንም እየተጫኑ ሊሆን ይችላል</div>' : ''}
+                    ${gallery(phWr(r), '📸 ዋራንቲ ካርድ')}
+                    ${gallery(phRc(r), '🏦 የባንክ ደረሰኝ')}
                 </div>`;
             const footer = r.approved
                 ? reportTgResendBtn(r) + ' <button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>'
@@ -5190,8 +5203,8 @@ ${locationLine}
 
             // --- Helper to get photo URLs (array) from either field ---
             function getPhotoURLs(order) {
-                if (order.warrantyPhotoURLs && Array.isArray(order.warrantyPhotoURLs) && order.warrantyPhotoURLs.length > 0)
-                    return order.warrantyPhotoURLs;
+                if (ordephWr(r) && Array.isArray(ordephWr(r)) && ordephWr(r).length > 0)
+                    return ordephWr(r);
                 if (order.warrantyPhotoURL) return [order.warrantyPhotoURL];
                 return [];
             }
@@ -5905,8 +5918,8 @@ ${locationLine}
                                 ${r.income ? `💰 ገቢ: ${r.income} ብር<br>` : ''}
                                 ${r.notes ? `📝 ${r.notes}` : ''}
                             </div>
-                            ${(r.warrantyPhotoURLs && r.warrantyPhotoURLs.length) ? `<div style="font-size:0.8rem; margin-top:8px; color:var(--text-muted);">📸 ዋራንቲ ካርድ</div><div class="photo-gallery">${r.warrantyPhotoURLs.map(u => `<img src="${u}" alt="ዋራንቲ" onclick="window.open('${u}','_blank')" />`).join('')}</div>` : ''}
-                            ${(r.receiptURLs && r.receiptURLs.length) ? `<div style="font-size:0.8rem; margin-top:8px; color:var(--text-muted);">🏦 የባንክ ደረሰኝ</div><div class="photo-gallery">${r.receiptURLs.map(u => `<img src="${u}" alt="ደረሰኝ" onclick="window.open('${u}','_blank')" />`).join('')}</div>` : ''}
+                            ${(phWr(r) && phWr(r).length) ? `<div style="font-size:0.8rem; margin-top:8px; color:var(--text-muted);">📸 ዋራንቲ ካርድ</div><div class="photo-gallery">${phWr(r).map(u => `<img src="${u}" alt="ዋራንቲ" onclick="window.open('${u}','_blank')" />`).join('')}</div>` : ''}
+                            ${(phRc(r) && phRc(r).length) ? `<div style="font-size:0.8rem; margin-top:8px; color:var(--text-muted);">🏦 የባንክ ደረሰኝ</div><div class="photo-gallery">${phRc(r).map(u => `<img src="${u}" alt="ደረሰኝ" onclick="window.open('${u}','_blank')" />`).join('')}</div>` : ''}
                             ${!r.approved ? `<button class="btn btn-success btn-sm mt-8" onclick="approveReport('${r.id}','${techId}')"><i class="fas fa-check"></i> አጽድቅ</button>` : ''}
                         </div>
                     `;
@@ -6205,7 +6218,7 @@ ${locationLine}
             const ex = (k) => ({ count: num(r[k + 'Count']), income: num(r[k + 'Income']), expense: num(r[k + 'Expense']), staffShare: num(r[k + 'StaffShare']) });
             const extraLines = [['referral', '🔗 ሪፈራል'], ['correction', '🛠️ እርማት']].map(([k, l]) => [ex(k), l]).filter(([e]) => e.count > 0)
                 .map(([e, l]) => `${l}: ${e.count} ስራ | ገቢ ${e.income} ብር | ወጪ ${e.expense} ብር | ለሠራተኛ ${e.staffShare} ብር`).join('\n');
-            const wN = (r.warrantyPhotoURLs || []).length, rN = (r.receiptURLs || []).length;
+            const wN = (phWr(r) || []).length, rN = (phRc(r) || []).length;
             const lateN = num(r.photosFailed);
             const _blk = (...lines) => lines.filter(l => l !== '' && l != null).join('\n');
             const totalIncome = r.totalIncome != null ? r.totalIncome : (r.income || 0);
@@ -6288,7 +6301,7 @@ ${locationLine}
                 let photosOk = early ? (r.tgPhotosOk !== false) : true;
                 if (textOk) {
                     const cap = `${r.technicianName || r.technician || ''} — ${r.date || r.dateKey || ''}`;
-                    const w = r.warrantyPhotoURLs || [], rc = r.receiptURLs || [];
+                    const w = phWr(r) || [], rc = phRc(r) || [];
                     if (!early || (force && r.tgPhotosOk === false)) {
                         photosOk = true;
                         if (w.length) photosOk = (await reportSendPhotoUrls(w, `📸 ዋራንቲ ካርድ — ${cap}`)) && photosOk;
@@ -9347,6 +9360,28 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 task.then(() => { clearTimeout(t); resolve(); }, (e) => { clearTimeout(t); reject(e); });
             });
         }
+        // 📸 ፎቶዎችን በሪፖርቱ ሰነድ ውስጥ ራሱ ማስቀመጥ (Storage ባይሳካ/ገጹ ቢዘጋ እንኳ አድሚን ያያል)።
+        // ሰነዱ ከ1MB እንዳይበልጥ ድምሩ ከ ~700KB በታች እንዲሆን እያጨቀ ይሞክራል።
+        async function techEmbedPhotos(warrantyFiles, receiptFiles) {
+            const toUrl = (f) => new Promise((res) => { try { const r = new FileReader(); r.onload = () => res(String(r.result || '')); r.onerror = () => res(''); r.readAsDataURL(f); } catch (e) { res(''); } });
+            const all = [...warrantyFiles.map(f => ({ k: 'w', f })), ...receiptFiles.map(f => ({ k: 'r', f }))];
+            if (!all.length) return { warrantyData: [], receiptData: [] };
+            const BUDGET = 700000;
+            let size = 1000, q = 0.6, out = [];
+            for (let attempt = 0; attempt < 4; attempt++) {
+                out = [];
+                for (const it of all) {
+                    const c = await compressImageFile(it.f, size, q);
+                    out.push({ k: it.k, d: await toUrl(c) });
+                }
+                const total = out.reduce((n, x) => n + x.d.length, 0);
+                if (total <= BUDGET) break;
+                size = Math.round(size * 0.75); q = Math.max(0.35, q - 0.08);
+            }
+            let used = 0;
+            const keep = out.filter(x => { if (!x.d || used + x.d.length > BUDGET) return false; used += x.d.length; return true; });
+            return { warrantyData: keep.filter(x => x.k === 'w').map(x => x.d), receiptData: keep.filter(x => x.k === 'r').map(x => x.d) };
+        }
         async function uploadReportPhotosToStorage(repRef, warrantyFiles, receiptFiles, techName) {
             const total = warrantyFiles.length + receiptFiles.length;
             if (total === 0) return { failed: 0, total: 0 };
@@ -9377,7 +9412,10 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             };
             const failed = total - wUrls.length - rUrls.length;
             try {
-                await repRef.update({ warrantyPhotoURLs: wUrls, receiptURLs: rUrls, photosPending: false, photosFailed: failed });
+                const _upd = { warrantyPhotoURLs: wUrls, receiptURLs: rUrls, photosPending: false, photosFailed: failed };
+                // ሁሉም ፎቶ በ Storage ከተጫነ በሰነዱ ውስጥ የነበረው ቅጂ ይወገዳል (ሰነዱ እንዳይከብድ)
+                if (failed === 0) { _upd.warrantyData = firebase.firestore.FieldValue.delete(); _upd.receiptData = firebase.firestore.FieldValue.delete(); }
+                await repRef.update(_upd);
             } catch (e) { console.warn('Report photo URL update failed:', e); }
             return { failed, total, failedFiles };
         }
@@ -12095,6 +12133,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 return;
             }
 
+            let _embedded = { warrantyData: [], receiptData: [] };
+            try { _embedded = await techEmbedPhotos(reportPhotoSel.warrantyPreview.slice(), reportPhotoSel.receiptPreview.slice()); } catch (embErr) { console.warn('embed photos failed (non-fatal)', embErr); }
             // Build report object
             // ✅ FIX: አድሚን ገጽ ላይ ያለው "የባለሙያዎች ሪፖርት" (ማጽደቂያ + ማሳወቂያ ቀይ ቁጥር) ስርዓት
             // ከ 'dailyReports' collection ብቻ ነው የሚያነበው (technicianId/dateKey/approved
@@ -12151,6 +12191,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 receiptURLs: receiptURLs,
                 photoCount: warrantyCompressed.length + receiptCompressed.length,
                 photosPending: (warrantyCompressed.length + receiptCompressed.length) > 0,
+                warrantyData: _embedded.warrantyData,
+                receiptData: _embedded.receiptData,
                 tgDeferred: true,   // 📌 የሪፖርቱ ጽሁፍ ወደ ቴሌግራም የሚላከው አድሚን ሲያጸድቅ ብቻ ነው
                 tgPhotosEarly: true, // 📸 የባንክ ደረሰኝ + ዋራንቲ ፎቶ ግን ሪፖርት እንደተደረገ ወዲያውኑ ወደ ቴሌግራም ይላካል
                 tgPhotosOk: null,
