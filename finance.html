@@ -25,6 +25,19 @@
 <script src="he-common.js"></script>
     <script src="he-eye.js" defer></script>
     <script src="he-extras.js" defer></script>
+<script>
+/* 📸 የሪፖርት ፎቶ፦ ከ Storage ካልተጫነ በሪፖርቱ ውስጥ ራሱ የተቀመጠው ቅጂ (warrantyData / receiptData) ይታያል */
+function phRc(r) { r = r || {}; var u = phRc(r) || []; return u.length ? u : (r.receiptData || []); }
+function phWr(r) { r = r || {}; var u = phWr(r) || []; return u.length ? u : (r.warrantyData || []); }
+document.addEventListener('click', function (e) {
+    var i = e.target;
+    if (i && i.tagName === 'IMG' && /^data:image\//.test(i.src || '') && i.closest && i.closest('.photo-gallery')) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        var w = window.open('', '_blank');
+        if (w) { w.document.write('<title>ፎቶ</title><body style="margin:0;background:#000"><img src="' + i.src + '" style="max-width:100%;display:block;margin:auto">'); w.document.close(); }
+    }
+}, true);
+</script>
 </head>
 <body>
 <header class="he-top">
@@ -1282,7 +1295,7 @@ function renderPendingReports() {
     card.style.display = pending.length ? '' : 'none';
     list.innerHTML = pending.map(r => {
         const income = r.totalIncome != null ? r.totalIncome : (r.income || 0);
-        const photos = ((r.warrantyPhotoURLs || []).length + (r.receiptURLs || []).length);
+        const photos = ((phWr(r) || []).length + (phRc(r) || []).length);
         return `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px; border:1px solid var(--border); border-radius:10px; margin-bottom:8px;">
             <div style="flex:1; min-width:150px;">
                 <strong>👤 ${escHtml(r.technicianName || r.technician || '—')}</strong>${admReportBadges(r)}
@@ -1477,8 +1490,8 @@ async function approveReport(reportId, techId) {
             ${r.expenseDetails ? `<div>🧾 ወጪ: ${escHtml(r.expenseDetails)}</div>` : ''}
             <div>📝 ${n(r.remarks || r.notes)}</div>
             ${r.readyTomorrow ? `<div>🚶 ለነገ ስራ ይወጣል: ${r.readyTomorrow === 'yes' ? 'አዎ' : 'አይ'}</div>` : ''}
-            ${gallery(r.warrantyPhotoURLs, '📸 ዋራንቲ ካርድ')}
-            ${gallery(r.receiptURLs, '🏦 የባንክ ደረሰኝ')}
+            ${gallery(phWr(r), '📸 ዋራንቲ ካርድ')}
+            ${gallery(phRc(r), '🏦 የባንክ ደረሰኝ')}
         </div>`;
     const footer = r.approved
         ? '<button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>'
@@ -2802,7 +2815,7 @@ function renderPendingReports() {
     card.style.display = pending.length ? '' : 'none';
     list.innerHTML = pending.map(r => {
         const income = r.totalIncome != null ? r.totalIncome : (r.income || 0);
-        const photos = ((r.warrantyPhotoURLs || []).length + (r.receiptURLs || []).length);
+        const photos = ((phWr(r) || []).length + (phRc(r) || []).length);
         return `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px; border:1px solid var(--border); border-radius:10px; margin-bottom:8px;">
             <div style="flex:1; min-width:150px;">
                 <strong>👤 ${escHtml(r.technicianName || r.technician || '—')}</strong>
@@ -2872,8 +2885,8 @@ function viewReportDetail(reportId) {
             ${r.expenseDetails ? `<div>🧾 ወጪ: ${escHtml(r.expenseDetails)}</div>` : ''}
             <div>📝 ${n(r.remarks || r.notes)}</div>
             ${r.readyTomorrow ? `<div>🚶 ለነገ ስራ ይወጣል: ${r.readyTomorrow === 'yes' ? 'አዎ' : 'አይ'}</div>` : ''}
-            ${gallery(r.warrantyPhotoURLs, '📸 ዋራንቲ ካርድ')}
-            ${gallery(r.receiptURLs, '🏦 የባንክ ደረሰኝ')}
+            ${gallery(phWr(r), '📸 ዋራንቲ ካርድ')}
+            ${gallery(phRc(r), '🏦 የባንክ ደረሰኝ')}
         </div>`;
     const footer = r.approved
         ? '<button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>'
