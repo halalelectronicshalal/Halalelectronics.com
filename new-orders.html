@@ -706,7 +706,7 @@ function showStatDetail(kind, refresh) {
         }
     } else if (kind === 'scheduled') {
         title = '📅 እስከሚደርስ ቀጠሮ';
-        const pend = visibleOrders().filter(o => o.status === 'Pending' && orderIsScheduled(o));
+        const pend = visibleOrders().filter(o => o.status === 'Pending' && orderApptWaiting(o));
         const asg = visibleOrders().filter(o => o.status === 'Assigned' && orderHasFutureAppt(o));
         const l = pend.concat(asg).sort((a, b) => orderApptDate(a) - orderApptDate(b) || toMs(b.createdAt) - toMs(a.createdAt));
         const keepSel = {};
@@ -792,6 +792,16 @@ function orderHasFutureAppt(o) {
 function orderIsReturned(o) {
     return !!(o.returnReason || o.returnedAt || o.returnedFrom || o.returnedFromId || o.completionOption === 'return-job');
 }
+/** ⏰ ለሌላ ቀን የተላለፈ ቀጠሮ ስራ (ሰዓት ያለው) — ቀኑ ዛሬ ሆኖ ሰዓቱ ገና ካልደረሰ እስኪደርስ በ«ቀጠሮ» ውስጥ ይቆያል */
+function orderApptTimePending(o) {
+    if (!o || !o.rescheduledFrom || !o.rescheduledDate || !o.rescheduledTime) return false;
+    const d = keyToLocalDate(o.rescheduledDate); const t = /^(\d{1,2}):(\d{2})/.exec(String(o.rescheduledTime));
+    if (!d || !t) return false;
+    d.setHours(+t[1], +t[2], 0, 0);
+    return d.getTime() > Date.now();
+}
+/** በቀን ወይም በሰዓት ገና ያልደረሰ ቀጠሮ (ለዝርዝር ማሳያ ብቻ — ለ«መድብ» hold ህግ orderIsScheduled ራሱ ይቀራል) */
+function orderApptWaiting(o) { return orderIsScheduled(o) || orderApptTimePending(o); }
 function orderIsScheduled(o) {
     if (o.id === highlightOrderId) return false;
     const d = orderApptDate(o);
@@ -832,7 +842,8 @@ function apptTagHtml(o) {
     const n = daysUntil(d);
     const when = n === 0 ? 'ዛሬ' : n > 0 ? (n === 1 ? 'ነገ' : `ከ${n} ቀን በኋላ`) : `${-n} ቀን አልፏል`;
     const color = n > 0 ? '#B45309' : n === 0 ? 'var(--success)' : 'var(--emergency)';
-    return `<span class="tag" style="color:${color}; font-weight:700;">📅 ቀጠሮ: ${escHtml(formatEthDate(d, true))} (${when})</span>`;
+    const _tm = (o.rescheduledFrom && o.rescheduledTime) ? ' ⏰ ' + escHtml(String(o.rescheduledTime)) : '';
+    return `<span class="tag" style="color:${color}; font-weight:700;">📅 ቀጠሮ: ${escHtml(formatEthDate(d, true))}${_tm} (${when})</span>`;
 }
 /** ⏰ «ያደረ» ስራ = ዛሬ ያልተፈጠረ/ያልተመለሰ/ቀጠሮው ያላለፈ ያልተጠናቀቀ ስራ (ያልተመደበ ወይም የተመደበ ክፍት) — ከአድሚን ገጽ ጋር አንድ ደንብ */
 function overnightBaseMs(o) {
@@ -903,8 +914,8 @@ function renderDashNewOrders() {
     const returned = visibleOrders().filter(o => o.status === 'Pending' && orderIsReturned(o))
         .sort((a, b) => (toMs(b.returnedAt) || toMs(b.createdAt)) - (toMs(a.returnedAt) || toMs(a.createdAt)));
     const fresh = pending.filter(o => !orderIsReturned(o));
-    const due = fresh.filter(o => !orderIsScheduled(o));
-    const scheduled = fresh.filter(o => orderIsScheduled(o))
+    const due = fresh.filter(o => !orderApptWaiting(o));
+    const scheduled = fresh.filter(o => orderApptWaiting(o))
         .sort((a, b) => orderApptDate(a) - orderApptDate(b) || toMs(b.createdAt) - toMs(a.createdAt));
 
     // ስታቲስቲክስ
@@ -1078,6 +1089,7 @@ HE.boot(() => {
     try { if ('Notification' in window && Notification.permission === 'granted') document.getElementById('notifyBtn').style.display = 'none'; } catch (e) {}
     document.getElementById('orderSearch').addEventListener('input', renderDashNewOrders);
     document.getElementById('sourceFilter').addEventListener('change', renderDashNewOrders);
+    setInterval(function () { try { renderDashNewOrders(); } catch (e) {} }, 60000); // ⏰ የቀጠሮ ሰዓት ሲደርስ ስራው ከ«ቀጠሮ» ወደ ዋናው ዝርዝር ፊት ይወጣል
     loadOrders();
     loadOfficeCallApprovals();
     loadTechnicians();
