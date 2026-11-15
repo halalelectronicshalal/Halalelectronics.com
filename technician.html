@@ -10916,7 +10916,22 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         }
 
         let anotherDayBusy = false;
+        // 📅 «አስገባ» ሲነካ — ስራው ወዴት ይመደብ የሚል ምርጫ ይመጣል (ወደ ቢሮ ይመለስ / ለዛ ቀን ወደ እኔ ይመደብ)
         async function submitAnotherDay() {
+            if (anotherDayBusy) return;
+            const newDate = document.getElementById('anotherDayDate').value;
+            const newTime = (document.getElementById('anotherDayTime').value || '').trim();
+            if (!newDate || !newTime) { showToast('እባክዎ ቀን እና ሰዓት ይምረጡ', 'error'); return; }
+            const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
+            if (!orderId) return;
+            openModal('📅 ስራው ለዚህ ቀን ወዴት ይመደብ?',
+                `<p class="text-muted" style="margin-bottom:10px;">📆 ${techEsc(formatEthDate(newDate))} · ⏰ ${techEsc(custSmsTime(newTime))}</p>
+                 <button class="btn btn-primary btn-block" style="margin-bottom:8px;" onclick="techAnotherDayChoose('office')">🏢 ወደ ቢሮ ይመለስ<br><small>ቀጠሮ ካርድ ውስጥ ይቀመጣል፤ ቀኑና ሰዓቱ ሲደርስ ቢሮ ይመድበዋል</small></button>
+                 <button class="btn btn-success btn-block" onclick="techAnotherDayChoose('self')">👤 ለዛ ቀን ወደ እኔ ይመደብ<br><small>ቀጠሮ ካርድ ውስጥ ይቀመጣል፤ ቀኑና ሰዓቱ ሲደርስ በራሱ ፊት ይታያል፣ «በስራ ላይ» ይሆናሉ</small></button>`,
+                '<button class="btn btn-secondary" onclick="closeModal()">ተመለስ</button>');
+        }
+        window.techAnotherDayChoose = function (mode) { closeModal(); submitAnotherDayWith(mode === 'office' ? 'office' : 'self'); };
+        async function submitAnotherDayWith(mode) {
             if (anotherDayBusy) return;
             const newDate = document.getElementById('anotherDayDate').value;
             const newTime = (document.getElementById('anotherDayTime').value || '').trim();
@@ -10945,7 +10960,9 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     source: orderData.source || 'web',
                     createdById: orderData.createdById || '',
                     createdByName: orderData.createdByName || '',
-                    technician: technicianName,
+                    // 🏢 ወደ ቢሮ ከተመለሰ ቴክኒሻን አይያዝም (ቢሮ ይመድባል)፤ 👤 ወደ እኔ ከሆነ በስሜ ተይዞ ቀኑ ሲደርስ በራሱ ይነቃል
+                    ...(mode === 'office' ? { apptReturnedToOffice: true, apptFromTechnician: technicianName } : { technician: technicianName }),
+                    apptMode: mode,
                     isAppointment: true,
                     rescheduledFrom: orderId,
                     rescheduledDate: newDate,
@@ -10981,7 +10998,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 📅 ${formatEthDateTime(new Date())}
                 `);
                 } catch (tgErr) { console.warn('telegram notify failed', tgErr); }
-                showToast('✅ ለሌላ ቀን ተዘጋጅቷል — ቀኑ እና ሰዓቱ ሲደርስ በራሱ «በስራ ላይ» ይሆናል፤ እስከዚያ «ነፃ» ማለት ይችላሉ', 'success');
+                if (mode === 'office') {
+                    showToast('✅ ወደ ቢሮ ተመልሷል — በቀጠሮ ካርድ ውስጥ ተቀምጧል፤ ቀኑና ሰዓቱ ሲደርስ ቢሮ ይመድባል። «ነፃ» ማለት ይችላሉ', 'success');
+                    // 🔔 ለስራ መዳቢ + ለአድሚን (Worker notifyDispatchers: push + ቴሌግራም)
+                    try { callWorker('notifyDispatchers', { text: `📅 *ቀጠሮ ወደ ቢሮ ተመልሷል*\n👨‍🔧 *ቴክኒሻን:* ${tgEsc(technicianName)}\n👤 *ደንበኛ:* ${tgEsc(orderData.fullName || '—')}\n📆 *ቀን:* ${newDate} ⏰ ${newTime}\nቀኑና ሰዓቱ ሲደርስ ይመድቡ።` }).catch(() => {}); } catch (e) {}
+                } else {
+                    showToast('✅ ለዛ ቀን ወደ እርስዎ ተመድቧል — ቀኑ እና ሰዓቱ ሲደርስ በራሱ ፊት ይታያል፣ «በስራ ላይ» ይሆናሉ፤ እስከዚያ «ነፃ» ማለት ይችላሉ', 'success');
+                }
                 resetCompletionForm();
                 try { renderMyJobs(); } catch (e) {}
             } catch (error) { showToast('❌ ' + error.message, 'error'); }
