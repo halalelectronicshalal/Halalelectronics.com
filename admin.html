@@ -1648,6 +1648,14 @@ document.addEventListener('click', function (e) {
                     <div id="officeCallList"></div>
                 </div>
 
+                <!-- 📅 ለሌላ ቀን የተላለፉ ቀጠሮዎች (ቀኑና ሰዓቱ እስኪደርስ) — ሲደርስ ወደ «አዲስ ትዕዛዞች» ፊት ይወጣል -->
+                <div class="card" id="apptWaitCard" style="display:none;">
+                    <div class="card-header">
+                        <h3><i class="fas fa-calendar-alt" style="color:#B45309;"></i> 📅 እስከሚደርስ ቀጠሮ <span class="badge" id="apptWaitBadge" style="background:#B45309; color:#fff; border-radius:50px; padding:1px 8px; font-size:0.7rem; margin-left:6px;">0</span></h3>
+                    </div>
+                    <div id="apptWaitList" style="max-height:320px; overflow-y:auto;"></div>
+                </div>
+
                 <!-- ✅ NEW: አዲስ ትዕዛዞች (ገና ያልተመደቡ) - አድሚን ወዲያውኑ ዳሽቦርድ ላይ ሆኖ ይመድብ -->
                 <div class="card" id="dashNewOrdersCard">
                     <div class="card-header">
@@ -5520,14 +5528,43 @@ document.addEventListener('focusout', function (e) {
             } catch (e) { showToast('❌ ' + (e && e.message ? e.message : 'ማጽደቅ አልተቻለም'), 'error'); }
         }
 
+        // ============================================================
+        // 📅 ለሌላ ቀን የተላለፈ ቀጠሮ ስራ (rescheduledFrom) — ቀኑ እና ሰዓቱ እስኪደርስ በ«እስከሚደርስ ቀጠሮ» ካርድ ውስጥ ይቆያል
+        // ============================================================
+        function adminApptWaiting(o) {
+            if (!o || o.status !== 'Pending' || !o.rescheduledFrom || !o.rescheduledDate) return false;
+            const d = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(o.rescheduledDate));
+            if (!d) return false;
+            const t = /^(\d{1,2}):(\d{2})/.exec(String(o.rescheduledTime || ''));
+            return new Date(+d[1], +d[2] - 1, +d[3], t ? +t[1] : 0, t ? +t[2] : 0, 0, 0).getTime() > Date.now();
+        }
+        function renderAdminApptWait() {
+            const card = document.getElementById('apptWaitCard'), list = document.getElementById('apptWaitList');
+            if (!card || !list) return;
+            const rows = (allOrders || []).filter(adminApptWaiting).sort((a, b) => String(a.rescheduledDate + (a.rescheduledTime || '')).localeCompare(String(b.rescheduledDate + (b.rescheduledTime || ''))));
+            card.style.display = rows.length ? '' : 'none';
+            const b = document.getElementById('apptWaitBadge'); if (b) b.textContent = rows.length;
+            list.innerHTML = rows.map(o => `<div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid var(--border-light);">
+                    <div style="flex:1; min-width:180px;">
+                        <div style="font-weight:600;">${escHtml(o.fullName || '—')} <span class="text-muted" style="font-weight:400; font-size:0.8rem;">• ${escHtml(o.appliance || '—')}</span></div>
+                        <div class="text-muted" style="font-size:0.78rem;">📱 ${o.phone ? `<a href="tel:${escHtml(o.phone)}" style="color:var(--secondary); font-weight:600;">${escHtml(o.phone)}</a>` : '—'}</div>
+                        <div style="font-size:0.8rem; font-weight:700; color:#B45309;">📅 ${escHtml(formatEthDate(o.rescheduledDate))}${o.rescheduledTime ? ' ⏰ ' + escHtml(o.rescheduledTime) : ''}</div>
+                        <div style="margin-top:3px; font-size:0.78rem; color:${o.technician ? '#1E40AF' : '#92400E'};">${o.technician ? '👤 ለ <b>' + escHtml(o.technician) + '</b> ተይዟል' : '🏢 ወደ ቢሮ ተመልሷል — ቀኑ ሲደርስ ይመድቡ'}</div>
+                    </div>
+                    <button class="btn btn-sm btn-primary" onclick="viewOrder('${o.id}')"><i class="fas fa-eye"></i></button>
+                </div>`).join('');
+        }
+        setInterval(function () { try { renderDashNewOrders(); } catch (e) {} }, 60000); // ⏰ ሰዓቱ ሲደርስ ከካርዱ ወደ «አዲስ ትዕዛዞች» ፊት ይወጣል
+
         function renderDashNewOrders() {
             const list = document.getElementById('dashNewOrdersList');
             const badge = document.getElementById('dashNewOrdersBadge');
             try { renderAdminOfficeCalls(); } catch (e) { console.warn('office-call render failed', e); }
+            try { renderAdminApptWait(); } catch (e) { console.warn('appt-wait render failed', e); }
             if (!list) return;
             if (heSelectOpenIn(list)) { window._heDashDirty = true; return; }
 
-            const pendingOrders = allOrders.filter(o => o.status === 'Pending');
+            const pendingOrders = allOrders.filter(o => o.status === 'Pending' && !adminApptWaiting(o));
             if (badge) badge.textContent = pendingOrders.length;
 
             if (pendingOrders.length === 0) {
