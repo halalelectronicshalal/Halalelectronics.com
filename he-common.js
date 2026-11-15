@@ -363,17 +363,41 @@ const HE = (() => {
             onReady(staff);
         };
         const showNoAccess = (staff) => {
-            // 🧭 ሠራተኛው የራሱ ገጽ ካለው ወዲያው ወደዚያ ይወሰዳል (እያንዳንዱ ገጽ ለብቻ ነው)
+            // ⛔ ከዚህ በፊት ወደ ሌላ ገጽ በጸጥታ ይወስድ ነበር (new-orders → new-entry)። አሁን ግን ተጠቃሚው በራሱ ይመርጣል።
             const mine = (staff.pages || []).filter(p => PAGE_LABEL[p] && p !== page);
-            if (mine.length) {
-                try { const raw = localStorage.getItem(HE_SESSION_KEY); if (raw) localStorage.setItem('he_session_' + mine[0], raw); } catch (e) {}
-                location.replace(PAGE_LABEL[mine[0]][0]);
-                return;
-            }
             const box = document.getElementById('heNoAccessLinks');
-            box.innerHTML = '<span class="text-muted">ለዚህ ገጽ አልተመደቡም</span>';
+            box.innerHTML = '';
+            if (mine.length) {
+                mine.forEach(p => {
+                    const a = document.createElement('a');
+                    a.className = 'btn btn-outline';
+                    a.href = PAGE_LABEL[p][0];
+                    a.textContent = PAGE_LABEL[p][1] + ' — ወደዚህ ገጽ ሂድ';
+                    a.addEventListener('click', () => { try { const raw = localStorage.getItem(HE_SESSION_KEY); if (raw) localStorage.setItem('he_session_' + p, raw); } catch (e) {} });
+                    box.appendChild(a);
+                });
+            } else {
+                box.innerHTML = '<span class="text-muted">ለዚህ ገጽ አልተመደቡም</span>';
+            }
             const who = document.getElementById('heNoAccessWho'); if (who) who.textContent = 'አሁን የገቡት፦ ' + (staff.name || '') + (staff.phone ? ' (' + staff.phone + ')' : '');
             pane('noaccess');
+        };
+
+        // 🔑 የገጽ ፈቃድ ትክክለኛ ምንጭ staff/{id}.pages (Firestore) ነው — Worker የላከው staff ውስጥ pages የጎደለ/የቆየ ሊሆን ይችላል
+        const withFreshPages = async (staff) => {
+            if (!staff || isAdminStaff(staff) || !staff.id) return staff;
+            try {
+                const snap = await db.collection('staff').doc(staff.id).get();
+                if (snap.exists) {
+                    const d = snap.data();
+                    if (Array.isArray(d.pages)) staff = Object.assign({}, staff, { pages: d.pages });
+                    const cur = heGetSession();
+                    if (cur && cur.staff && cur.staff.id === staff.id) {
+                        localStorage.setItem(HE_SESSION_KEY, JSON.stringify(Object.assign({}, cur, { staff: Object.assign({}, cur.staff, { pages: staff.pages }) })));
+                    }
+                }
+            } catch (e) { console.warn('fresh pages read failed', e); }
+            return staff;
         };
 
         // ── የተቀመጠ session ካለ፦ ፈቃዱን ከ Worker አድሱ (አድሚን ከሻረው ወዲያው ይሰራል)
@@ -389,8 +413,9 @@ const HE = (() => {
             s = heGetSession();
         }
         if (s) {
-            if (page && !canOpen(s.staff, page)) { document.getElementById('heGate').classList.add('show'); showNoAccess(s.staff); }
-            else enter(s.staff);
+            const fresh = await withFreshPages(s.staff);
+            if (page && !canOpen(fresh, page)) { document.getElementById('heGate').classList.add('show'); showNoAccess(fresh); }
+            else enter(fresh);
             return;
         }
 
@@ -408,7 +433,8 @@ const HE = (() => {
                 if (res && res.ok && res.staff) {
                     await heSignInWithResult(res);
                     document.getElementById('heLoginPassword').value = '';
-                    if (page && !canOpen(res.staff, page)) showNoAccess(res.staff); else enter(res.staff);
+                    const fresh = await withFreshPages(res.staff);
+                    if (page && !canOpen(fresh, page)) showNoAccess(fresh); else enter(fresh);
                 } else {
                     err.textContent = LOGIN_ERR[res && res.error] || heLoginErrorText(res && res.error, 'pages');
                 }
