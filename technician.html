@@ -5203,8 +5203,8 @@ ${locationLine}
 
             // --- Helper to get photo URLs (array) from either field ---
             function getPhotoURLs(order) {
-                if (ordephWr(r) && Array.isArray(ordephWr(r)) && ordephWr(r).length > 0)
-                    return ordephWr(r);
+                if (order.warrantyPhotoURLs && Array.isArray(order.warrantyPhotoURLs) && order.warrantyPhotoURLs.length > 0)
+                    return order.warrantyPhotoURLs;
                 if (order.warrantyPhotoURL) return [order.warrantyPhotoURL];
                 return [];
             }
@@ -9540,7 +9540,15 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             // (ሙሉ አዲስ ቴክኒሻን — ምንም ሪፖርትም ስራም የሌለው — አይቆጠርም)
             try {
                 const yk = getDateKey(new Date(bizNow().getTime() - 24 * 3600 * 1000));
-                const hasRecent = (techSentReports || []).some(r => String((r && r.dateKey) || '') === yk); // የትላንት (ያደረ) ሪፖርት ብቻ ይፈተሻል — የዛሬ አይጠየቅም
+                const tk = getBizDateKey(); // የዛሬ የስራ ቀን
+                // ✅ የትላንት ሪፖርት ወይም — ያደረ ስራ የያዘ — የዛሬ ሪፖርት። ቀደም ሲል የትላንት ቀን ያለው ሪፖርት ብቻ ይቆጠር ስለነበር፣
+                //    ያደረ ስራን በዛሬ ቀን (ነባሪ) የላከ ቴክኒሻን ሪፖርት ቢልክም «ዕለታዊ ሪፖርት አልላኩም» ተብሎ ይከለከል ነበር።
+                //    ያደረ ስራ የሌለው የዛሬ ሪፖርት ግን አሁንም የትላንት ሪፖርት ምትክ አይሆንም (ህጉ አልተቀየረም)።
+                const hasRecent = (techSentReports || []).some(r => {
+                    const dk = String((r && r.dateKey) || '');
+                    if (dk === yk) return true;
+                    return dk === tk && (Number(r.overnightJobs) > 0 || (Array.isArray(r.jobStatuses) && r.jobStatuses.some(j => j && j.overnight)));
+                });
                 const isBrandNew = !(techSentReports || []).length && !(myOrders || []).length;
                 out.missingDaily = !hasRecent && !isBrandNew; // ስራ ባይኖርም ግዴታ ነው — ለአዲስ ሰራተኛ (ምንም ሪፖርት/ስራ የሌለው) ብቻ ይቀራል
             } catch (e) {}
@@ -11581,7 +11589,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         function loadReportJobs() {
             const container = document.getElementById('reportJobList');
             try { techRenderHeldReportBanner(); } catch (e) {}
-            const today = techReportDateChosen || new Date().toISOString().split('T')[0]; // 📅 የተመረጠ ቀን ወይም ዛሬ
+            const today = techReportDateChosen || getBizDateKey(); // 📅 የተመረጠ ቀን ወይም የዛሬ የስራ ቀን (8:30 ቀን መቀየሪያ — ከ dateKey ጋር አንድ)
             try { techStartSentReports(); } catch (e) {}
             // ✅ FIX: ቀድሞ የተጣራው በ 'createdAt' ብቻ ስለነበር፣ ከትናንት/ካለፈ ቀን ተመድቦ ዛሬ የተጠናቀቀ
             // ስራ (ለምሳሌ የ"ለሌላ ቀን ተዘጋጅቷል" ስራዎች) ከሪፖርቱ ውጪ ይቀር ነበር፣ ይህም አውቶ-ካልኩሌት
@@ -11589,8 +11597,9 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const reportedSet = techReportedKeysAll(); // ✅ ቀደም ሲል በማንኛውም ሪፖርት የተላኩ ስራዎች እንደገና አይታዩም
             const todayJobsAll = myOrders.filter(o => {
                 if (o.convertedInReportId) return false; // ከተላከ ሪፖርት ውስጥ ወደ አጠናቅ የተቀየረ — ገቢው ቀድሞ በዚያ ሪፖርት ገብቷል
-                const createdStr = (o.createdAt?.toDate?.() || null)?.toISOString().split('T')[0];
-                const completedStr = (o.completedAt?.toDate?.() || null)?.toISOString().split('T')[0];
+                const _bk = (v) => { try { const d = v && v.toDate ? v.toDate() : null; return d && !isNaN(d.getTime()) ? getBizDateKey(d) : ''; } catch (e) { return ''; } };
+                const createdStr = _bk(o.createdAt);   // ✅ ቀድሞ UTC ቀን ነበር → በ 00:00–08:30 ስራዎች ከ dateKey/ያደረ ፍተሻ ጋር ይጋጩ ነበር
+                const completedStr = _bk(o.completedAt);
                 return createdStr === today || completedStr === today;
             });
 
