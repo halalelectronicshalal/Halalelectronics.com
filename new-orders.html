@@ -117,6 +117,13 @@ html,body{overflow-x:hidden;max-width:100%}.he-wrap,.card,.modal{min-width:0;max
     </div>
 
 
+    <div class="card" id="officeCallCard" style="display:none;">
+        <div class="card-header">
+            <h3><i class="fas fa-phone-volume" style="color:var(--warning);"></i> 📞 ቢሮ ስለማስደወል ማጽደቅ የሚጠብቁ (ዋጋ አልተስማሙም) <span class="status-badge status-pending" id="officeCallBadge">0</span></h3>
+        </div>
+        <div id="officeCallList"></div>
+    </div>
+
     <div class="card" id="freeAnnounceCard" style="display:none;">
         <div class="card-header">
             <h3><i class="fas fa-circle" style="color:var(--success);"></i> 🟢 «ነፃ ነኝ» ያሉ ቴክኒሻኖች (ዛሬ) <span class="status-badge status-completed" id="freeAnnounceBadge">0</span></h3>
@@ -158,6 +165,7 @@ let allDailyReports = [];
 let ordersFirstLoadDone = false;
 const _urlParams = new URLSearchParams(location.search);
 let highlightOrderId = _urlParams.get('assignOrder') || null;   // ከቴሌግራም "መድብ" ቁልፍ
+let highlightOfficeCallId = _urlParams.get('approveOfficeCall') || null;   // ከቴሌግራም/ፑሽ «አጽድቅ» ሊንክ
 
 /* ============================================================
    ቴክኒሻን ሁኔታ / ዋርኒግ / ራንክ (admin.html ጋር ተመሳሳይ)
@@ -975,6 +983,59 @@ function notifyFreeAnnounce(t) {
         if ('Notification' in window && Notification.permission === 'granted') new Notification('🟢 ቴክኒሻን ነፃ ሆኗል', { body: `${t.name || ''} ነፃ ነኝ አለ`, icon: 'icon-192.png' });
     } catch (e) {}
 }
+/* ============================================================
+   📞 «ዋጋ አልተስማሙም» + «ቢሮ አስደውለዋል: አዎ» — ማጽደቅ (new-orders ወይም አድሚን አንዳቸው ካጸደቁ ይበቃል)
+   ሲጸድቅ ስራው በቴክኒሻኑ ሪፖርት ካርድ ውስጥ ይገባል፤ «ነጻ ነኝ» መቆለፊያውም ይከፈታል።
+   ============================================================ */
+let officeCallOrders = [];
+function loadOfficeCallApprovals() {
+    db.collection('orders').where('officeCallApproval', '==', 'pending').onSnapshot((snapshot) => {
+        officeCallOrders = [];
+        snapshot.forEach(doc => { const d = doc.data(); d.id = doc.id; if (d.status === 'PriceNotAgreed') officeCallOrders.push(d); });
+        renderOfficeCalls();
+    }, (e) => console.warn('officeCall listener', e));
+}
+function renderOfficeCalls() {
+    const card = document.getElementById('officeCallCard'); if (!card) return;
+    const list = document.getElementById('officeCallList');
+    const rows = officeCallOrders.slice().sort((a, b) => toMs(b.officeCallRequestedAt) - toMs(a.officeCallRequestedAt));
+    card.style.display = rows.length ? '' : 'none';
+    const badge = document.getElementById('officeCallBadge'); if (badge) badge.textContent = rows.length;
+    list.innerHTML = rows.map(o => {
+        const t = (allTechnicians || []).find(x => (o.technicianId && x.id === o.technicianId) || x.name === (o.officeCallRequestedBy || o.technician));
+        const name = o.officeCallRequestedBy || o.technician || '—';
+        const phone = (t && t.phone) || '';
+        const hl = o.id === highlightOfficeCallId ? ' hl' : '';
+        return `<div class="order-row${hl}" id="oc-${o.id}">
+            <div class="order-info">
+                <div style="font-weight:700;">👨‍🔧 ${escHtml(name)} ${phone ? `<a href="tel:${escHtml(phone)}" style="font-weight:600;">📱 ${escHtml(phone)}</a>` : ''}</div>
+                <div class="text-muted" style="font-size:0.78rem;">💰 ዋጋ አልተስማሙም — ${escHtml(o.fullName || '—')} • ${escHtml(o.appliance || '—')} • #${escHtml(String(o.id).substring(0, 8))}</div>
+                <div class="text-muted" style="font-size:0.78rem;">📞 «ቢሮ አስደውለዋል» ብሏል — ${toMs(o.officeCallRequestedAt) ? formatEthDateTime(new Date(toMs(o.officeCallRequestedAt))) : ''}</div>
+            </div>
+            <div class="order-actions">
+                <button class="btn btn-sm btn-success" onclick="approveOfficeCall('${o.id}')"><i class="fas fa-check"></i> አጽድቅ</button>
+            </div>
+        </div>`;
+    }).join('');
+    if (highlightOfficeCallId) {
+        const el = document.getElementById('oc-' + highlightOfficeCallId);
+        if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); highlightOfficeCallId = null; }
+    }
+}
+async function approveOfficeCall(orderId) {
+    try {
+        const ref = db.collection('orders').doc(orderId);
+        const snap = await ref.get();
+        const o = snap.exists ? snap.data() : null;
+        if (!o || o.status !== 'PriceNotAgreed' || o.officeCallApproval !== 'pending') { showToast('ℹ️ ይህ ጥያቄ ቀድሞ ተጠናቅቋል (ተጽድቋል ወይም ተቀይሯል)', 'info'); return; }
+        const s = (typeof heGetSession === 'function') ? heGetSession() : null;
+        const by = (s && s.staff && s.staff.name) ? s.staff.name + ' (መዳቢ)' : 'ስራ መዳቢ';
+        await ref.update({ officeCallApproval: 'approved', officeCallApprovedAt: new Date(), officeCallApprovedBy: by });
+        showToast('✅ ጸድቋል — ስራው በቴክኒሻኑ ሪፖርት ካርድ ይገባል፤ «ነጻ ነኝ» ይከፈትለታል', 'success');
+        try { await db.collection('activity').add({ user: by, action: 'approve_office_call', details: `ቢሮ ስለማስደወል ጸድቋል — ${o.officeCallRequestedBy || o.technician || ''} #${String(orderId).substring(0, 8)}`, timestamp: new Date() }); } catch (e) {}
+        if (o.technicianId) { try { callWorker('pushNotify', { audience: ['staff:' + o.technicianId], title: '✅ ቢሮ ስለማስደወልዎ ጸድቋል', body: `#${String(orderId).substring(0, 8)} — አሁን ወደ ሪፖርት ካርድ ገብቷል`, url: new URL('technician.html', location.href).href }).catch(() => {}); } catch (e) {} }
+    } catch (e) { showToast('❌ ' + (e && e.message ? e.message : 'ማጽደቅ አልተቻለም'), 'error'); }
+}
 function loadTechnicians() {
     db.collection('staff').onSnapshot((snapshot) => {
         allTechnicians = [];
@@ -1018,6 +1079,7 @@ HE.boot(() => {
     document.getElementById('orderSearch').addEventListener('input', renderDashNewOrders);
     document.getElementById('sourceFilter').addEventListener('change', renderDashNewOrders);
     loadOrders();
+    loadOfficeCallApprovals();
     loadTechnicians();
     loadDailyReports();
     listenRankReset();
