@@ -5883,8 +5883,8 @@ ${locationLine}
 
             // --- Helper to get photo URLs (array) from either field ---
             function getPhotoURLs(order) {
-                if (ordephWr(r) && Array.isArray(ordephWr(r)) && ordephWr(r).length > 0)
-                    return ordephWr(r);
+                if (order.warrantyPhotoURLs && Array.isArray(order.warrantyPhotoURLs) && order.warrantyPhotoURLs.length > 0)
+                    return order.warrantyPhotoURLs;
                 if (order.warrantyPhotoURL) return [order.warrantyPhotoURL];
                 return [];
             }
