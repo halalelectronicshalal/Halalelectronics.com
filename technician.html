@@ -1332,6 +1332,33 @@
 /* 📸 የሪፖርት ፎቶ፦ ከ Storage ካልተጫነ በሪፖርቱ ውስጥ ራሱ የተቀመጠው ቅጂ (warrantyData / receiptData) ይታያል */
 function phRc(r) { r = r || {}; var u = r.receiptURLs || []; return u.length ? u : (r.receiptData || []); }
 document.addEventListener('change', function (e) { if (e.target && e.target.id === 'noAnswerOfficeCalled') { var r = document.getElementById('noAnswerDispRow'); if (r) r.style.display = e.target.value === 'yes' ? '' : 'none'; } });
+/* 🇪🇹 ሪፖርት ቀን እና ሰዓት በኢትዮጵያ አቆጣጠር — ሰዓቱ ከመሣሪያው የሰዓት ሰቅ ነጻ ነው (ሁልጊዜ አዲስ አበባ UTC+3) */
+function ethAddisParts(v) {
+    var ms = v && v.toDate ? v.toDate().getTime() : (v ? new Date(v).getTime() : 0);
+    if (!ms || isNaN(ms)) return null;
+    var a = new Date(ms + 3 * 3600 * 1000);
+    return { y: a.getUTCFullYear(), m: a.getUTCMonth(), d: a.getUTCDate(), h: a.getUTCHours(), mi: a.getUTCMinutes() };
+}
+function ethClockOf(p) {
+    var h = ((p.h + 6) % 12) || 12, m = ('0' + p.mi).slice(-2);
+    var per = p.h < 6 ? 'ሌሊት' : p.h < 12 ? 'ጠዋት' : p.h < 18 ? 'ከሰዓት' : 'ማታ';
+    return h + ':' + m + ' ' + per;
+}
+function ethReportLabel(r, withWeekday) {
+    try {
+        r = r || {};
+        var out = '';
+        var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(r.dateKey || r.date || ''));
+        var sub = ethAddisParts(r.submittedAt);
+        var base = m ? new Date(+m[1], +m[2] - 1, +m[3]) : (sub ? new Date(sub.y, sub.m, sub.d) : null);
+        if (base) out = formatEthDate(base, withWeekday !== false);
+        if (sub) {
+            var sd = formatEthDate(new Date(sub.y, sub.m, sub.d));
+            out += (out ? ' · ' : '') + '🕐 ተላከ: ' + (out && out.indexOf(sd) >= 0 ? '' : sd + ' ') + ethClockOf(sub);
+        }
+        return out || String(r.dateKey || r.date || '—');
+    } catch (e) { return String(r && (r.dateKey || r.date) || '—'); }
+}
 function phWr(r) { r = r || {}; var u = r.warrantyPhotoURLs || []; return u.length ? u : (r.warrantyData || []); }
 document.addEventListener('click', function (e) {
     var i = e.target;
@@ -2294,6 +2321,7 @@ document.addEventListener('click', function (e) {
                         <button class="option-btn a" data-value="done">ሀ. ተሰራ</button>
                         <button class="option-btn b" data-value="price-not-agreed">ለ. ዋጋ አልተስማሙም</button>
                         <button class="option-btn c" data-value="another-day">ሐ. ለሌላ ቀን</button>
+                        <button class="option-btn b" data-value="price-agreed">መ. ዋጋ ተስማምተናል</button>
                         <button class="option-btn e" data-value="other">ሠ. ሌላ</button>
                         <button class="option-btn f" data-value="return-job">ረ. ስራ መልስ</button>
                         <button class="option-btn g" data-value="no-answer">ሰ. ስልክ አይነሳም</button>
@@ -2409,6 +2437,36 @@ document.addEventListener('click', function (e) {
                                 <input type="time" id="anotherDayTime" />
                             </div>
                             <button id="submitAnotherDay" class="btn btn-secondary btn-block"><i class="fas fa-calendar-plus"></i> አስገባ</button>
+                        </div>
+
+                        <!-- መ: Price Agreed (ዋጋ ተስማምተናል — ለሌላ ቀን/ሰዓት) -->
+                        <div id="subPriceAgreed" class="sub-content" style="display:none;">
+                            <div class="sub-row">
+                                <label>💰 በስንት ተስማማችሁ? (ብር) *</label>
+                                <input type="text" id="pagPrice" inputmode="numeric" placeholder="ለም: 1500" maxlength="9" autocomplete="off" />
+                            </div>
+                            <div id="pagStepDate" style="display:none;">
+                                <div class="sub-row">
+                                    <label>📅 ስራው የሚሰራበት ቀን *</label>
+                                    <div id="pagDateEthContainer" style="display:grid; grid-template-columns:1fr 1.5fr 1fr; gap:4px;"></div>
+                                    <input type="date" id="pagDate" style="display:none;" />
+                                </div>
+                                <div class="sub-row">
+                                    <label>⏰ ሰዓት *</label>
+                                    <input type="time" id="pagTime" />
+                                </div>
+                            </div>
+                            <div id="pagStepReason" style="display:none;">
+                                <div class="sub-row">
+                                    <label>📝 ለምን ዛሬ አልተሰራም? *</label>
+                                    <textarea id="pagReason" placeholder="ምክንያቱን ይጻፉ..." maxlength="400"></textarea>
+                                </div>
+                            </div>
+                            <div id="pagStepDest" style="display:none;">
+                                <label style="font-weight:600; display:block; margin:6px 0; font-size:0.85rem;">ከዚያ በኋላ ስራው ወዴት ይሂድ? (አንዱን ይንኩ)</label>
+                                <button id="pagToOffice" type="button" class="btn btn-secondary btn-block" style="margin-bottom:6px;"><i class="fas fa-building"></i> 🏢 ስራው ወደ ቢሮ ይመለስ</button>
+                                <button id="pagToMe" type="button" class="btn btn-success btn-block"><i class="fas fa-user-check"></i> 👷 ቀኑና ሰዓቱ ሲደርስ ለኔ ይመደብ</button>
+                            </div>
                         </div>
 
                         <!-- E: Other -->
@@ -2596,8 +2654,8 @@ document.addEventListener('click', function (e) {
                                 <input type="text" id="reportProfit" placeholder="0" readonly />
                             </div>
                             <div class="field">
-                                <label>📊 8️⃣ የባለሙያ ድርሻ (%) <span style="color:var(--emergency,#dc2626); font-size:0.75rem;">* ገቢ ካለ ግዴታ</span></label>
-                                <input type="text" inputmode="decimal" id="reportTechSharePercent" placeholder="ለም: 50" />
+                                <label>📊 8️⃣ የባለሙያ ድርሻ (%) <b style="color:var(--primary,#1d4ed8);">ፐርሰንት</b> <span style="color:var(--emergency,#dc2626); font-size:0.75rem;">* ገቢ ካለ ግዴታ</span></label>
+                                <input type="text" inputmode="numeric" maxlength="2" id="reportTechSharePercent" placeholder="ለም: 50 (ፐርሰንት — እስከ 2 አሃዝ)" />
                             </div>
                             <div class="field">
                                 <label>👨‍🔧 የባለሙያ ድርሻ (ብር)</label>
@@ -4777,7 +4835,7 @@ document.addEventListener('click', function (e) {
                     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px; background:#fff; border:1px solid var(--border); border-radius:10px; margin-bottom:8px;">
                         <div style="flex:1; min-width:150px;">
                             <strong>👤 ${escHtml(r.technicianName || r.technician || '—')}</strong>
-                            <div style="font-size:0.8rem; color:var(--text-muted);">📅 ${escHtml(r.date || r.dateKey || '')} · 💰 ${escHtml(income)} ብር${photos ? ' · 📸 ' + photos : ''}</div>
+                            <div style="font-size:0.8rem; color:var(--text-muted);">📅 ${escHtml(ethReportLabel(r))} · 💰 ${escHtml(income)} ብር${photos ? ' · 📸 ' + photos : ''}</div>
                         </div>
                         <button class="btn btn-outline btn-sm" onclick="viewReportDetail('${r.id}')"><i class="fas fa-eye"></i> ተመልከት</button>
                         <button class="btn btn-success btn-sm" onclick="approveReportFromCard('${r.id}')"><i class="fas fa-check"></i> አጽድቅ</button>
@@ -4806,7 +4864,7 @@ document.addEventListener('click', function (e) {
                 ? `<div style="font-size:0.8rem; margin-top:10px; color:var(--text-muted);">${label}</div><div class="photo-gallery">${urls.map(u => `<img src="${u}" alt="" onclick="window.open('${u}','_blank')" />`).join('')}</div>` : '';
             const html = `
                 <div style="font-size:0.9rem; line-height:1.7;">
-                    <div><strong>👤 ${n(r.technicianName || r.technician)}</strong> · 📅 ${n(r.date || r.dateKey)} ${r.day ? '(' + escHtml(r.day) + ')' : ''}</div>
+                    <div><strong>👤 ${n(r.technicianName || r.technician)}</strong> · 📅 ${n(ethReportLabel(r))}</div>
                     <div>📊 የተላኩ: ${n(r.totalSent != null ? r.totalSent : r.jobs)} | ተጠናቀቁ: ${n(r.completedCount)} | አልተጠናቀቁ: ${n(r.notCompletedCount)}</div>
                     ${jobs ? `<div style="margin:8px 0; padding:8px; background:var(--bg); border-radius:8px;">${jobs}</div>` : ''}
                     <div>💰 ገቢ: ${n(r.totalIncome != null ? r.totalIncome : r.income)} ብር | ወጪ: ${n(r.totalExpense)} ብር | ትርፍ: ${n(r.profit)} ብር</div>
@@ -6306,13 +6364,23 @@ ${locationLine}
                 _blk(
                     wN ? `✅ ተያይዟል (${wN} ፎቶ) — የዋራንቲ ካርድ እና ሎጎ ፎቶ` : '❌ አልተያያዘም — የዋራንቲ ካርድ እና ሎጎ ፎቶ',
                     rN ? `✅ ተያይዟል (${rN} ፎቶ) — የባንክ ደረሰኝ` : '❌ አልተያያዘም — የባንክ ደረሰኝ',
-                    lateN ? `ℹ️ ${lateN} ፎቶ በቀጥታ ቀድሞ ተልኳል` : ''
+                    ''
                 )
             ].filter(x => x !== '').join('\n\n');
         }
         async function reportSendPhotoUrls(urls, caption) {
-            const list = (urls || []).filter(u => typeof u === 'string' && u);
+            const allList = (urls || []).filter(u => typeof u === 'string' && u);
+            const list = allList.filter(u => !/^data:image\//.test(u));
+            const dataList = allList.filter(u => /^data:image\//.test(u)); // በሪፖርቱ ውስጥ የተቀመጡ ፎቶዎች (Storage ካልተጫነ)
             let failed = 0;
+            for (let di = 0; di < dataList.length; di++) {
+                let ok = false;
+                for (let a = 0; a < 2 && !ok; a++) {
+                    try { const res = await callWorker('sendTelegramPhoto', { dataUrl: dataList[di], caption: `${caption} (${list.length + di + 1}/${allList.length})`, bot: 'admin' }); ok = !!(res && res.ok); } catch (e) { console.warn('photo data send failed', e); }
+                    if (!ok) await new Promise(r => setTimeout(r, 1200));
+                }
+                if (!ok) failed++;
+            }
             const call = async (chunk, start) => {
                 const payload = { urls: chunk, captions: chunk.map((_, k) => `${caption} (${start + k + 1}/${list.length})`) };
                 for (let a = 0; a < 2; a++) {
@@ -6384,7 +6452,7 @@ ${locationLine}
                 const report = allDailyReports.find(r => r.id === reportId);
                 if (!techId && report) techId = report.technicianId;
                 // 📸 ፎቶዎች ገና እየተጫኑ ከሆነ (ቴክኒሻኑ ገጹን ገና ካልጨረሰ) ያስጠነቅቃል — ከጸደቀ በኋላ ፎቶ ወደ ቴሌግራም አይደርስም
-                if (report && report.tgDeferred && !report.tgPhotosEarly && !report.tgSentAt && report.photosPending && !confirm('📸 የቴክኒሻኑ ፎቶዎች ገና እየተጫኑ ነው።\n\nጥቂት ቆይተው ቢያጸድቁ ፎቶዎቹ ከሪፖርቱ ጋር ወደ ቴሌግራም ይላካሉ።\n\nቢሆንም አሁን ይጽደቅ?')) return;
+                if (report && report.tgDeferred && !report.tgPhotosEarly && !report.tgSentAt && report.photosPending && !((phWr(report) || []).length || (phRc(report) || []).length) && !confirm('📸 የቴክኒሻኑ ፎቶዎች ገና እየተጫኑ ነው።\n\nጥቂት ቆይተው ቢያጸድቁ ፎቶዎቹ ከሪፖርቱ ጋር ወደ ቴሌግራም ይላካሉ።\n\nቢሆንም አሁን ይጽደቅ?')) return;
                 await db.collection('dailyReports').doc(reportId).update({
                     approved: true,
                     approvedAt: new Date()
@@ -9167,6 +9235,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 document.getElementById('reportDateEthContainer').innerHTML = techBuildEthiopianPickerHTML('reportDateEth', 'reportDate', today);
                 document.getElementById('anotherDayDateEthContainer').innerHTML = techBuildEthiopianPickerHTML('anotherDayDateEth', 'anotherDayDate', today);
                 document.getElementById('anotherDayDate').value = today;
+                document.getElementById('pagDateEthContainer').innerHTML = techBuildEthiopianPickerHTML('pagDateEth', 'pagDate', today);
+                document.getElementById('pagDate').value = today;
             }, 'reportDate defaults');
 
             // Auto-fill day
@@ -9226,7 +9296,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 });
             }, 'bindDecimalField reportTotalIncome');
             // ✅ NEW: የባለሙያ ድርሻ (%) ሲቀየር ትርፍ/ድርሻ/የድርጅት ገንዘብ ራሱ በራሱ እንደገና ይሰላል
-            safe(() => { bindDecimalField(document.getElementById('reportTechSharePercent')); }, 'bindDecimalField reportTechSharePercent');
+            safe(() => {
+                const _pc = document.getElementById('reportTechSharePercent');
+                // 🔢 ፐርሰንት፦ ቁጥር ብቻ፣ ከ 2 አሃዝ (ከ 99) በላይ አይፈቀድም — ከ bindDecimalField በፊት ይሰራል ስለዚህ ስሌቱ የተጣራውን ዋጋ ያነባል
+                _pc.maxLength = 2;
+                _pc.addEventListener('input', function () { const v = this.value.replace(/[^0-9]/g, '').slice(0, 2); if (v !== this.value) this.value = v; });
+                bindDecimalField(_pc);
+            }, 'bindDecimalField reportTechSharePercent');
             safe(() => { bindDecimalField(document.getElementById('reportDeposited')); }, 'bindDecimalField reportDeposited');
 
             // ✅ NEW: "የተላኩ ስራዎች ብዛት" ሲፃፍ/ሲቀየር በራሱ በቁጥሩ ልክ "የስራ አይነት" ማስገቢያዎች ይከፈታሉ
@@ -10506,6 +10582,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         'done': '✅ ሀ. ተሰራ',
                         'price-not-agreed': '💰 ለ. ዋጋ አልተስማሙም',
                         'another-day': '📅 ሐ. ለሌላ ቀን',
+                        'price-agreed': '🤝 መ. ዋጋ ተስማምተናል',
                         'other': '📌 ሠ. ሌላ',
                         'return-job': '↩️ ረ. ስራ መልስ',
                         'no-answer': '📵 ሰ. ስልክ አይነሳም'
@@ -10517,6 +10594,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         'done': 'subDone',
                         'price-not-agreed': 'subPriceNotAgreed',
                         'another-day': 'subAnotherDay',
+                        'price-agreed': 'subPriceAgreed',
                         'other': 'subOther',
                         'return-job': 'subReturnJob',
                         'no-answer': 'subNoAnswer'
@@ -10537,6 +10615,12 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             updateDoneAutoIncome();
             document.getElementById('submitPriceNotAgreed').addEventListener('click', submitPriceNotAgreed);
             document.getElementById('submitAnotherDay').addEventListener('click', submitAnotherDay);
+            // መ: ዋጋ ተስማምተናል — ደረጃ በደረጃ (ዋጋ → ቀን/ሰዓት → ምክንያት → ወዴት ይሂድ)
+            ['pagPrice', 'pagTime', 'pagReason'].forEach(id => { const el = document.getElementById(id); if (el) { el.addEventListener('input', pagUpdateSteps); el.addEventListener('change', pagUpdateSteps); } });
+            const _pagP = document.getElementById('pagPrice');
+            if (_pagP) _pagP.addEventListener('input', function () { const v = this.value.replace(/[^0-9]/g, ''); if (v !== this.value) this.value = v; });
+            document.getElementById('pagToOffice').addEventListener('click', () => submitPriceAgreed('office'));
+            document.getElementById('pagToMe').addEventListener('click', () => submitPriceAgreed('me'));
             document.getElementById('submitOther').addEventListener('click', submitOther);
             document.getElementById('submitReturnJob').addEventListener('click', submitReturnJob);
             document.getElementById('submitNoAnswer').addEventListener('click', submitNoAnswer);
@@ -10861,6 +10945,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 'done':             { label: 'ሀ. ተሰራ',              enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ የ{መሳሪያ} ጥገናዎ ተጠናቅቋል። ስለመረጡን እናመሰግናለን!' },
                 'price-not-agreed': { label: 'ለ. ዋጋ አልተስማሙም',     enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ስለ ጊዜዎ እናመሰግናለን። በዋጋ ባለመስማማታችን ስራው አልተሰራም። ሀሳብዎን ከቀየሩ ይደውሉልን።' },
                 'another-day':      { label: 'ሐ. ለሌላ ቀን',           enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ የ{መሳሪያ} ጥገናዎ ወደ {ቀን} ሰዓት {ሰዓት} ተቀይሯል። ቴክኒሻን {ቴክኒሻን} ይመጣል። ለጥያቄ፦ {ቢሮ}' },
+                'price-agreed':     { label: 'መ. ዋጋ ተስማምተናል',      enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ የ{መሳሪያ} ጥገና በ{ዋጋ} ብር ተስማምተናል። ስራው በ{ቀን} ሰዓት {ሰዓት} ይሰራል። ለጥያቄ፦ {ቢሮ}' },
                 'other':            { label: 'ሠ. ሌላ',                enabled: false, text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ስለ {መሳሪያ} ጥገናዎ ቢሯችን በቅርቡ ያነጋግርዎታል።' },
                 'return-job':       { label: 'ረ. ስራ መልስ',           enabled: false, text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ስለ {መሳሪያ} ጥገናዎ ቢሯችን በቅርቡ ያነጋግርዎታል።' },
                 'no-answer':        { label: 'ስልክ አያነሳም',          enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ለጥገና ስንደውልልዎ አላገኘንዎትም። እባክዎ ሲመችዎ ይደውሉልን።' }
@@ -10903,7 +10988,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 if (!o) { showToast('⚠️ ለደንበኛ SMS አልተላከም — ትዕዛዙ አልተገኘም', 'error'); return; }
                 const to = custSmsPhone(o.phone);
                 if (!to) { showToast('⚠️ የደንበኛ ስልክ ቁጥር የለም ወይም ትክክል አይደለም — ለደንበኛ SMS አልተላከም', 'error'); return; }
-                const vars = { 'ደንበኛ': (o.fullName || '').trim() || 'ደንበኛችን', 'መሳሪያ': (o.appliance || '').trim() || 'መሳሪያ', 'ቀን': (extra && extra.date) || '', 'ሰዓት': (extra && extra.time) || '', 'ቴክኒሻን': technicianName || '', 'ቢሮ': cfg.officePhone || '' };
+                const vars = { 'ደንበኛ': (o.fullName || '').trim() || 'ደንበኛችን', 'መሳሪያ': (o.appliance || '').trim() || 'መሳሪያ', 'ቀን': (extra && extra.date) || '', 'ሰዓት': (extra && extra.time) || '', 'ዋጋ': (extra && extra.price != null) ? String(extra.price) : '', 'ቴክኒሻን': technicianName || '', 'ቢሮ': cfg.officePhone || '' };
                 const message = String(item.text).replace(/\{([^{}]+)\}/g, (m, k) => (k in vars ? vars[k] : m)).trim().slice(0, 600);
                 const r = await callWorker('sendSms', { phone: to, message });
                 if (r && (r.success || r.acknowledge === 'success')) showToast('📱 ለደንበኛ SMS ተልኳል', 'success');
@@ -10952,6 +11037,108 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 try { renderMyJobs(); } catch (e) {}
                 resetCompletionForm();
             } catch (error) { showToast('❌ ' + error.message, 'error'); }
+        }
+
+        // ============================================================
+        // 🤝 መ. ዋጋ ተስማምተናል — ዋጋ → ቀን/ሰዓት → ምክንያት → «ወደ ቢሮ ይመለስ» ወይም «ቀኑና ሰዓቱ ሲደርስ ለኔ ይመደብ»
+        //   • ለኔ ይመደብ → ቀጠሮ ሆኖ ይያዛል፤ ቀኑ ሲደርስ በራሱ ወደ ቴክኒሻኑ ይገባል
+        //   • ወደ ቢሮ  → በአድሚን «እስከሚደርስ ቀጠሮ» ካርድ ይያዛል፤ ቀኑ ሲደርስ ሙሉ ዝርዝሩን ይዞ ወደ ዳሽቦርድ ይመጣል
+        // ============================================================
+        function pagUpdateSteps() {
+            const g = (id) => document.getElementById(id);
+            if (!g('pagPrice')) return;
+            const price = parseInt(g('pagPrice').value, 10) || 0;
+            const hasTime = !!(g('pagTime') && g('pagTime').value);
+            const hasReason = ((g('pagReason') && g('pagReason').value) || '').trim().length >= 3;
+            g('pagStepDate').style.display = price > 0 ? '' : 'none';
+            g('pagStepReason').style.display = (price > 0 && hasTime) ? '' : 'none';
+            g('pagStepDest').style.display = (price > 0 && hasTime && hasReason) ? '' : 'none';
+        }
+        function pagKeyToLocalDate(k) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(k || '')); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
+        let priceAgreedBusy = false;
+        async function submitPriceAgreed(dest) {
+            if (priceAgreedBusy) return;
+            const price = parseInt(document.getElementById('pagPrice').value, 10) || 0;
+            const newDate = document.getElementById('pagDate').value;
+            const newTime = (document.getElementById('pagTime').value || '').trim();
+            const reason = (document.getElementById('pagReason').value || '').trim();
+            if (!(price > 0)) { showToast('እባክዎ የተስማሙበትን ዋጋ ያስገቡ', 'error'); return; }
+            if (!newDate || !newTime) { showToast('እባክዎ ቀን እና ሰዓት ይምረጡ', 'error'); return; }
+            if (newDate < getBizDateKey()) { showToast('ያለፈ ቀን መምረጥ አይቻልም', 'error'); return; }
+            if (reason.length < 3) { showToast('እባክዎ ለምን ዛሬ እንዳልተሰራ ምክንያቱን ይጻፉ', 'error'); return; }
+            if (dest !== 'me' && dest !== 'office') return;
+            const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
+            if (!orderId) return;
+            const dd = pagKeyToLocalDate(newDate);
+            const dateLabel = dd ? formatEthDate(dd, true) : newDate;
+            if (!confirm(`💰 ${price} ብር\n📅 ${dateLabel} · ⏰ ${newTime}\n\n` + (dest === 'me' ? '👷 ቀኑና ሰዓቱ ሲደርስ ለእርስዎ ይመደባል።' : '🏢 ስራው ወደ ቢሮ ይመለሳል፤ ቀኑ ሲደርስ በአድሚን ዳሽቦርድ ይገባል።') + '\n\nይቀጥል?')) return;
+            priceAgreedBusy = true;
+            const btns = [document.getElementById('pagToOffice'), document.getElementById('pagToMe')];
+            btns.forEach(b => { if (b) b.disabled = true; });
+            try {
+                const orderRef = db.collection('orders').doc(orderId);
+                const orderSnap = await orderRef.get();
+                const orderData = orderSnap.data() || {};
+                // ሙሉ ዝርዝሩን እንደያዘ (ያሉ መስኮች ብቻ ይገለበጣሉ)
+                const carry = {};
+                ['fullName', 'phone', 'altPhone', 'address', 'appliance', 'problem', 'customerLat', 'customerLng', 'source', 'createdBy', 'createdById', 'createdByName',
+                 'orderType', 'orderTypeLabel', 'correctionTechnician', 'correctionDate', 'referredBy', 'returningCustomer'].forEach(k => { if (orderData[k] !== undefined && orderData[k] !== null) carry[k] = orderData[k]; });
+                const newRef = db.collection('orders').doc();
+                const batch = db.batch();
+                batch.set(newRef, Object.assign({
+                    status: 'Pending',
+                    technician: dest === 'me' ? technicianName : '',
+                    isAppointment: true,
+                    rescheduledFrom: orderId,
+                    rescheduledDate: newDate,
+                    rescheduledTime: newTime,
+                    appointmentDate: newDate,
+                    appointmentTime: newTime,
+                    preferredDay: dateLabel + ' ' + newTime,
+                    priceAgreed: true,
+                    agreedPrice: price,
+                    notDoneReason: reason,
+                    priceAgreedBy: technicianName,
+                    previousTechnician: technicianName,
+                    appointmentDest: dest,
+                    createdAt: new Date()
+                }, carry));
+                batch.update(orderRef, {
+                    status: 'Rescheduled',
+                    completionOption: 'price-agreed',
+                    rescheduledDate: newDate,
+                    rescheduledTime: newTime,
+                    agreedPrice: price,
+                    notDoneReason: reason,
+                    appointmentDest: dest,
+                    completedAt: new Date(),
+                    technician: technicianName
+                });
+                await batch.commit();
+                try {
+                    await tgMuted(`
+                🤝 *ዋጋ ተስማምተናል — ለሌላ ቀን ተይዟል!*
+                🆔 *ትዕዛዝ:* #${orderId.substring(0,8)}
+                👤 *ደንበኛ:* ${orderData.fullName || '—'}
+                📞 *ስልክ:* ${orderData.phone || '—'}
+                📍 *አድራሻ:* ${orderData.address || '—'}
+                🔌 *እቃ:* ${orderData.appliance || '—'}
+
+                💰 *የተስማሙበት ዋጋ:* ${price} ብር
+                📆 *ቀን:* ${dateLabel}
+                ⏰ *ሰዓት:* ${newTime}
+                📝 *ዛሬ ያልተሰራበት ምክንያት:* ${reason}
+                👨‍🔧 *ቴክኒሻን:* ${technicianName}
+                ➡️ *ከዚያ በኋላ:* ${dest === 'me' ? 'ቀኑ ሲደርስ ለቴክኒሻኑ ይመደባል' : 'ወደ ቢሮ ይመለሳል — ቀኑ ሲደርስ ወደ ዳሽቦርድ ይገባል'}
+                📅 ${formatEthDateTime(new Date())}
+                `);
+                } catch (tgErr) { console.warn('telegram notify failed', tgErr); }
+                sendCustomerSmsFor('price-agreed', orderId, { order: orderData, date: dateLabel, time: custSmsTime(newTime), price: price }); // 📱 ለደንበኛ SMS
+                showToast(dest === 'me' ? '✅ ተመዝግቧል — ቀኑና ሰዓቱ ሲደርስ በራሱ ለእርስዎ ይመደባል' : '✅ ተመዝግቧል — ስራው ወደ ቢሮ ተመልሷል፤ ቀኑ ሲደርስ በአድሚን ዳሽቦርድ ይገባል', 'success');
+                resetCompletionForm();
+                try { renderMyJobs(); } catch (e) {}
+            } catch (error) { showToast('❌ ' + error.message, 'error'); }
+            finally { priceAgreedBusy = false; btns.forEach(b => { if (b) b.disabled = false; }); }
         }
 
         let anotherDayBusy = false;
@@ -11158,6 +11345,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const _pna = document.getElementById('priceNotAgreedCalled'); if (_pna) { _pna.value = ''; updatePriceNotAgreedGate(); }
             const _rj = document.getElementById('returnJobReason'); if (_rj) _rj.value = '';
             const _na = document.getElementById('noAnswerOfficeCalled'); if (_na) _na.value = '';
+            try {
+                ['pagPrice', 'pagTime', 'pagReason'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+                const _today = getBizDateKey();
+                const _pc = document.getElementById('pagDateEthContainer'); if (_pc) _pc.innerHTML = techBuildEthiopianPickerHTML('pagDateEth', 'pagDate', _today);
+                const _pd = document.getElementById('pagDate'); if (_pd) _pd.value = _today;
+                pagUpdateSteps();
+            } catch (e) {}
         }
 
         // ============================================================
@@ -12270,7 +12464,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 warrantyData: _embedded.warrantyData,
                 receiptData: _embedded.receiptData,
                 tgDeferred: true,   // 📌 የሪፖርቱ ጽሁፍ ወደ ቴሌግራም የሚላከው አድሚን ሲያጸድቅ ብቻ ነው
-                tgPhotosEarly: true, // 📸 የባንክ ደረሰኝ + ዋራንቲ ፎቶ ግን ሪፖርት እንደተደረገ ወዲያውኑ ወደ ቴሌግራም ይላካል
+                tgPhotosEarly: false, // 📸 ፎቶዎች ወደ ቴሌግራም የሚላኩት አድሚን ሪፖርቱን ሲያጸድቅ ከጽሁፉ ጋር ነው (ሪፖርት ሲደረግ አይላኩም)
                 tgPhotosOk: null,
                 tgSentAt: null,
                 submittedAt: new Date()
@@ -12289,15 +12483,9 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 let storageJob = Promise.resolve({ failed: 0, total: 0, failedFiles: { warranty: [], receipt: [] } });
                 let tgPhotoJob = Promise.resolve(true);
                 if (warrantyCompressed.length || receiptCompressed.length) {
-                    showToast('✅ ሪፖርት ተመዝግቧል! ፎቶዎች በመላክ ላይ ናቸው - ገጹን አይዝጉ', 'success');
-                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ፎቶ በመላክ ላይ... (ገጹን አይዝጉ)';
+                    showToast('✅ ሪፖርት ተመዝግቧል! ፎቶዎች በማስቀመጥ ላይ ናቸው - ገጹን አይዝጉ', 'success');
+                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ፎቶ በማስቀመጥ ላይ... (ገጹን አይዝጉ)';
                     storageJob = uploadReportPhotosToStorage(repRef, warrantyCompressed, receiptCompressed, technicianName);
-                    tgPhotoJob = (async () => {
-                        let ok = true;
-                        if (receiptCompressed.length) ok = (await techSendPhotosToTelegram(receiptCompressed, `🏦 የባንክ ደረሰኝ (ሪፖርት ተደርጓል — ገና አልጸደቀም) — ${repCap}`)) && ok;
-                        if (warrantyCompressed.length) ok = (await techSendPhotosToTelegram(warrantyCompressed, `📸 ዋራንቲ ካርድ (ሪፖርት ተደርጓል — ገና አልጸደቀም) — ${repCap}`)) && ok;
-                        return ok;
-                    })();
                 }
 
                 // ✅ ወደ አድሚኖች ስልክ ፑሽ ማሳወቂያም (ቴሌግራም ቢዘገይ/ባይደርስ እንኳ)
@@ -12316,14 +12504,11 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 try { callWorker('notifyDispatchers', { audience: 'finance', text: ovnCount ? '🌙 ያደረ ስራ ሪፖርት ማጽደቅ ግዴታ ነው — ' + technicianName : '📋 አዲስ ሪፖርት ማጽደቅ ይጠይቃል', smsText: ovnCount ? 'ያደረ ስራ ሪፖርት ማጽደቅ ግዴታ ነው' : 'አዲስ ሪፖርት ማጽደቅ ይጠይቃል' }).catch(() => {}); } catch (e) {}
 
                 const storageRes = await storageJob;
-                const tgPhotosOk = await tgPhotoJob;
                 if (storageRes.failed > 0) {
-                    showToast(`⚠️ ${storageRes.failed} ፎቶ በአፑ ውስጥ (Firebase) አልተቀመጠም${tgPhotosOk ? ' — ወደ ቴሌግራም ግን ተልኳል' : ''}።`, 'error');
+                    showToast(`⚠️ ${storageRes.failed} ፎቶ በ Firebase Storage አልተቀመጠም — ግን በሪፖርቱ ውስጥ ተቀምጧል፤ አድሚን ሲያጸድቅ ይላካል።`, 'error');
                 }
-                try { await repRef.update({ tgPhotosOk: tgPhotosOk, tgPhotosSentAt: new Date() }); } catch (e) { console.warn('tgPhotosOk update failed', e); }
-                if (!tgPhotosOk) showToast('⚠️ አንዳንድ ፎቶዎች ወደ ቴሌግራም አልደረሱም — እባክዎ ለአድሚን በቴሌግራም ይላኩ', 'error');
 
-                showToast('✅ ሪፖርት ተልኳል! ፎቶዎች ወደ ቴሌግራም ተልከዋል፤ የሪፖርቱ ጽሁፍ አድሚን ሲያጸድቀው ይላካል። አመሰግናለሁ!', 'success');
+                showToast('✅ ሪፖርት ተልኳል! አድሚን ሲያጸድቀው ሪፖርቱ ከፎቶዎች ጋር ወደ ቴሌግራም ይላካል። አመሰግናለሁ!', 'success');
 
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-paper-plane"></i> ሪፖርት አስገባ';
