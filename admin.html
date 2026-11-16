@@ -1555,6 +1555,7 @@ document.addEventListener('click', function (e) {
 
                 <!-- ✅ NEW: ያልጸደቁ የቴክኒሻን ሪፖርቶች (ከላይ በግልጽ ይታያል፤ ምንም ከሌለ ይደበቃል) -->
                 <div id="pendingReportsCard"></div>
+                <div id="holdRequestsCard"></div>
 
                 <!-- Stats -->
                 <div class="stats-grid" id="dashboardStats">
@@ -1638,22 +1639,6 @@ document.addEventListener('click', function (e) {
                         <div class="number" id="statTechnicianLinkVisits">0</div>
                         <div class="label">🔗 አዲስ የቴክኒሻን ሊንክ ጎብኚዎች</div>
                     </div>
-                </div>
-
-                <!-- 📞 ቢሮ ስለማስደወል ማጽደቅ የሚጠብቁ (ዋጋ አልተስማሙም) — አድሚን ወይም new-orders አንዳቸው ካጸደቁ ይበቃል -->
-                <div class="card" id="officeCallCard" style="display:none;">
-                    <div class="card-header">
-                        <h3><i class="fas fa-phone-volume" style="color:var(--warning);"></i> 📞 ቢሮ ስለማስደወል ማጽደቅ የሚጠብቁ (ዋጋ አልተስማሙም) <span class="badge" id="officeCallBadge" style="background:var(--warning); color:#fff; border-radius:50px; padding:1px 8px; font-size:0.7rem; margin-left:6px;">0</span></h3>
-                    </div>
-                    <div id="officeCallList"></div>
-                </div>
-
-                <!-- 📅 ለሌላ ቀን የተላለፉ ቀጠሮዎች (ቀኑና ሰዓቱ እስኪደርስ) — ሲደርስ ወደ «አዲስ ትዕዛዞች» ፊት ይወጣል -->
-                <div class="card" id="apptWaitCard" style="display:none;">
-                    <div class="card-header">
-                        <h3><i class="fas fa-calendar-alt" style="color:#B45309;"></i> 📅 እስከሚደርስ ቀጠሮ <span class="badge" id="apptWaitBadge" style="background:#B45309; color:#fff; border-radius:50px; padding:1px 8px; font-size:0.7rem; margin-left:6px;">0</span></h3>
-                    </div>
-                    <div id="apptWaitList" style="max-height:320px; overflow-y:auto;"></div>
                 </div>
 
                 <!-- ✅ NEW: አዲስ ትዕዛዞች (ገና ያልተመደቡ) - አድሚን ወዲያውኑ ዳሽቦርድ ላይ ሆኖ ይመድብ -->
@@ -4312,6 +4297,7 @@ document.addEventListener('click', function (e) {
                 renderRecentOrders();
                 renderOrders();
                 renderDashNewOrders();
+                try { admRenderHoldRequests(); } catch (e) { console.warn('hold requests card failed', e); }
                 renderTechnicians();
                 try { resyncLiveTechPins(); } catch (e) {} // 🗺️ ተመደበ/ተጠናቀቀ ሲሆን የካርታ ፒኖች ይታደሳሉ
                 updateChart();
@@ -5054,6 +5040,47 @@ document.addEventListener('click', function (e) {
         function escHtml(v) {
             return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
+
+        // ============================================================
+        // 📵 «ስልክ አይነሳም» ጥያቄዎች — ቴክኒሻኑ «ስራው እኔጋር ይቆይ» ወይም «ወደ ኋላ ይመለስ» ብሎ ሲጠይቅ አድሚን ማጽደቅ አለበት
+        // ============================================================
+        function admRenderHoldRequests() {
+            const box = document.getElementById('holdRequestsCard');
+            if (!box) return;
+            const list = (allOrders || []).filter(o => o && o.holdRequest && o.holdRequest.status === 'pending');
+            if (!list.length) { box.innerHTML = ''; return; }
+            const e = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            const rows = list.map(o => {
+                const keep = o.holdRequest.type === 'keep';
+                return `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px; background:#fff; border:1px solid var(--border); border-radius:10px; margin-bottom:8px;">
+                    <div style="flex:1; min-width:170px;">
+                        <strong>👷 ${e(o.technician || '—')}</strong> — ${e(o.fullName || '—')} (${e(o.appliance || '—')})
+                        <div style="font-size:0.8rem; color:var(--text-muted);">📵 ስልክ አይነሳም · ቢሮ ተደውሏል: ${o.calledOffice === 'yes' ? 'አዎ' : '—'} · ${keep ? '📌 ስራው እኔጋር ይቆይ' : '↩️ ወደ ኋላ (ወደ አድሚን) ይመለስ'}</div>
+                    </div>
+                    <button class="btn btn-success btn-sm" onclick="admDecideHold('${o.id}', true)"><i class="fas fa-check"></i> አጽድቅ</button>
+                    <button class="btn btn-danger btn-sm" onclick="admDecideHold('${o.id}', false)"><i class="fas fa-times"></i> ውድቅ</button>
+                </div>`;
+            }).join('');
+            box.innerHTML = `<div class="card" style="margin-bottom:14px; border:1px solid #F59E0B;"><div class="card-header"><h3>📵 «ስልክ አይነሳም» ማጽደቂያ (${list.length})</h3></div><div style="padding:10px;">${rows}</div></div>`;
+        }
+        async function admDecideHold(orderId, approve) {
+            const o = (allOrders || []).find(x => x.id === orderId);
+            if (!o || !o.holdRequest || o.holdRequest.status !== 'pending') return;
+            const keep = o.holdRequest.type === 'keep';
+            if (!confirm(approve ? (keep ? 'ስራው ከቴክኒሻኑ ጋር ይቆይ?' : 'ስራው ወደ አድሚን ይመለስ?') : 'ጥያቄው ውድቅ ይደረግ? (ስራው ወደ ቴክኒሻኑ «ተመድቧል» ይመለሳል)')) return;
+            const now = new Date();
+            let upd;
+            if (!approve) {
+                upd = { status: 'Assigned', onHold: false, 'holdRequest.status': 'rejected', 'holdRequest.decidedAt': now };
+            } else if (keep) {
+                upd = { onHold: true, heldAt: now, heldReason: 'ስልክ አይነሳም', 'holdRequest.status': 'approved', 'holdRequest.decidedAt': now };
+            } else {
+                upd = { status: 'Pending', technician: '', onHold: false, returnedFrom: o.technician || '', returnedFromId: o.technicianId || '', returnReason: 'ስልክ አይነሳም (አድሚን አጽድቋል)', returnedAt: now, 'holdRequest.status': 'approved', 'holdRequest.decidedAt': now };
+            }
+            try { await db.collection('orders').doc(orderId).update(upd); showToast('✅ ተመዝግቧል', 'success'); }
+            catch (err) { showToast('❌ ' + err.message, 'error'); }
+        }
+
         function renderPendingReportsCard() {
             const box = document.getElementById('pendingReportsCard');
             if (!box) return;
@@ -5482,89 +5509,13 @@ document.addEventListener('focusout', function (e) {
     if (!e.target || e.target.tagName !== 'SELECT' || !window._heDashDirty) return;
     setTimeout(function () { if (!(document.activeElement && document.activeElement.tagName === 'SELECT')) { window._heDashDirty = false; try { renderDashNewOrders(); } catch (x) {} } }, 400);
 });
-        // ============================================================
-        // 📞 «ዋጋ አልተስማሙም» + «ቢሮ አስደውለዋል: አዎ» — ማጽደቅ (አድሚን ወይም new-orders አንዳቸው ካጸደቁ ይበቃል)
-        // ሲጸድቅ ስራው በቴክኒሻኑ ሪፖርት ካርድ ውስጥ ይገባል፤ «ነጻ ነኝ» መቆለፊያውም ይከፈታል።
-        // ============================================================
-        let pendingOfficeCallFocusId = _urlParams.get('approveOfficeCall') || null;
-        function renderAdminOfficeCalls() {
-            const card = document.getElementById('officeCallCard');
-            const list = document.getElementById('officeCallList');
-            if (!card || !list) return;
-            const rows = (allOrders || []).filter(o => o.status === 'PriceNotAgreed' && o.officeCallApproval === 'pending')
-                .sort((a, b) => toMs(b.officeCallRequestedAt) - toMs(a.officeCallRequestedAt));
-            card.style.display = rows.length ? '' : 'none';
-            const badge = document.getElementById('officeCallBadge'); if (badge) badge.textContent = rows.length;
-            list.innerHTML = rows.map(o => {
-                const t = (allTechnicians || []).find(x => (o.technicianId && x.id === o.technicianId) || x.name === (o.officeCallRequestedBy || o.technician));
-                const name = o.officeCallRequestedBy || o.technician || '—';
-                const phone = (t && t.phone) || '';
-                const hl = o.id === pendingOfficeCallFocusId ? 'background:rgba(245,158,11,.15); outline:2px solid var(--warning); border-radius:8px;' : '';
-                return `<div id="oc-${o.id}" style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 6px; border-bottom:1px solid var(--border-light); ${hl}">
-                    <div style="flex:1; min-width:180px;">
-                        <div style="font-weight:700;">👨‍🔧 ${escHtml(name)} ${phone ? `<a href="tel:${escHtml(phone)}" style="color:var(--secondary); font-weight:600;">📱 ${escHtml(phone)}</a>` : ''}</div>
-                        <div class="text-muted" style="font-size:0.78rem;">💰 ዋጋ አልተስማሙም — ${escHtml(o.fullName || '—')} • ${escHtml(o.appliance || '—')} • #${escHtml(String(o.id).substring(0, 8))}</div>
-                        <div class="text-muted" style="font-size:0.78rem;">📞 «ቢሮ አስደውለዋል» ብሏል — ${toMs(o.officeCallRequestedAt) ? formatEthDateTime(new Date(toMs(o.officeCallRequestedAt))) : ''}</div>
-                    </div>
-                    <button class="btn btn-sm btn-success" onclick="approveOfficeCall('${o.id}')"><i class="fas fa-check"></i> አጽድቅ</button>
-                </div>`;
-            }).join('');
-            if (pendingOfficeCallFocusId) {
-                const el = document.getElementById('oc-' + pendingOfficeCallFocusId);
-                if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); pendingOfficeCallFocusId = null; }
-            }
-        }
-        async function approveOfficeCall(orderId) {
-            try {
-                await heEnsureAdminAuth();
-                const ref = db.collection('orders').doc(orderId);
-                const snap = await ref.get();
-                const o = snap.exists ? snap.data() : null;
-                if (!o || o.status !== 'PriceNotAgreed' || o.officeCallApproval !== 'pending') { showToast('ℹ️ ይህ ጥያቄ ቀድሞ ተጠናቅቋል (ተጽድቋል ወይም ተቀይሯል)', 'info'); return; }
-                await ref.update({ officeCallApproval: 'approved', officeCallApprovedAt: new Date(), officeCallApprovedBy: 'አድሚን' });
-                showToast('✅ ጸድቋል — ስራው በቴክኒሻኑ ሪፖርት ካርድ ይገባል፤ «ነጻ ነኝ» ይከፈትለታል', 'success');
-                try { await db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'approve_office_call', details: `ቢሮ ስለማስደወል ጸድቋል — ${o.officeCallRequestedBy || o.technician || ''} #${String(orderId).substring(0, 8)}`, timestamp: new Date() }); } catch (e) {}
-                if (o.technicianId) { try { callWorker('pushNotify', { audience: ['staff:' + o.technicianId], title: '✅ ቢሮ ስለማስደወልዎ ጸድቋል', body: `#${String(orderId).substring(0, 8)} — አሁን ወደ ሪፖርት ካርድ ገብቷል`, url: new URL('technician.html', location.href).href }).catch(() => {}); } catch (e) {} }
-            } catch (e) { showToast('❌ ' + (e && e.message ? e.message : 'ማጽደቅ አልተቻለም'), 'error'); }
-        }
-
-        // ============================================================
-        // 📅 ለሌላ ቀን የተላለፈ ቀጠሮ ስራ (rescheduledFrom) — ቀኑ እና ሰዓቱ እስኪደርስ በ«እስከሚደርስ ቀጠሮ» ካርድ ውስጥ ይቆያል
-        // ============================================================
-        function adminApptWaiting(o) {
-            if (!o || o.status !== 'Pending' || !o.rescheduledFrom || !o.rescheduledDate) return false;
-            const d = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(o.rescheduledDate));
-            if (!d) return false;
-            const t = /^(\d{1,2}):(\d{2})/.exec(String(o.rescheduledTime || ''));
-            return new Date(+d[1], +d[2] - 1, +d[3], t ? +t[1] : 0, t ? +t[2] : 0, 0, 0).getTime() > Date.now();
-        }
-        function renderAdminApptWait() {
-            const card = document.getElementById('apptWaitCard'), list = document.getElementById('apptWaitList');
-            if (!card || !list) return;
-            const rows = (allOrders || []).filter(adminApptWaiting).sort((a, b) => String(a.rescheduledDate + (a.rescheduledTime || '')).localeCompare(String(b.rescheduledDate + (b.rescheduledTime || ''))));
-            card.style.display = rows.length ? '' : 'none';
-            const b = document.getElementById('apptWaitBadge'); if (b) b.textContent = rows.length;
-            list.innerHTML = rows.map(o => `<div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid var(--border-light);">
-                    <div style="flex:1; min-width:180px;">
-                        <div style="font-weight:600;">${escHtml(o.fullName || '—')} <span class="text-muted" style="font-weight:400; font-size:0.8rem;">• ${escHtml(o.appliance || '—')}</span></div>
-                        <div class="text-muted" style="font-size:0.78rem;">📱 ${o.phone ? `<a href="tel:${escHtml(o.phone)}" style="color:var(--secondary); font-weight:600;">${escHtml(o.phone)}</a>` : '—'}</div>
-                        <div style="font-size:0.8rem; font-weight:700; color:#B45309;">📅 ${escHtml(formatEthDate(o.rescheduledDate))}${o.rescheduledTime ? ' ⏰ ' + escHtml(o.rescheduledTime) : ''}</div>
-                        <div style="margin-top:3px; font-size:0.78rem; color:${o.technician ? '#1E40AF' : '#92400E'};">${o.technician ? '👤 ለ <b>' + escHtml(o.technician) + '</b> ተይዟል' : '🏢 ወደ ቢሮ ተመልሷል — ቀኑ ሲደርስ ይመድቡ'}</div>
-                    </div>
-                    <button class="btn btn-sm btn-primary" onclick="viewOrder('${o.id}')"><i class="fas fa-eye"></i></button>
-                </div>`).join('');
-        }
-        setInterval(function () { try { renderDashNewOrders(); } catch (e) {} }, 60000); // ⏰ ሰዓቱ ሲደርስ ከካርዱ ወደ «አዲስ ትዕዛዞች» ፊት ይወጣል
-
         function renderDashNewOrders() {
             const list = document.getElementById('dashNewOrdersList');
             const badge = document.getElementById('dashNewOrdersBadge');
-            try { renderAdminOfficeCalls(); } catch (e) { console.warn('office-call render failed', e); }
-            try { renderAdminApptWait(); } catch (e) { console.warn('appt-wait render failed', e); }
             if (!list) return;
             if (heSelectOpenIn(list)) { window._heDashDirty = true; return; }
 
-            const pendingOrders = allOrders.filter(o => o.status === 'Pending' && !adminApptWaiting(o));
+            const pendingOrders = allOrders.filter(o => o.status === 'Pending');
             if (badge) badge.textContent = pendingOrders.length;
 
             if (pendingOrders.length === 0) {
