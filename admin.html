@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="am">
 <head>
@@ -1369,6 +1368,33 @@
 <script>
 /* 📸 የሪፖርት ፎቶ፦ ከ Storage ካልተጫነ በሪፖርቱ ውስጥ ራሱ የተቀመጠው ቅጂ (warrantyData / receiptData) ይታያል */
 function phRc(r) { r = r || {}; var u = r.receiptURLs || []; return u.length ? u : (r.receiptData || []); }
+/* 🇪🇹 ሪፖርት ቀን እና ሰዓት በኢትዮጵያ አቆጣጠር — ሰዓቱ ከመሣሪያው የሰዓት ሰቅ ነጻ ነው (ሁልጊዜ አዲስ አበባ UTC+3) */
+function ethAddisParts(v) {
+    var ms = v && v.toDate ? v.toDate().getTime() : (v ? new Date(v).getTime() : 0);
+    if (!ms || isNaN(ms)) return null;
+    var a = new Date(ms + 3 * 3600 * 1000);
+    return { y: a.getUTCFullYear(), m: a.getUTCMonth(), d: a.getUTCDate(), h: a.getUTCHours(), mi: a.getUTCMinutes() };
+}
+function ethClockOf(p) {
+    var h = ((p.h + 6) % 12) || 12, m = ('0' + p.mi).slice(-2);
+    var per = p.h < 6 ? 'ሌሊት' : p.h < 12 ? 'ጠዋት' : p.h < 18 ? 'ከሰዓት' : 'ማታ';
+    return h + ':' + m + ' ' + per;
+}
+function ethReportLabel(r, withWeekday) {
+    try {
+        r = r || {};
+        var out = '';
+        var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(r.dateKey || r.date || ''));
+        var sub = ethAddisParts(r.submittedAt);
+        var base = m ? new Date(+m[1], +m[2] - 1, +m[3]) : (sub ? new Date(sub.y, sub.m, sub.d) : null);
+        if (base) out = formatEthDate(base, withWeekday !== false);
+        if (sub) {
+            var sd = formatEthDate(new Date(sub.y, sub.m, sub.d));
+            out += (out ? ' · ' : '') + '🕐 ተላከ: ' + (out && out.indexOf(sd) >= 0 ? '' : sd + ' ') + ethClockOf(sub);
+        }
+        return out || String(r.dateKey || r.date || '—');
+    } catch (e) { return String(r && (r.dateKey || r.date) || '—'); }
+}
 function phWr(r) { r = r || {}; var u = r.warrantyPhotoURLs || []; return u.length ? u : (r.warrantyData || []); }
 document.addEventListener('click', function (e) {
     var i = e.target;
@@ -2173,7 +2199,7 @@ document.addEventListener('click', function (e) {
                     <div class="card-header"><h3><i class="fas fa-sms"></i> 📱 ለደንበኛ ራስ-ሰር SMS (አጠናቅ ፊደሎች)</h3></div>
                     <p class="text-muted" style="margin-bottom:12px; font-size:0.88rem; line-height:1.6;">
                         ቴክኒሻን በ «አጠናቅ» ታብ አንዱን ፊደል ሲያስገባ ለደንበኛው ይህ ጽሁፍ በራሱ ይላካል። ፊደሉን ለማጥፋት ምልክቱን ያውጡ። ቃላት፦
-                        <code>{ደንበኛ}</code> <code>{መሳሪያ}</code> <code>{ቀን}</code> <code>{ሰዓት}</code> <code>{ቴክኒሻን}</code> <code>{ቢሮ}</code>
+                        <code>{ደንበኛ}</code> <code>{መሳሪያ}</code> <code>{ቀን}</code> <code>{ሰዓት}</code> <code>{ዋጋ}</code> <code>{ቴክኒሻን}</code> <code>{ቢሮ}</code>
                         (<code>{ቀን}</code> እና <code>{ሰዓት}</code> ለ «ሐ. ለሌላ ቀን» ብቻ ይሞላሉ)። እያንዳንዱ SMS ክፍያ አለው — አጭር ያድርጉ።
                     </p>
                     <div class="form-group"><label>📞 የቢሮ ስልክ ({ቢሮ})</label><input type="text" id="custSmsOffice" maxlength="20" /></div>
@@ -2456,7 +2482,7 @@ document.addEventListener('click', function (e) {
                         <button class="option-btn a" data-value="done">ሀ. ተሰራ</button>
                         <button class="option-btn b" data-value="price-not-agreed">ለ. ዋጋ አልተስማሙም</button>
                         <button class="option-btn c" data-value="another-day">ሐ. ለሌላ ቀን</button>
-                        <button class="option-btn d" data-value="not-today">መ. ዛሬ አይመቻቸውም</button>
+                        <button class="option-btn d" data-value="not-today">ዛሬ አይመቻቸውም</button>
                         <button class="option-btn e" data-value="other">ሠ. ሌላ</button>
                     </div>
                     <div id="selectedOptionDisplay" style="text-align:center; font-weight:600; color:var(--primary); margin:8px 0;"></div>
@@ -2675,8 +2701,8 @@ document.addEventListener('click', function (e) {
                                 <input type="text" id="reportProfit" placeholder="0" readonly />
                             </div>
                             <div class="field">
-                                <label>📊 8️⃣ የባለሙያ ድርሻ (%)</label>
-                                <input type="text" inputmode="decimal" id="reportTechSharePercent" placeholder="ለም: 50" />
+                                <label>📊 8️⃣ የባለሙያ ድርሻ (%) <b style="color:var(--primary,#1d4ed8);">ፐርሰንት</b></label>
+                                <input type="text" inputmode="numeric" maxlength="2" id="reportTechSharePercent" placeholder="ለም: 50 (ፐርሰንት — እስከ 2 አሃዝ)" />
                             </div>
                             <div class="field">
                                 <label>👨‍🔧 የባለሙያ ድርሻ (ብር)</label>
@@ -5103,7 +5129,7 @@ document.addEventListener('click', function (e) {
                     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px; background:#fff; border:1px solid var(--border); border-radius:10px; margin-bottom:8px;">
                         <div style="flex:1; min-width:150px;">
                             <strong>👤 ${escHtml(r.technicianName || r.technician || '—')}</strong>${admReportBadges(r)}
-                            <div style="font-size:0.8rem; color:var(--text-muted);">📅 ${escHtml(r.date || r.dateKey || '')} · 💰 ${escHtml(income)} ብር${photos ? ' · 📸 ' + photos : ''}</div>
+                            <div style="font-size:0.8rem; color:var(--text-muted);">📅 ${escHtml(ethReportLabel(r))} · 💰 ${escHtml(income)} ብር${photos ? ' · 📸 ' + photos : ''}</div>
                             ${admHasCorrection(r) ? `<div style="font-size:0.8rem; color:#DC2626; margin-top:4px; white-space:pre-wrap;">✍️ ${escHtml(r.correctionRequest.text)}</div>` : ''}
                         </div>
                         <button class="btn btn-outline btn-sm" onclick="viewReportDetail('${r.id}')"><i class="fas fa-eye"></i> ተመልከት</button>
@@ -5169,7 +5195,7 @@ document.addEventListener('click', function (e) {
                     ${cr0.original ? `<div style="font-size:0.72rem; color:var(--text-muted);">ቀድሞ የተጻፈው: ${v(cr0.original)}</div>` : ''}
                     <div style="font-size:0.72rem; color:var(--text-muted); margin-top:4px;">🔓 የሪፖርቱ ሁሉም ክፍል ክፍት ነው — ከታች ያስተካክሉ።</div>
                 </div>
-                <div style="font-size:0.85rem;"><strong>👤 ${v(r.technicianName || r.technician)}</strong> · 📅 ${v(r.date || r.dateKey)}</div>
+                <div style="font-size:0.85rem;"><strong>👤 ${v(r.technicianName || r.technician)}</strong> · 📅 ${v(ethReportLabel(r))}</div>
                 ${rows ? `<div style="margin:8px 0;"><div style="font-weight:700; font-size:0.82rem;">📋 የስራ ዝርዝር</div>${rows}</div>` : ''}
                 <div class="form-row">
                     <div class="form-group"><label>የተላኩ</label><input type="number" id="admE_sent" value="${v(r.totalSent != null ? r.totalSent : r.jobs)}" /></div>
@@ -5289,7 +5315,7 @@ document.addEventListener('click', function (e) {
                 ? `<div style="font-size:0.8rem; margin-top:10px; color:var(--text-muted);">${label}</div><div class="photo-gallery">${urls.map(u => `<img src="${u}" alt="" onclick="window.open('${u}','_blank')" />`).join('')}</div>` : '';
             const html = `
                 <div style="font-size:0.9rem; line-height:1.7;">
-                    <div><strong>👤 ${n(r.technicianName || r.technician)}</strong> · 📅 ${n(r.date || r.dateKey)} ${r.day ? '(' + escHtml(r.day) + ')' : ''}</div>
+                    <div><strong>👤 ${n(r.technicianName || r.technician)}</strong> · 📅 ${n(ethReportLabel(r))}</div>
                     <div>📊 የተላኩ: ${n(r.totalSent != null ? r.totalSent : r.jobs)} | ተጠናቀቁ: ${n(r.completedCount)} | አልተጠናቀቁ: ${n(r.notCompletedCount)}</div>
                     ${r.reopenedForApproval ? '<div style="color:#047857; font-weight:600;">🔄 ይህ ሪፖርት ከተጸደቀ በኋላ ቴክኒሻኑ ያልተጠናቀቀ ስራ ወደ «ተጠናቀቀ» ስለቀየረ እንደገና ማጽደቅ ይጠይቃል</div>' : ''}
                     ${jobs ? `<div style="margin:8px 0; padding:8px; background:var(--bg); border-radius:8px;">${jobs}</div>` : ''}
@@ -5523,6 +5549,11 @@ document.addEventListener('focusout', function (e) {
         //   • ሰራተኛ ከተመደበ/ከተያዘ → ቀኑ ሲደርስ ወደ ሰራተኛው ይገባል
         //   • ካልተመደበ → ቀኑ ሲደርስ በራሱ ወደ «አዲስ ትዕዛዞች» (ዳሽቦርድ) ይመጣል
         // ============================================================
+        // 🤝 «ዋጋ ተስማምተናል» ከቴክኒሻን የመጣ ስራ — የተስማሙበት ዋጋ + ዛሬ ያልተሰራበት ምክንያት
+        function admPriceTag(o) {
+            if (!o || !o.priceAgreed) return '';
+            return `<div style="margin-top:4px; padding:5px 8px; border-radius:6px; background:#ECFDF5; color:#065F46; font-size:0.78rem;">🤝 <b>ዋጋ ተስማምተዋል: ${escHtml(o.agreedPrice != null ? o.agreedPrice : '—')} ብር</b>${o.priceAgreedBy ? ' · ' + escHtml(o.priceAgreedBy) : ''}${o.notDoneReason ? `<br>📝 ዛሬ ያልተሰራበት ምክንያት: ${escHtml(o.notDoneReason)}` : ''}</div>`;
+        }
         function admIsFutureAppt(o) {
             if (!o) return false;
             if (o.returnReason || o.returnedAt || o.returnedFrom || o.returnedFromId || o.completionOption === 'return-job') return false; // የተመለሱ በራሳቸው ካርድ/ዝርዝር
@@ -5559,6 +5590,7 @@ document.addEventListener('focusout', function (e) {
                         <div style="font-weight:600;">${escHtml(o.fullName || '—')} <span class="text-muted" style="font-weight:400; font-size:0.8rem;">• ${escHtml(o.appliance || '—')}</span></div>
                         <div class="text-muted" style="font-size:0.78rem;">📱 ${escHtml(o.phone || '—')} · 📍 ${escHtml(o.address || '—')}</div>
                         ${note}
+                        ${admPriceTag(o)}
                     </div>
                     ${assign}
                     <button class="btn btn-sm btn-primary" onclick="viewOrder('${o.id}')"><i class="fas fa-eye"></i></button>
@@ -5596,6 +5628,7 @@ document.addEventListener('focusout', function (e) {
                         <div class="text-muted" style="font-size:0.78rem;">📱 ${order.phone ? `<a href="tel:${escHtml(order.phone)}" style="color:var(--secondary); font-weight:600;">${escHtml(order.phone)}</a>` : '—'} &nbsp; <i class="fas fa-map-marker-alt"></i> ${escHtml(order.address || '—')} </div>
                         ${order.returnReason ? `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#FEF3C7; color:#92400E; font-size:0.78rem;">↩️ <strong>ተመለሰ${order.returnedFrom ? ' ከ ' + escHtml(order.returnedFrom) : ''}</strong> — ምክንያት: ${escHtml(order.returnReason)}</div>` : ''}
                         ${schedHoldTag(order)}
+                        ${admPriceTag(order)}
                     </div>
                     <select class="dashAssignSelect" data-id="${order.id}" style="padding:4px 8px; font-size:0.78rem; border:1px solid var(--border); border-radius:6px;">
                         <option value="">ቴክኒሻን ምረጥ</option>
@@ -7138,13 +7171,23 @@ ${locationLine}
                 _blk(
                     wN ? `✅ ተያይዟል (${wN} ፎቶ) — የዋራንቲ ካርድ እና ሎጎ ፎቶ` : '❌ አልተያያዘም — የዋራንቲ ካርድ እና ሎጎ ፎቶ',
                     rN ? `✅ ተያይዟል (${rN} ፎቶ) — የባንክ ደረሰኝ` : '❌ አልተያያዘም — የባንክ ደረሰኝ',
-                    lateN ? `ℹ️ ${lateN} ፎቶ በቀጥታ ቀድሞ ተልኳል` : ''
+                    ''
                 )
             ].filter(x => x !== '').join('\n\n');
         }
         async function reportSendPhotoUrls(urls, caption) {
-            const list = (urls || []).filter(u => typeof u === 'string' && u);
+            const allList = (urls || []).filter(u => typeof u === 'string' && u);
+            const list = allList.filter(u => !/^data:image\//.test(u));
+            const dataList = allList.filter(u => /^data:image\//.test(u)); // በሪፖርቱ ውስጥ የተቀመጡ ፎቶዎች (Storage ካልተጫነ)
             let failed = 0;
+            for (let di = 0; di < dataList.length; di++) {
+                let ok = false;
+                for (let a = 0; a < 2 && !ok; a++) {
+                    try { const res = await callWorker('sendTelegramPhoto', { dataUrl: dataList[di], caption: `${caption} (${list.length + di + 1}/${allList.length})`, bot: 'admin' }); ok = !!(res && res.ok); } catch (e) { console.warn('photo data send failed', e); }
+                    if (!ok) await new Promise(r => setTimeout(r, 1200));
+                }
+                if (!ok) failed++;
+            }
             const call = async (chunk, start) => {
                 const payload = { urls: chunk, captions: chunk.map((_, k) => `${caption} (${start + k + 1}/${list.length})`) };
                 for (let a = 0; a < 2; a++) {
@@ -7216,7 +7259,7 @@ ${locationLine}
                 const report = allDailyReports.find(r => r.id === reportId);
                 if (!techId && report) techId = report.technicianId;
                 // 📸 ፎቶዎች ገና እየተጫኑ ከሆነ (ቴክኒሻኑ ገጹን ገና ካልጨረሰ) ያስጠነቅቃል — ከጸደቀ በኋላ ፎቶ ወደ ቴሌግራም አይደርስም
-                if (report && report.tgDeferred && !report.tgPhotosEarly && !report.tgSentAt && report.photosPending && !confirm('📸 የቴክኒሻኑ ፎቶዎች ገና እየተጫኑ ነው።\n\nጥቂት ቆይተው ቢያጸድቁ ፎቶዎቹ ከሪፖርቱ ጋር ወደ ቴሌግራም ይላካሉ።\n\nቢሆንም አሁን ይጽደቅ?')) return;
+                if (report && report.tgDeferred && !report.tgPhotosEarly && !report.tgSentAt && report.photosPending && !((phWr(report) || []).length || (phRc(report) || []).length) && !confirm('📸 የቴክኒሻኑ ፎቶዎች ገና እየተጫኑ ነው።\n\nጥቂት ቆይተው ቢያጸድቁ ፎቶዎቹ ከሪፖርቱ ጋር ወደ ቴሌግራም ይላካሉ።\n\nቢሆንም አሁን ይጽደቅ?')) return;
                 await db.collection('dailyReports').doc(reportId).update({
                     approved: true,
                     approvedAt: new Date(),
@@ -7510,7 +7553,7 @@ ${locationLine}
                 reports.forEach(r => {
                     const ex = !!r.financeExcluded;
                     html += `<tr style="${ex ? 'opacity:0.55;' : ''}">
-                        <td>${r.dateKey || '—'}${ex ? '<div class="text-muted" style="font-size:0.65rem;">🚫 ከፋይናንስ ወጥቷል</div>' : ''}</td>
+                        <td>${escHtml(ethReportLabel(r, false))}${ex ? '<div class="text-muted" style="font-size:0.65rem;">🚫 ከፋይናንስ ወጥቷል</div>' : ''}</td>
                         <td>${(r.totalIncome ?? r.income ?? 0).toLocaleString()}</td>
                         <td>${(r.totalExpense || 0).toLocaleString()}</td>
                         <td style="color:#2563eb;">${(r.companyAmount || 0).toLocaleString()}</td>
@@ -7896,7 +7939,7 @@ ${locationLine}
 
         // ============================================================
         // 📱 ለደንበኛ ራስ-ሰር SMS (በ "አጠናቅ" ፊደሎች) — ጽሁፉ በአድሚን ሲቲንግ ይስተካከላል (settings/customer_sms)
-        // ቃላት፦ {ደንበኛ} {መሳሪያ} {ቀን} {ሰዓት} {ቴክኒሻን} {ቢሮ}
+        // ቃላት፦ {ደንበኛ} {መሳሪያ} {ቀን} {ሰዓት} {ዋጋ} {ቴክኒሻን} {ቢሮ}
         // ============================================================
         const CUSTOMER_SMS_DEFAULTS = {
             officePhone: '0939165164',
@@ -7904,7 +7947,8 @@ ${locationLine}
                 'done':             { label: 'ሀ. ተሰራ',              enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ የ{መሳሪያ} ጥገናዎ ተጠናቅቋል። ስለመረጡን እናመሰግናለን!' },
                 'price-not-agreed': { label: 'ለ. ዋጋ አልተስማሙም',     enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ስለ ጊዜዎ እናመሰግናለን። በዋጋ ባለመስማማታችን ስራው አልተሰራም። ሀሳብዎን ከቀየሩ ይደውሉልን።' },
                 'another-day':      { label: 'ሐ. ለሌላ ቀን',           enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ የ{መሳሪያ} ጥገናዎ ወደ {ቀን} ሰዓት {ሰዓት} ተቀይሯል። ቴክኒሻን {ቴክኒሻን} ይመጣል። ለጥያቄ፦ {ቢሮ}' },
-                'not-today':        { label: 'መ. ዛሬ አይመቻቸውም',     enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ዛሬ ለእርስዎ እንደማይመች ተረድተናል። ሲመችዎ ቀን ለመቀየር ይደውሉልን።' },
+                'not-today':        { label: 'ዛሬ አይመቻቸውም (አድሚን ፎርም)', enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ዛሬ ለእርስዎ እንደማይመች ተረድተናል። ሲመችዎ ቀን ለመቀየር ይደውሉልን።' },
+                'price-agreed':     { label: 'መ. ዋጋ ተስማምተናል',      enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ የ{መሳሪያ} ጥገና በ{ዋጋ} ብር ተስማምተናል። ስራው በ{ቀን} ሰዓት {ሰዓት} ይሰራል። ለጥያቄ፦ {ቢሮ}' },
                 'other':            { label: 'ሠ. ሌላ',                enabled: false, text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ስለ {መሳሪያ} ጥገናዎ ቢሯችን በቅርቡ ያነጋግርዎታል።' },
                 'return-job':       { label: 'ረ. ስራ መልስ',           enabled: false, text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ስለ {መሳሪያ} ጥገናዎ ቢሯችን በቅርቡ ያነጋግርዎታል።' },
                 'no-answer':        { label: 'ስልክ አያነሳም',          enabled: true,  text: 'ሀላል ኤሌክትሮኒክስ፦ ውድ {ደንበኛ}፣ ለጥገና ስንደውልልዎ አላገኘንዎትም። እባክዎ ሲመችዎ ይደውሉልን።' }
@@ -10889,7 +10933,12 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 });
             }, 'bindDecimalField reportTotalIncome');
             // ✅ NEW: የባለሙያ ድርሻ (%) ሲቀየር ትርፍ/ድርሻ/የድርጅት ገንዘብ ራሱ በራሱ እንደገና ይሰላል
-            safe(() => { bindDecimalField(document.getElementById('reportTechSharePercent')); }, 'bindDecimalField reportTechSharePercent');
+            safe(() => {
+                const _pc = document.getElementById('reportTechSharePercent');
+                _pc.maxLength = 2;
+                _pc.addEventListener('input', function () { const v = this.value.replace(/[^0-9]/g, '').slice(0, 2); if (v !== this.value) this.value = v; });
+                bindDecimalField(_pc);
+            }, 'bindDecimalField reportTechSharePercent');
             safe(() => { bindDecimalField(document.getElementById('reportDeposited')); }, 'bindDecimalField reportDeposited');
 
             // ✅ NEW: "የተላኩ ስራዎች ብዛት" ሲፃፍ/ሲቀየር በራሱ በቁጥሩ ልክ "የስራ አይነት" ማስገቢያዎች ይከፈታሉ
@@ -11732,7 +11781,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         'done': '✅ ሀ. ተሰራ',
                         'price-not-agreed': '💰 ለ. ዋጋ አልተስማሙም',
                         'another-day': '📅 ሐ. ለሌላ ቀን',
-                        'not-today': '📝 መ. ዛሬ አይመቻቸውም',
+                        'not-today': '📝 ዛሬ አይመቻቸውም',
                         'other': '📌 ሠ. ሌላ'
                     };
                     document.getElementById('selectedOptionDisplay').textContent = '✅ የተመረጠ: ' + labels[selectedOption];
