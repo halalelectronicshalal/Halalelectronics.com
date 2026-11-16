@@ -1331,6 +1331,7 @@
 <script>
 /* 📸 የሪፖርት ፎቶ፦ ከ Storage ካልተጫነ በሪፖርቱ ውስጥ ራሱ የተቀመጠው ቅጂ (warrantyData / receiptData) ይታያል */
 function phRc(r) { r = r || {}; var u = r.receiptURLs || []; return u.length ? u : (r.receiptData || []); }
+document.addEventListener('change', function (e) { if (e.target && e.target.id === 'noAnswerOfficeCalled') { var r = document.getElementById('noAnswerDispRow'); if (r) r.style.display = e.target.value === 'yes' ? '' : 'none'; } });
 function phWr(r) { r = r || {}; var u = r.warrantyPhotoURLs || []; return u.length ? u : (r.warrantyData || []); }
 document.addEventListener('click', function (e) {
     var i = e.target;
@@ -1512,6 +1513,7 @@ document.addEventListener('click', function (e) {
 
                 <!-- ✅ NEW: ያልጸደቁ የቴክኒሻን ሪፖርቶች (ከላይ በግልጽ ይታያል፤ ምንም ከሌለ ይደበቃል) -->
                 <div id="pendingReportsCard"></div>
+                <div id="holdRequestsCard"></div>
 
                 <!-- Stats -->
                 <div class="stats-grid" id="dashboardStats">
@@ -2391,7 +2393,7 @@ document.addEventListener('click', function (e) {
                                     <option value="no">❌ አይ</option>
                                 </select>
                             </div>
-                            <small id="priceNotAgreedHint" style="display:none; color:var(--emergency); font-weight:600; margin-bottom:8px;">⚠️ ቢሮ ካላስደወሉ ማስገባት አይቻልም — 0931152425 ደውለው ቢሮ ያነጋግሩ፣ ከዚያ «አዎ» ይምረጡ።</small>
+                            <small id="priceNotAgreedHint" style="display:none; color:var(--emergency); font-weight:600; margin-bottom:8px;">⚠️ ቢሮ ካላስደወሉ ማስገባት አይቻልም — መጀመሪያ ቢሮ ያስደውሉ፣ ከዚያ «አዎ» ይምረጡ።</small>
                             <button id="submitPriceNotAgreed" class="btn btn-warning btn-block" style="background:var(--warning); color:#FFFFFF;" disabled><i class="fas fa-check"></i> አስገባ</button>
                         </div>
 
@@ -2435,6 +2437,14 @@ document.addEventListener('click', function (e) {
                                     <option value="">— ይምረጡ —</option>
                                     <option value="yes">✅ አዎ</option>
                                     <option value="no">❌ አይ</option>
+                                </select>
+                            </div>
+                            <div class="sub-row" id="noAnswerDispRow" style="display:none;">
+                                <label>📌 ስራው ምን ይሁን? <small>(አድሚን ማጽደቅ ይጠብቃል)</small></label>
+                                <select id="noAnswerDisposition">
+                                    <option value="">— ይምረጡ —</option>
+                                    <option value="keep">📌 ስራው እኔጋር ይቆይ</option>
+                                    <option value="return">↩️ ወደ ኋላ (ወደ አድሚን) ይመለስ</option>
                                 </select>
                             </div>
                             <button id="submitNoAnswer" class="btn btn-secondary btn-block"><i class="fas fa-check"></i> አስገባ</button>
@@ -4286,6 +4296,7 @@ document.addEventListener('click', function (e) {
                 renderRecentOrders();
                 renderOrders();
                 renderDashNewOrders();
+                try { admRenderHoldRequests(); } catch (e) { console.warn('hold requests card failed', e); }
                 renderTechnicians();
                 try { resyncLiveTechPins(); } catch (e) {} // 🗺️ ተመደበ/ተጠናቀቀ ሲሆን የካርታ ፒኖች ይታደሳሉ
                 updateChart();
@@ -4712,6 +4723,47 @@ document.addEventListener('click', function (e) {
         function escHtml(v) {
             return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
+
+        // ============================================================
+        // 📵 «ስልክ አይነሳም» ጥያቄዎች — ቴክኒሻኑ «ስራው እኔጋር ይቆይ» ወይም «ወደ ኋላ ይመለስ» ብሎ ሲጠይቅ አድሚን ማጽደቅ አለበት
+        // ============================================================
+        function admRenderHoldRequests() {
+            const box = document.getElementById('holdRequestsCard');
+            if (!box) return;
+            const list = (allOrders || []).filter(o => o && o.holdRequest && o.holdRequest.status === 'pending');
+            if (!list.length) { box.innerHTML = ''; return; }
+            const e = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            const rows = list.map(o => {
+                const keep = o.holdRequest.type === 'keep';
+                return `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px; background:#fff; border:1px solid var(--border); border-radius:10px; margin-bottom:8px;">
+                    <div style="flex:1; min-width:170px;">
+                        <strong>👷 ${e(o.technician || '—')}</strong> — ${e(o.fullName || '—')} (${e(o.appliance || '—')})
+                        <div style="font-size:0.8rem; color:var(--text-muted);">📵 ስልክ አይነሳም · ቢሮ ተደውሏል: ${o.calledOffice === 'yes' ? 'አዎ' : '—'} · ${keep ? '📌 ስራው እኔጋር ይቆይ' : '↩️ ወደ ኋላ (ወደ አድሚን) ይመለስ'}</div>
+                    </div>
+                    <button class="btn btn-success btn-sm" onclick="admDecideHold('${o.id}', true)"><i class="fas fa-check"></i> አጽድቅ</button>
+                    <button class="btn btn-danger btn-sm" onclick="admDecideHold('${o.id}', false)"><i class="fas fa-times"></i> ውድቅ</button>
+                </div>`;
+            }).join('');
+            box.innerHTML = `<div class="card" style="margin-bottom:14px; border:1px solid #F59E0B;"><div class="card-header"><h3>📵 «ስልክ አይነሳም» ማጽደቂያ (${list.length})</h3></div><div style="padding:10px;">${rows}</div></div>`;
+        }
+        async function admDecideHold(orderId, approve) {
+            const o = (allOrders || []).find(x => x.id === orderId);
+            if (!o || !o.holdRequest || o.holdRequest.status !== 'pending') return;
+            const keep = o.holdRequest.type === 'keep';
+            if (!confirm(approve ? (keep ? 'ስራው ከቴክኒሻኑ ጋር ይቆይ?' : 'ስራው ወደ አድሚን ይመለስ?') : 'ጥያቄው ውድቅ ይደረግ? (ስራው ወደ ቴክኒሻኑ «ተመድቧል» ይመለሳል)')) return;
+            const now = new Date();
+            let upd;
+            if (!approve) {
+                upd = { status: 'Assigned', onHold: false, 'holdRequest.status': 'rejected', 'holdRequest.decidedAt': now };
+            } else if (keep) {
+                upd = { onHold: true, heldAt: now, heldReason: 'ስልክ አይነሳም', 'holdRequest.status': 'approved', 'holdRequest.decidedAt': now };
+            } else {
+                upd = { status: 'Pending', technician: '', onHold: false, returnedFrom: o.technician || '', returnedFromId: o.technicianId || '', returnReason: 'ስልክ አይነሳም (አድሚን አጽድቋል)', returnedAt: now, 'holdRequest.status': 'approved', 'holdRequest.decidedAt': now };
+            }
+            try { await db.collection('orders').doc(orderId).update(upd); showToast('✅ ተመዝግቧል', 'success'); }
+            catch (err) { showToast('❌ ' + err.message, 'error'); }
+        }
+
         function renderPendingReportsCard() {
             const box = document.getElementById('pendingReportsCard');
             if (!box) return;
@@ -9512,7 +9564,6 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         function techIsOvernightClosed(o) {
             if (!o || o.convertedInReportId || o.workTag) return false;
             if (o.status === 'Pending' || o.status === 'Assigned') return false; // ገና ያልተጠናቀቀ — በሌላ ህግ ይፈተሻል
-            if (techOfficeCallPending(o)) return false; // 📞 ማጽደቅ የሚጠብቅ — እስኪጸድቅ በሪፖርት ካርድ አይገባም (በ«ነጻ ነኝ» ቁልፍ ላይ ራሱን የቻለ መቆለፊያ አለ)
             if (isFutureAppointment(o)) return false; // ለወደፊት የተቀጠረ ስራ ሪፖርት አይጠበቅበትም
             const c = o.completedAt && o.completedAt.toDate ? o.completedAt.toDate() : null;
             const cr = o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : null;
@@ -9541,14 +9592,14 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             // (ሙሉ አዲስ ቴክኒሻን — ምንም ሪፖርትም ስራም የሌለው — አይቆጠርም)
             try {
                 const yk = getDateKey(new Date(bizNow().getTime() - 24 * 3600 * 1000));
-                const tk = getBizDateKey(); // የዛሬ የስራ ቀን
-                // ✅ የትላንት ሪፖርት ወይም — ያደረ ስራ የያዘ — የዛሬ ሪፖርት። ቀደም ሲል የትላንት ቀን ያለው ሪፖርት ብቻ ይቆጠር ስለነበር፣
-                //    ያደረ ስራን በዛሬ ቀን (ነባሪ) የላከ ቴክኒሻን ሪፖርት ቢልክም «ዕለታዊ ሪፖርት አልላኩም» ተብሎ ይከለከል ነበር።
-                //    ያደረ ስራ የሌለው የዛሬ ሪፖርት ግን አሁንም የትላንት ሪፖርት ምትክ አይሆንም (ህጉ አልተቀየረም)።
+                const tk = getBizDateKey();
+                // ✅ ሪፖርት ተቆጥሯል፦ የትላንት (ወይም አዲስ) ቀን ሪፖርት ከሆነ፣ ወይም በዚህ የስራ ቀን ውስጥ ከተላከ
+                // (ጠዋት ላይ ለትላንት ሪፖርት ሲልክ ቀኑ በስህተት «ዛሬ» ቢመረጥም እንዳይታገድ)
                 const hasRecent = (techSentReports || []).some(r => {
-                    const dk = String((r && r.dateKey) || '');
-                    if (dk === yk) return true;
-                    return dk === tk && (Number(r.overnightJobs) > 0 || (Array.isArray(r.jobStatuses) && r.jobStatuses.some(j => j && j.overnight)));
+                    if (!r) return false;
+                    if (String(r.dateKey || '') >= yk) return true;
+                    const t = r.submittedAt && r.submittedAt.toDate ? r.submittedAt.toDate() : null;
+                    return !!t && getBizDateKey(t) >= tk;
                 });
                 const isBrandNew = !(techSentReports || []).length && !(myOrders || []).length;
                 out.missingDaily = !hasRecent && !isBrandNew; // ስራ ባይኖርም ግዴታ ነው — ለአዲስ ሰራተኛ (ምንም ሪፖርት/ስራ የሌለው) ብቻ ይቀራል
@@ -9628,10 +9679,6 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         if (_ovb.unreported.length) {
                             showToast('🔒 ያደረ ያልተላከ ሪፖርት አለዎት (' + _ovb.unreported.length + ' ስራ)! መጀመሪያ ሪፖርት ያድርጉ፣ ከዚያ «ነጻ ነኝ» ማለት ይችላሉ', 'error');
                             try { document.querySelector('[data-tab="report"]').click(); } catch (e) {}
-                            return;
-                        }
-                        if ((myOrders || []).some(techOfficeCallPending)) {
-                            showToast('🔒 ቢሮ ስለማስደወልዎ (ዋጋ አልተስማሙም) ማጽደቅ እየተጠበቀ ነው! ከ new-orders ወይም ከአድሚን እስኪጸድቅ «ነጻ ነኝ» ማለት አይቻልም', 'error');
                             return;
                         }
                         if (techFreeLockGet()) {
@@ -10227,21 +10274,6 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // «ስራ መልስ» (ረ) ሲባል ብቻ ወደ አድሚን ይመለሳል፤ «አጠናቅ» (ሀ) ሲባል ደግሞ ይጠናቀቃል።
         // ============================================================
         const TECH_HOLD_STATUSES = ['PriceNotAgreed', 'Other', 'PhoneNoAnswer'];
-        // 📞 «ዋጋ አልተስማሙም» + «ቢሮ አስደውለዋል: አዎ» — ከ new-orders ወይም ከአድሚን ማጽደቅ የሚጠብቅ ስራ
-        function techOfficeCallPending(o) { return !!(o && o.status === 'PriceNotAgreed' && o.officeCallApproval === 'pending'); }
-        async function techRequestOfficeCallApproval(orderId) {
-            let phone = '';
-            try { const _s = heGetSession(); phone = (_s && _s.staff && _s.staff.phone) || ''; } catch (e) {}
-            const safeName = tgEsc(technicianName);
-            const shortId = String(orderId).substring(0, 8);
-            const body = `📞 *ቢሮ አስደውሏል — ማጽደቅ ይጠይቃል*\n👨‍🔧 *ቴክኒሻን:* ${safeName}${phone ? `\n📱 *ስልክ:* ${phone}` : ''}\n💰 ዋጋ አልተስማሙም — #${shortId}\nቢሮ ስለማስደወሉ ያጽድቁለት።`;
-            const adminUrl = ADMIN_PAGE_URL() + '?approveOfficeCall=' + encodeURIComponent(orderId);
-            const dispUrl = new URL('new-orders.html?approveOfficeCall=' + encodeURIComponent(orderId), location.href).href;
-            // ቴሌግራም — አድሚን ቦት (አጽድቅ ቁልፍ)
-            sendTelegramNotificationWithButton(body, '✅ አጽድቅ', adminUrl).catch(() => {});
-            // Worker `notifyDispatchers` ራሱ፦ ለአድሚን + ለስራ መዳቢ push፣ እና በቴሌግራም ለተገናኙ ስራ መዳቢዎች ቴሌግራም ይልካል (ድርብ እንዳይሆን pushNotify አልተጨመረም)
-            callWorker('notifyDispatchers', { text: body + '\n🔗 ' + dispUrl }).catch(() => {});
-        }
         function techIsHeld(o) {
             return !!(o && o.onHold === true && TECH_HOLD_STATUSES.includes(o.status) && !o.workTag);
         }
@@ -10279,7 +10311,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     <div class="job-card" style="border-left:4px solid #F59E0B; background:#fff;">
                         <div class="top">
                             <span class="id">🆔 #${techEsc(o.id.substring(0, 8))}</span>
-                            <span class="status-badge status-pending">${techHeldLabel(o.status)}${techOfficeCallPending(o) ? ' · ⏳ ማጽደቅ በመጠበቅ' : ''}</span>
+                            <span class="status-badge status-pending">${techHeldLabel(o.status)}</span>
                         </div>
                         <div class="customer">👤 ${techEsc(o.fullName || '—')} <span>📱 ${techEsc(o.phone || '—')}${o.altPhone ? ' · ☎️ ' + techEsc(o.altPhone) : ''}</span></div>
                         <div class="details">
@@ -10336,7 +10368,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             document.getElementById('jobCount').textContent = count + ' ስራዎች';
 
             const apptJobs = myOrders.filter(o => isFutureAppointment(o) && !TECH_CLOSED_STATUSES.includes(o.status));
-            const apptHtml = apptJobs.length ? `<div style="margin-top:10px; padding:8px 10px; background:#eff6ff; border-radius:8px; font-size:0.8rem; color:#1e40af;">📅 <strong>ቀጠሮዎች (${apptJobs.length})</strong> — ቀኑ ሲደርስ ወደ ስራዎች ይገባሉ፦<br>` +
+            const apptHtml = false /* ቀጠሮ ጊዜው ሲደርስ ብቻ ወደ ቴክኒሻኑ ይገባል */ && apptJobs.length ? `<div style="margin-top:10px; padding:8px 10px; background:#eff6ff; border-radius:8px; font-size:0.8rem; color:#1e40af;">📅 <strong>ቀጠሮዎች (${apptJobs.length})</strong> — ቀኑ ሲደርስ ወደ ስራዎች ይገባሉ፦<br>` +
                 apptJobs.map(o => `• ${o.fullName || '—'} (${o.appliance || '—'}) — ${o.rescheduledDate}`).join('<br>') + `</div>` : '';
             if (pendingJobs.length === 0) {
                 container.innerHTML = '<p class="text-center text-muted">ምንም የተመደበ ስራ የለም 🎉</p>' + apptHtml;
@@ -10881,26 +10913,29 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             return `${(h % 12) || 12}:${m[2]} ${h < 12 ? 'ጠዋት' : 'ከሰዓት'}`;
         }
 
+        // ↩️ ስራን ወደ አድሚን መመለስ (ለ ዋጋ አልተስማሙም፣ ሠ ሌላ፣ ሰ-«አይ») — ከቴክኒሻኑ ዳሽቦርድ ይወጣል
+        async function techReturnToAdmin(orderId, option, reason, extra) {
+            await db.collection('orders').doc(orderId).update(Object.assign({
+                status: 'Pending',
+                technician: '',
+                completionOption: option,
+                onHold: false,
+                returnedFrom: technicianName,
+                returnedFromId: technicianId || '',
+                returnReason: reason,
+                returnedAt: new Date()
+            }, extra || {}));
+        }
         async function submitPriceNotAgreed() {
             const called = document.getElementById('priceNotAgreedCalled').value;
             if (called !== 'yes') {
-                showToast('⚠️ ቢሮ ካላስደወሉ ማስገባት አይቻልም — 0931152425 ደውለው ቢሮ ያነጋግሩ፣ ከዚያ «አዎ» ይምረጡ', 'error');
+                showToast('⚠️ ቢሮ ካላስደወሉ ማስገባት አይቻልም — መጀመሪያ ቢሮ ያስደውሉ፣ ከዚያ «አዎ» ይምረጡ', 'error');
                 return;
             }
             const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
             if (!orderId) return;
             try {
-                await db.collection('orders').doc(orderId).update({
-                    status: 'PriceNotAgreed',
-                    completionOption: 'price-not-agreed',
-                    calledOffice: called,
-                    completedAt: new Date(),
-                    technician: technicianName,
-                    onHold: true, heldAt: new Date(), heldReason: 'ዋጋ አልተስማሙም',   // 📦 ወደ አድሚን አይመለስም — በመጠባበቂያ ካርድ ይቀመጣል
-                    // 📞 «ቢሮ አስደውለዋል? አዎ» ማረጋገጫ ከ new-orders ወይም ከአድሚን እስኪጸድቅ ድረስ ስራው በሪፖርት ካርድ አይገባም፤ «ነጻ ነኝ» አይቻልም
-                    officeCallApproval: 'pending', officeCallRequestedAt: new Date(), officeCallRequestedBy: technicianName
-                });
-                try { techRequestOfficeCallApproval(orderId); } catch (e) { console.warn('office-call approval request failed (non-fatal)', e); }
+                await techReturnToAdmin(orderId, 'price-not-agreed', 'ዋጋ አልተስማሙም', { calledOffice: called });
                 sendCustomerSmsFor('price-not-agreed', orderId);
                 await tgMuted(`
                 💰 *ዋጋ አልተስማሙም!* 💬
@@ -10909,29 +10944,14 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 📞 *ቢሮ ተደውሏል:* ${called === 'yes' ? '✅ አዎ' : '❌ አይ'}
                 📅 ${formatEthDateTime(new Date())}
                 `);
-                showToast('✅ ውጤቱ ተመዝግቧል — ቢሮ ስለማስደወልዎ ማጽደቅ ይጠብቃል። ሲጸድቅ ስራው ወደ ሪፖርት ካርድ ይገባል፤ እስከዚያ «ነጻ ነኝ» ማለት አይቻልም', 'success');
+                showToast('✅ ውጤቱ ተመዝግቧል — ስራው ወደ አድሚን ተመልሷል', 'success');
                 try { renderMyJobs(); } catch (e) {}
                 resetCompletionForm();
             } catch (error) { showToast('❌ ' + error.message, 'error'); }
         }
 
         let anotherDayBusy = false;
-        // 📅 «አስገባ» ሲነካ — ስራው ወዴት ይመደብ የሚል ምርጫ ይመጣል (ወደ ቢሮ ይመለስ / ለዛ ቀን ወደ እኔ ይመደብ)
         async function submitAnotherDay() {
-            if (anotherDayBusy) return;
-            const newDate = document.getElementById('anotherDayDate').value;
-            const newTime = (document.getElementById('anotherDayTime').value || '').trim();
-            if (!newDate || !newTime) { showToast('እባክዎ ቀን እና ሰዓት ይምረጡ', 'error'); return; }
-            const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
-            if (!orderId) return;
-            openModal('📅 ስራው ለዚህ ቀን ወዴት ይመደብ?',
-                `<p class="text-muted" style="margin-bottom:10px;">📆 ${techEsc(formatEthDate(newDate))} · ⏰ ${techEsc(custSmsTime(newTime))}</p>
-                 <button class="btn btn-primary btn-block" style="margin-bottom:8px;" onclick="techAnotherDayChoose('office')">🏢 ወደ ቢሮ ይመለስ<br><small>ቀጠሮ ካርድ ውስጥ ይቀመጣል፤ ቀኑና ሰዓቱ ሲደርስ ቢሮ ይመድበዋል</small></button>
-                 <button class="btn btn-success btn-block" onclick="techAnotherDayChoose('self')">👤 ለዛ ቀን ወደ እኔ ይመደብ<br><small>ቀጠሮ ካርድ ውስጥ ይቀመጣል፤ ቀኑና ሰዓቱ ሲደርስ በራሱ ፊት ይታያል፣ «በስራ ላይ» ይሆናሉ</small></button>`,
-                '<button class="btn btn-secondary" onclick="closeModal()">ተመለስ</button>');
-        }
-        window.techAnotherDayChoose = function (mode) { closeModal(); submitAnotherDayWith(mode === 'office' ? 'office' : 'self'); };
-        async function submitAnotherDayWith(mode) {
             if (anotherDayBusy) return;
             const newDate = document.getElementById('anotherDayDate').value;
             const newTime = (document.getElementById('anotherDayTime').value || '').trim();
@@ -10960,9 +10980,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     source: orderData.source || 'web',
                     createdById: orderData.createdById || '',
                     createdByName: orderData.createdByName || '',
-                    // 🏢 ወደ ቢሮ ከተመለሰ ቴክኒሻን አይያዝም (ቢሮ ይመድባል)፤ 👤 ወደ እኔ ከሆነ በስሜ ተይዞ ቀኑ ሲደርስ በራሱ ይነቃል
-                    ...(mode === 'office' ? { apptReturnedToOffice: true, apptFromTechnician: technicianName } : { technician: technicianName }),
-                    apptMode: mode,
+                    technician: technicianName,
                     isAppointment: true,
                     rescheduledFrom: orderId,
                     rescheduledDate: newDate,
@@ -10998,13 +11016,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 📅 ${formatEthDateTime(new Date())}
                 `);
                 } catch (tgErr) { console.warn('telegram notify failed', tgErr); }
-                if (mode === 'office') {
-                    showToast('✅ ወደ ቢሮ ተመልሷል — በቀጠሮ ካርድ ውስጥ ተቀምጧል፤ ቀኑና ሰዓቱ ሲደርስ ቢሮ ይመድባል። «ነፃ» ማለት ይችላሉ', 'success');
-                    // 🔔 ለስራ መዳቢ + ለአድሚን (Worker notifyDispatchers: push + ቴሌግራም)
-                    try { callWorker('notifyDispatchers', { text: `📅 *ቀጠሮ ወደ ቢሮ ተመልሷል*\n👨‍🔧 *ቴክኒሻን:* ${tgEsc(technicianName)}\n👤 *ደንበኛ:* ${tgEsc(orderData.fullName || '—')}\n📆 *ቀን:* ${newDate} ⏰ ${newTime}\nቀኑና ሰዓቱ ሲደርስ ይመድቡ።` }).catch(() => {}); } catch (e) {}
-                } else {
-                    showToast('✅ ለዛ ቀን ወደ እርስዎ ተመድቧል — ቀኑ እና ሰዓቱ ሲደርስ በራሱ ፊት ይታያል፣ «በስራ ላይ» ይሆናሉ፤ እስከዚያ «ነፃ» ማለት ይችላሉ', 'success');
-                }
+                showToast('✅ ለሌላ ቀን ተዘጋጅቷል — ቀኑ እና ሰዓቱ ሲደርስ በራሱ «በስራ ላይ» ይሆናል፤ እስከዚያ «ነፃ» ማለት ይችላሉ', 'success');
                 resetCompletionForm();
                 try { renderMyJobs(); } catch (e) {}
             } catch (error) { showToast('❌ ' + error.message, 'error'); }
@@ -11017,14 +11029,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
             if (!orderId) return;
             try {
-                await db.collection('orders').doc(orderId).update({
-                    status: 'Other',
-                    completionOption: 'other',
-                    otherReason: reason,
-                    completedAt: new Date(),
-                    technician: technicianName,
-                    onHold: true, heldAt: new Date(), heldReason: reason   // 📦 ወደ አድሚን አይመለስም — በመጠባበቂያ ካርድ ይቀመጣል
-                });
+                await techReturnToAdmin(orderId, 'other', reason, { otherReason: reason });
                 sendCustomerSmsFor('other', orderId);
                 await tgMuted(`
                 📌 *ሌላ ምክንያት!*
@@ -11033,7 +11038,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 📝 *ማብራሪያ:* ${reason}
                 📅 ${formatEthDateTime(new Date())}
                 `);
-                showToast('✅ ውጤቱ ተመዝግቧል — ስራው በ«📦 መጠባበቂያ ስራዎች» ካርድ ላይ ከእርስዎ ጋር ተቀምጧል (ወደ አድሚን አልተመለሰም)', 'success');
+                showToast('✅ ውጤቱ ተመዝግቧል — ስራው ወደ አድሚን ተመልሷል', 'success');
                 try { renderMyJobs(); } catch (e) {}
                 resetCompletionForm();
             } catch (error) { showToast('❌ ' + error.message, 'error'); }
@@ -11090,18 +11095,31 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
         async function submitNoAnswer() {
             const called = document.getElementById('noAnswerOfficeCalled').value;
-            if (!called) { showToast('እባክዎ «ከቢሮ አስደውለሃል?» ሲሉ አዎ ወይም አይ ይምረጡ', 'error'); return; }
+            if (called !== 'yes') {
+                showToast('⚠️ ቢሮ ካላስደወሉ ማስገባት አይቻልም — መጀመሪያ ቢሮ ያስደውሉ፣ ከዚያ «አዎ» ይምረጡ', 'error');
+                return;
+            }
+            const disp = (document.getElementById('noAnswerDisposition') || {}).value || '';
+            if (called === 'yes' && !disp) { showToast('⚠️ «ስራው እኔጋር ይቆይ» ወይም «ወደ ኋላ ይመለስ» ይምረጡ', 'error'); return; }
             const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
             if (!orderId) return;
             try {
-                await db.collection('orders').doc(orderId).update({
-                    status: 'PhoneNoAnswer',
-                    completionOption: 'no-answer',
-                    calledOffice: called,
-                    completedAt: new Date(),
-                    technician: technicianName,
-                    onHold: true, heldAt: new Date(), heldReason: 'ስልክ አይነሳም'   // 📦 ወደ አድሚን አይመለስም — በመጠባበቂያ ካርድ ይቀመጣል
-                });
+                if (called !== 'yes') {
+                    // ቢሮ ካልተደወለ → ከሌሎቹ ጋር አንድ ላይ ወደ አድሚን ይመለሳል
+                    await techReturnToAdmin(orderId, 'no-answer', 'ስልክ አይነሳም (ቢሮ አልተደወለም)', { calledOffice: called });
+                } else {
+                    // ቢሮ ተደውሏል → «እኔጋር ይቆይ» / «ወደ ኋላ ይመለስ» — ሁለቱም የአድሚን ማጽደቅ ይጠብቃሉ
+                    await db.collection('orders').doc(orderId).update({
+                        status: 'PhoneNoAnswer',
+                        completionOption: 'no-answer',
+                        calledOffice: called,
+                        completedAt: new Date(),
+                        technician: technicianName,
+                        technicianId: technicianId || '',
+                        onHold: false,
+                        holdRequest: { type: disp, status: 'pending', requestedAt: new Date(), by: technicianName }
+                    });
+                }
                 sendCustomerSmsFor('no-answer', orderId);
                 db.collection('activity').add({
                     user: technicianName,
@@ -11116,7 +11134,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 📞 *ከቢሮ ተደውሏል:* ${called === 'yes' ? '✅ አዎ' : '❌ አይ'}
                 📅 ${formatEthDateTime(new Date())}
                 `);
-                showToast('✅ ውጤቱ ተመዝግቧል — ስራው በ«📦 መጠባበቂያ ስራዎች» ካርድ ላይ ከእርስዎ ጋር ተቀምጧል (ወደ አድሚን አልተመለሰም)', 'success');
+                showToast(called === 'yes' ? '✅ ጥያቄዎ ተልኳል — አድሚን እስኪያጸድቅ ይጠብቁ' : '✅ ውጤቱ ተመዝግቧል — ስራው ወደ አድሚን ተመልሷል', 'success');
                 try { renderMyJobs(); } catch (e) {}
                 resetCompletionForm();
                 try { renderMyJobs(); } catch (e) {}
@@ -11625,7 +11643,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 b.id = 'reportHeldBanner';
                 container.parentElement.insertBefore(b, container);
             }
-            const held = techHeldJobs().filter(o => !techOfficeCallPending(o)); // 📞 ማጽደቅ የሚጠብቅ ገና በሪፖርት አይገባም
+            const held = techHeldJobs();
             if (!held.length) { b.innerHTML = ''; b.style.display = 'none'; return; }
             b.style.cssText = 'display:block; margin:6px 0 10px; padding:8px 10px; background:#FFFBEB; border:1.5px solid #F59E0B; border-radius:8px; font-size:0.8rem; color:#92400E;';
             b.innerHTML = `<strong>📦 ከእርስዎ ጋር ያልተጠናቀቀ ስራ አለ (${held.length})</strong> — በሪፖርቱ ላይ ምልክት ይደረግበታል፦` +
@@ -11635,7 +11653,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         function loadReportJobs() {
             const container = document.getElementById('reportJobList');
             try { techRenderHeldReportBanner(); } catch (e) {}
-            const today = techReportDateChosen || getBizDateKey(); // 📅 የተመረጠ ቀን ወይም የዛሬ የስራ ቀን (8:30 ቀን መቀየሪያ — ከ dateKey ጋር አንድ)
+            const today = techReportDateChosen || new Date().toISOString().split('T')[0]; // 📅 የተመረጠ ቀን ወይም ዛሬ
             try { techStartSentReports(); } catch (e) {}
             // ✅ FIX: ቀድሞ የተጣራው በ 'createdAt' ብቻ ስለነበር፣ ከትናንት/ካለፈ ቀን ተመድቦ ዛሬ የተጠናቀቀ
             // ስራ (ለምሳሌ የ"ለሌላ ቀን ተዘጋጅቷል" ስራዎች) ከሪፖርቱ ውጪ ይቀር ነበር፣ ይህም አውቶ-ካልኩሌት
@@ -11643,10 +11661,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const reportedSet = techReportedKeysAll(); // ✅ ቀደም ሲል በማንኛውም ሪፖርት የተላኩ ስራዎች እንደገና አይታዩም
             const todayJobsAll = myOrders.filter(o => {
                 if (o.convertedInReportId) return false; // ከተላከ ሪፖርት ውስጥ ወደ አጠናቅ የተቀየረ — ገቢው ቀድሞ በዚያ ሪፖርት ገብቷል
-                if (techOfficeCallPending(o)) return false; // 📞 ቢሮ ስለማስደወል ማጽደቅ የሚጠብቅ — ሲጸድቅ ወደ ሪፖርት ካርድ ይገባል
-                const _bk = (v) => { try { const d = v && v.toDate ? v.toDate() : null; return d && !isNaN(d.getTime()) ? getBizDateKey(d) : ''; } catch (e) { return ''; } };
-                const createdStr = _bk(o.createdAt);   // ✅ ቀድሞ UTC ቀን ነበር → በ 00:00–08:30 ስራዎች ከ dateKey/ያደረ ፍተሻ ጋር ይጋጩ ነበር
-                const completedStr = _bk(o.completedAt);
+                const createdStr = (o.createdAt?.toDate?.() || null)?.toISOString().split('T')[0];
+                const completedStr = (o.completedAt?.toDate?.() || null)?.toISOString().split('T')[0];
                 return createdStr === today || completedStr === today;
             });
 
@@ -12214,8 +12230,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 notCompletedCount: notCompletedCount,
                 jobStatuses: jobStatuses,
                 overnightJobs: ovnCount,                 // 🌙 ያደረ ስራ ብዛት (ማጽደቅ ግዴታ)
-                heldJobsCount: techHeldJobs().filter(o => !techOfficeCallPending(o)).length,   // 📦 ከቴክኒሻኑ ጋር ያሉ ያልተጠናቀቁ ስራዎች
-                heldJobs: techHeldJobs().filter(o => !techOfficeCallPending(o)).map(o => ({
+                heldJobsCount: techHeldJobs().length,   // 📦 ከቴክኒሻኑ ጋር ያሉ ያልተጠናቀቁ ስራዎች
+                heldJobs: techHeldJobs().map(o => ({
                     orderId: o.id, customer: o.fullName || '—', phone: o.phone || '', appliance: o.appliance || '',
                     status: o.status, statusLabel: techHeldLabel(o.status), reason: techHeldReasonText(o) || '',
                     assignedDate: techDateKeyOf(techAssignedTs(o)),
