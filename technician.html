@@ -9555,6 +9555,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // 🌙 ያደረ ሪፖርት፦ ከዛሬ (የስራ ቀን) በፊት የተጠናቀቀ/የተመዘገበ ስራ ሪፖርት ሳይደረግበት ካደረ «ነጻ ነኝ» ማለት አይቻልም
         // 🌙 ስራው «ያደረ» ነው? = (ከዛሬ በፊት የተዘጋ) ወይም (ከተመዘገበበት/ከተመለሰበት/ከተቀጠረበት ቀን በኋላ በሌላ ቀን የተዘጋ)።
         // የቀጠሮ ስራ በቀጠሮው ቀን ከተሰራ «ያደረ» አይደለም (ቀጠሮው ቀን የስራው መነሻ ቀን ነው)።
+        // 📅 የያደረ/ዕለታዊ ሪፖርት ህግ የሚጀምርበት የስራ ቀን — ከዚህ በፊት ለተዘጉ ስራዎች እና ለቀደሙ ቀናት ሪፖርት አይጠየቅም
+        const TECH_OVN_RULE_START = '2026-11-16';
         function techJobBaseKey(o) {
             const k = (v) => { try { const d = v && v.toDate ? v.toDate() : (v ? new Date(v) : null); return (d && !isNaN(d.getTime())) ? getBizDateKey(d) : ''; } catch (e) { return ''; } };
             const ap = String((o && ((o.rescheduledFrom && o.rescheduledDate) || o.appointmentDate)) || '').slice(0, 10);
@@ -9571,6 +9573,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (!d) return false;
             const closeKey = getBizDateKey(d);
             if (!closeKey) return false;
+            if (closeKey < TECH_OVN_RULE_START) return false; // ህጉ ከመጀመሩ በፊት የተዘጉ አይቆጠሩም
             if (closeKey < getBizDateKey()) return true;        // ከዛሬ በፊት የተዘጋ
             const baseKey = techJobBaseKey(o);
             return !!baseKey && baseKey < closeKey;              // ዛሬ ተዘግቷል ግን ከትላንት/ከዚያ በፊት የጀመረ
@@ -9602,7 +9605,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     return !!t && getBizDateKey(t) >= tk;
                 });
                 const isBrandNew = !(techSentReports || []).length && !(myOrders || []).length;
-                out.missingDaily = !hasRecent && !isBrandNew; // ስራ ባይኖርም ግዴታ ነው — ለአዲስ ሰራተኛ (ምንም ሪፖርት/ስራ የሌለው) ብቻ ይቀራል
+                // የትላንት ቀን ህጉ ከመጀመሩ በፊት ከሆነ (ማለትም ከዛሬ በፊት) ሪፖርት አይጠየቅም
+                out.missingDaily = yk >= TECH_OVN_RULE_START && !hasRecent && !isBrandNew; // ስራ ባይኖርም ግዴታ ነው — ለአዲስ ሰራተኛ (ምንም ሪፖርት/ስራ የሌለው) ብቻ ይቀራል
             } catch (e) {}
             (myOrders || []).forEach(o => {
                 if (!techIsOvernightClosed(o)) return;
@@ -12428,11 +12432,21 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 if (!snap.exists) throw new Error('ሪፖርቱ አልተገኘም');
                 const rep = snap.data();
                 if (rep.approved) throw new Error('ሪፖርቱ ቀድሞ ጸድቋል — እርማት መጻፍ አይቻልም');
+                // 🔕 ተመሳሳይ ጽሁፍ ድጋሜ ሲቀመጥ ወይም በአጭር ጊዜ ውስጥ ደጋግሞ ሲነካ ቴሌግራም/ማሳወቂያ አይላክም (spam መከላከያ)
+                const _prevText = (rep.correctionRequest && rep.correctionRequest.text) ? String(rep.correctionRequest.text).trim() : '';
+                let _notify = !!text && text !== _prevText;
+                try {
+                    const _k = 'techCorrNotified_' + reportId;
+                    const _last = parseInt(localStorage.getItem(_k) || '0', 10);
+                    if (_notify && Date.now() - _last < 10 * 60 * 1000) _notify = false;
+                    if (_notify) localStorage.setItem(_k, String(Date.now()));
+                } catch (e) {}
                 const upd = text
                     ? { correctionRequest: { text: text, by: 'technician', at: new Date(), editedByAdmin: false }, hasCorrectionRequest: true }
                     : { correctionRequest: null, hasCorrectionRequest: false };
                 await ref.update(upd);
-                if (text) {
+                if (text && !_notify) { /* ድጋሜ ተመሳሳይ ጽሁፍ — ማሳወቂያ አይላክም */ }
+                if (text && _notify) {
                     db.collection('activity').add({ user: technicianName, action: 'report_correction_request', details: `ሪፖርት ${rep.dateKey || ''}: ${text.slice(0, 200)}`, timestamp: new Date() }).catch(() => {});
                     try { techSendTelegramNotification(`✍️ የእርማት ጥያቄ\n👷 ${tgEsc(technicianName)} — ${tgEsc(rep.date || rep.dateKey || '')}\n${tgEsc(text)}`); } catch (e) {}
                     try { callWorker('notifyDispatchers', { audience: 'finance', text: '✍️ ቴክኒሻን በሪፖርት ላይ እርማት ጠይቋል', smsText: 'ቴክኒሻን በሪፖርት ላይ እርማት ጠይቋል' }).catch(() => {}); } catch (e) {}
