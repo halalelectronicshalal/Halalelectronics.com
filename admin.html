@@ -6748,6 +6748,7 @@ ${locationLine}
                 </div>
                 <div class="flex" style="margin-bottom:16px; gap:8px; flex-wrap:wrap;">
                     <button class="btn btn-success btn-sm" onclick="showAddReportForm()"><i class="fas fa-plus"></i> ሪፖርት በአድሚን መዝግብ</button>
+                    <button class="btn btn-outline btn-sm" style="color:#DC2626; border-color:#DC2626;" onclick="admAuditAutoApproved()"><i class="fas fa-search"></i> ያለ አድሚን የጸደቁ ሪፖርቶችን ፈልግ</button>
                     <button class="btn btn-outline btn-sm" onclick="toggleTechReportsAll()"><i class="fas fa-${_techReportsShowAll ? 'filter' : 'users'}"></i> ${_techReportsShowAll ? 'ሪፖርት ያላደረጉትን ብቻ አሳይ' : 'ሁሉንም ቴክኒሻን አሳይ (ማጽደቅ)'}</button>
                 </div>
             `;
@@ -7102,6 +7103,68 @@ ${locationLine}
             } catch (error) {
                 showToast('❌ ' + error.message, 'error');
             }
+        }
+
+
+        // ============================================================
+        // 🔍 ያለ አድሚን ፈቃድ የጸደቁ ሪፖርቶችን መፈለግ እና ወደ «አልጸደቀም» መመለስ (አድሚን ብቻ)
+        //   አጠራጣሪ = የጸደቀ ሆኖ (1) በ activity ውስጥ «approve_report» መዝገብ የሌለው፣ ወይም
+        //   (2) approvedAt ከ submittedAt በ2 ደቂቃ ውስጥ የሆነ። approvedBy ያለው (አድሚን ያጸደቀው) አይጠቆምም።
+        //   መመለሱ በእጅ ምርጫ ብቻ ነው — በራስ አይመለስም።
+        // ============================================================
+        function admTs(v) { return v && v.toDate ? v.toDate().getTime() : (v instanceof Date ? v.getTime() : 0); }
+        async function admAuditAutoApproved() {
+            if (!heIsAdminSession()) { showToast('⛔ አድሚን ብቻ', 'error'); return; }
+            try {
+                showToast('🔍 በመፈለግ ላይ...', 'success');
+                const snap = await db.collection('activity').where('action', '==', 'approve_report').get();
+                const logged = [];
+                snap.forEach(d => logged.push(String((d.data() || {}).details || '')));
+                const approved = (allDailyReports || []).filter(r => r.approved === true && !r.approvedBy);
+                const sus = [];
+                approved.forEach(r => {
+                    const hasLog = logged.some(t => t.indexOf(r.technicianName || '\u0000') !== -1 && t.indexOf('(' + (r.dateKey || '\u0000') + ')') !== -1);
+                    const sub = admTs(r.submittedAt), ap = admTs(r.approvedAt);
+                    const fast = sub && ap && Math.abs(ap - sub) < 120000;
+                    if (!hasLog || fast) sus.push({ r, why: [!hasLog ? 'የማጽደቅ መዝገብ የለም' : '', fast ? 'ከመላክ ጋር በአንድ ጊዜ ጸድቋል' : ''].filter(Boolean).join(' · ') });
+                });
+                if (!sus.length) { openModal('🔍 ያለ አድሚን የጸደቁ ሪፖርቶች', '<p class="text-center text-muted">አጠራጣሪ ሪፖርት አልተገኘም ✅</p>'); return; }
+                sus.sort((a, b) => (b.r.dateKey || '').localeCompare(a.r.dateKey || ''));
+                const rows = sus.map(x => `<label style="display:flex; gap:8px; align-items:flex-start; padding:8px; border:1px solid var(--border); border-radius:8px; margin-bottom:6px;">
+                    <input type="checkbox" class="admRevChk" value="${x.r.id}" />
+                    <span><strong>${escHtml(x.r.technicianName || x.r.technician || '—')}</strong> · ${escHtml(x.r.dateKey || '')} · ${escHtml(x.r.totalIncome != null ? x.r.totalIncome : (x.r.income || 0))} ብር<br><small style="color:#b45309;">⚠️ ${escHtml(x.why)}</small></span></label>`).join('');
+                openModal('🔍 ያለ አድሚን የጸደቁ ሪፖርቶች (' + sus.length + ')',
+                    `<p style="font-size:0.85rem;">ትክክል እንዳልሆኑ የሚያውቋቸውን ብቻ ይምረጡ። ይህ ግምት ነው፤ ቀደም ብለው በትክክል ያጸደቁትም ሊጠቆም ይችላል።</p>${rows}`,
+                    `<button class="btn btn-danger" onclick="admRevertSelectedReports()"><i class="fas fa-undo"></i> የተመረጡትን ወደ «አልጸደቀም» መልስ</button> <button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>`);
+            } catch (e) { showToast('❌ ' + e.message, 'error'); }
+        }
+        async function admRevertReport(reportId) {
+            const ref = db.collection('dailyReports').doc(reportId);
+            await ref.update({ approved: false, approvedAt: null, approvedBy: firebase.firestore.FieldValue.delete(), revertedByAdminAt: new Date() });
+            // በዚህ ሪፖርት የተለቀቁ ገቢ/ወጪዎች ወደ pending ይመለሳሉ
+            const tx = await db.collection('transactions').where('releasedByReport', '==', reportId).get();
+            if (!tx.empty) {
+                const batch = db.batch();
+                tx.forEach(d => batch.update(d.ref, { pending: true, releasedAt: null, releasedByReport: '' }));
+                await batch.commit();
+            }
+            return tx.size;
+        }
+        async function admRevertSelectedReports() {
+            if (!heIsAdminSession()) { showToast('⛔ አድሚን ብቻ', 'error'); return; }
+            const ids = Array.from(document.querySelectorAll('.admRevChk:checked')).map(c => c.value);
+            if (!ids.length) { showToast('⚠️ ምንም አልተመረጠም', 'error'); return; }
+            if (!confirm(ids.length + ' ሪፖርት ወደ «አልጸደቀም» ይመለስ?\n\nየተለቀቀው ገቢ/ወጪ ወደ መጠባበቂያ ይመለሳል።')) return;
+            let ok = 0, tx = 0;
+            for (const id of ids) {
+                try {
+                    tx += await admRevertReport(id); ok++;
+                    const r = (allDailyReports || []).find(x => x.id === id);
+                    try { await db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'revert_report_approval', details: `የ ${r ? r.technicianName : ''} ሪፖርት ወደ «አልጸደቀም» ተመለሰ (${r ? r.dateKey : ''})`, timestamp: new Date() }); } catch (e) {}
+                } catch (e) { console.warn('revert failed', id, e); }
+            }
+            showToast(`✅ ${ok}/${ids.length} ሪፖርት ተመለሰ (${tx} ገቢ/ወጪ)`, 'success');
+            closeModal();
         }
 
 
