@@ -9765,6 +9765,12 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                             showToast('✅ «ነጻ ነኝ» ብለው ቀድሞ ልከዋል። ድጋሜ መላክ የሚችሉት ስራ ከጨረሱ በኋላ ነው', 'info');
                             return;
                         }
+                        // 📵 «ስልክ አይነሳም» ውሳኔ (እኔጋር ይቆይ / ይመለስ) የአድሚን ማጽደቅ እየጠበቀ ከሆነ «ነጻ ነኝ» አይቻልም — አድሚን ሲያጸድቅ ብቻ
+                        const awaitingPhoneApproval = myOrders.some(o => o.status === 'PhoneNoAnswer' && o.holdRequest && o.holdRequest.status === 'pending');
+                        if (awaitingPhoneApproval) {
+                            showToast('⏳ «ስልክ አይነሳም» ውሳኔዎ የአድሚን ማጽደቅ እየጠበቀ ነው — አድሚን ሲያጸድቅ «ነጻ ነኝ» ማለት ይችላሉ', 'error');
+                            return;
+                        }
                         const hasUnfinishedJob = myOrders.some(o => o.status === 'Assigned' && !isFutureAppointment(o));
                         if (hasUnfinishedJob) {
                             showToast('🔒 የተመደበልዎት ስራ አለ! መጀመሪያ ስራውን ያጠናቅቁ (ወይም ውጤቱን ያስመዝግቡ) ከዚያ "ነፃ" ማለት ይችላሉ', 'error');
