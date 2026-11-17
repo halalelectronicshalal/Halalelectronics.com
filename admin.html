@@ -7279,6 +7279,7 @@ ${locationLine}
         }
 
         async function approveReport(reportId, techId, fromCard) {
+            if (!heIsAdminSession()) { showToast('⛔ ሪፖርት ማጽደቅ የሚችለው አድሚን ብቻ ነው', 'error'); return; }
             try {
                 const report = allDailyReports.find(r => r.id === reportId);
                 if (!techId && report) techId = report.technicianId;
@@ -7287,6 +7288,7 @@ ${locationLine}
                 await db.collection('dailyReports').doc(reportId).update({
                     approved: true,
                     approvedAt: new Date(),
+                    approvedBy: (heGetSession() && heGetSession().staff && heGetSession().staff.id) || '',
                     reopenedForApproval: false
                 });
                 if (techId) {
