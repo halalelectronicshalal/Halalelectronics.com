@@ -4330,6 +4330,7 @@ document.addEventListener('click', function (e) {
                 renderRecentOrders();
                 renderOrders();
                 renderDashNewOrders();
+                try { admReturnFutureAssigned(); } catch (e) {}
                 try { admRenderHoldRequests(); } catch (e) { console.warn('hold requests card failed', e); }
                 renderTechnicians();
                 try { resyncLiveTechPins(); } catch (e) {} // 🗺️ ተመደበ/ተጠናቀቀ ሲሆን የካርታ ፒኖች ይታደሳሉ
@@ -5551,6 +5552,31 @@ document.addEventListener('focusout', function (e) {
         function admPriceTag(o) {
             if (!o || !o.priceAgreed) return '';
             return `<div style="margin-top:4px; padding:5px 8px; border-radius:6px; background:#ECFDF5; color:#065F46; font-size:0.78rem;">🤝 <b>ዋጋ ተስማምተዋል: ${escHtml(o.agreedPrice != null ? o.agreedPrice : '—')} ብር</b>${o.priceAgreedBy ? ' · ' + escHtml(o.priceAgreedBy) : ''}${o.notDoneReason ? `<br>📝 ዛሬ ያልተሰራበት ምክንያት: ${escHtml(o.notDoneReason)}` : ''}</div>`;
+        }
+        // 📅 ለወደፊት ቀን (ለምሳሌ «አርብ ይመቻቸዋል») የሆነ ስራ ለቴክኒሻን ተመድቦ ከሆነ → ለዚያ ቴክኒሻን ተይዞ ወደ «እስከሚደርስ ቀጠሮ» ካርድ ይመለሳል፤ ቀኑ ሲደርስ በራሱ ይመደባል
+        let admPrefReturning = false;
+        async function admReturnFutureAssigned() {
+            if (admPrefReturning || !Array.isArray(allOrders)) return;
+            const list = allOrders.filter(o => {
+                if (!o || o.status !== 'Assigned' || !o.technician || o.workTag || o.completionOption || o.appointmentActivatedAt || o.assignedBy === 'appointment') return false;
+                if (o.onHold || o.holdRequest || (o.rescheduledFrom && o.rescheduledDate)) return false;
+                const d = schedApptDate(o);
+                return !!d && schedDaysUntil(d) > 0;
+            });
+            if (!list.length) return;
+            admPrefReturning = true;
+            try {
+                for (const o of list) {
+                    const d = schedApptDate(o);
+                    const t = (allTechnicians || []).find(x => x.name === o.technician);
+                    await db.collection('orders').doc(o.id).update({
+                        status: 'Pending', technician: '', onHold: false,
+                        scheduledTechnician: o.technician, scheduledTechnicianId: (t && t.id) || o.technicianId || null,
+                        scheduledReleaseDate: getDateKey(d), scheduledBy: 'auto', scheduledAt: new Date()
+                    });
+                }
+            } catch (e) { console.warn('future assigned return failed', e); }
+            finally { admPrefReturning = false; }
         }
         function admIsFutureAppt(o) {
             if (!o) return false;
