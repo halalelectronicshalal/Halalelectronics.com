@@ -1333,10 +1333,11 @@ async function releaseTechTransactions(report) {
 }
 
 async function approveReport(reportId, techId) {
+    if (!heIsAdminSession()) { showToast('⛔ ሪፖርት ማጽደቅ የሚችለው አድሚን ብቻ ነው', 'error'); return; }
     try {
         const report = allDailyReports.find(r => r.id === reportId);
         if (!techId && report) techId = report.technicianId;
-        await db.collection('dailyReports').doc(reportId).update({ approved: true, approvedAt: new Date(), reopenedForApproval: false });
+        await db.collection('dailyReports').doc(reportId).update({ approved: true, approvedAt: new Date(), approvedBy: (heGetSession() && heGetSession().staff && heGetSession().staff.id) || '', reopenedForApproval: false });
         try { await releaseTechTransactions(report); } catch (relErr) { console.error('release transactions failed', relErr); showToast('⚠️ ሪፖርቱ ጸድቋል፣ ነገር ግን ገቢ/ወጪ ወደ ዝርዝሩ ማስገባት አልተቻለም: ' + (relErr && relErr.message ? relErr.message : relErr), 'error'); }
         if (techId) { try { await db.collection('staff').doc(techId).update({ lastApprovedDateKey: report ? report.dateKey : null }); } catch (e) { console.warn('lastApprovedDateKey update skipped', e); } }
         try { await db.collection('activity').add({ user: heUserName(), action: 'approve_report', details: `የ ${report ? report.technicianName : ''} ሪፖርት ጸደቀ (${report ? report.dateKey : ''})`, timestamp: new Date() }); } catch (e) {}
@@ -2853,10 +2854,11 @@ async function releaseTechTransactions(report) {
 }
 
 async function approveReport(reportId, techId) {
+    if (!heIsAdminSession()) { showToast('⛔ ሪፖርት ማጽደቅ የሚችለው አድሚን ብቻ ነው', 'error'); return; }
     try {
         const report = allDailyReports.find(r => r.id === reportId);
         if (!techId && report) techId = report.technicianId;
-        await db.collection('dailyReports').doc(reportId).update({ approved: true, approvedAt: new Date() });
+        await db.collection('dailyReports').doc(reportId).update({ approved: true, approvedAt: new Date(), approvedBy: (heGetSession() && heGetSession().staff && heGetSession().staff.id) || '' });
         try { await releaseTechTransactions(report); } catch (relErr) { console.error('release transactions failed', relErr); showToast('⚠️ ሪፖርቱ ጸድቋል፣ ነገር ግን ገቢ/ወጪ ወደ ዝርዝሩ ማስገባት አልተቻለም: ' + (relErr && relErr.message ? relErr.message : relErr), 'error'); }
         if (techId) { try { await db.collection('staff').doc(techId).update({ lastApprovedDateKey: report ? report.dateKey : null }); } catch (e) { console.warn('lastApprovedDateKey update skipped', e); } }
         try { await db.collection('activity').add({ user: heUserName(), action: 'approve_report', details: `የ ${report ? report.technicianName : ''} ሪፖርት ጸደቀ (${report ? report.dateKey : ''})`, timestamp: new Date() }); } catch (e) {}
