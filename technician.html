@@ -1350,12 +1350,10 @@ function ethReportLabel(r, withWeekday) {
         var out = '';
         var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(r.dateKey || r.date || ''));
         var sub = ethAddisParts(r.submittedAt);
-        var base = m ? new Date(+m[1], +m[2] - 1, +m[3]) : (sub ? new Date(sub.y, sub.m, sub.d) : null);
+        /* ቀኑ ሪፖርቱ በተደረገበት (በተላከበት) ቀን ነው — ቴክኒሻኑ የመረጠው የሪፖርት ቀን ሳይሆን */
+        var base = sub ? new Date(sub.y, sub.m, sub.d) : (m ? new Date(+m[1], +m[2] - 1, +m[3]) : null);
         if (base) out = formatEthDate(base, withWeekday !== false);
-        if (sub) {
-            var sd = formatEthDate(new Date(sub.y, sub.m, sub.d));
-            out += (out ? ' · ' : '') + '🕐 ተላከ: ' + (out && out.indexOf(sd) >= 0 ? '' : sd + ' ') + ethClockOf(sub);
-        }
+        if (sub) out += (out ? ' · ' : '') + '🕐 ' + ethClockOf(sub);
         return out || String(r.dateKey || r.date || '—');
     } catch (e) { return String(r && (r.dateKey || r.date) || '—'); }
 }
