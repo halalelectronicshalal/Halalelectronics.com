@@ -6446,6 +6446,7 @@ ${locationLine}
         }
 
         async function approveReport(reportId, techId, fromCard) {
+            if (!heIsAdminSession()) { showToast('⛔ ሪፖርት ማጽደቅ የሚችለው አድሚን ብቻ ነው', 'error'); return; }
             try {
                 const report = allDailyReports.find(r => r.id === reportId);
                 if (!techId && report) techId = report.technicianId;
@@ -6453,7 +6454,8 @@ ${locationLine}
                 if (report && report.tgDeferred && !report.tgPhotosEarly && !report.tgSentAt && report.photosPending && !((phWr(report) || []).length || (phRc(report) || []).length) && !confirm('📸 የቴክኒሻኑ ፎቶዎች ገና እየተጫኑ ነው።\n\nጥቂት ቆይተው ቢያጸድቁ ፎቶዎቹ ከሪፖርቱ ጋር ወደ ቴሌግራም ይላካሉ።\n\nቢሆንም አሁን ይጽደቅ?')) return;
                 await db.collection('dailyReports').doc(reportId).update({
                     approved: true,
-                    approvedAt: new Date()
+                    approvedAt: new Date(),
+                    approvedBy: (heGetSession() && heGetSession().staff && heGetSession().staff.id) || ''
                 });
                 if (techId) {
                     await db.collection('staff').doc(techId).update({
