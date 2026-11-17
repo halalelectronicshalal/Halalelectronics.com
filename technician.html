@@ -10285,6 +10285,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     try { if (myOrders.some(o => o.status === 'Assigned' && !isFutureAppointment(o))) techFreeLockClear(); } catch (e) {}
                     try { techApplyOpenStatusOnce(); } catch (e) { console.warn('open status failed', e); }
                     try { techStartSentReports(); techEnforceOvernightWorking(); } catch (e) {}
+                    try { techReturnFutureAssigned(); } catch (e) {}
                     try { techActivateDueAppointments(); } catch (e) {}
                     try { techNotifyOvernightClosed(); } catch (e) {}
                     renderMyJobs();
@@ -10321,6 +10322,61 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const ms = techApptMs(o);
             return ms > 0 ? ms > Date.now() : String(o.rescheduledDate) > techLocalTodayKey();
         }
+        // 📅 «መች ይመቻቸዋል» (preferredDay) ለወደፊት ቀን (ለምሳሌ «አርብ») የሆነ ስራ ለዚህ ቴክኒሻን ተመድቦ ከሆነ → ወደ አድሚን «እስከሚደርስ ቀጠሮ» ካርድ ይመለሳል
+        //    (ለዚህ ቴክኒሻን ተይዞ)፤ ቀኑ ሲደርስ በራሱ ተመልሶ ይመደባል። እስከዚያ «ነጻ ነኝ» አይከለከልም።
+        const TECH_PREF_WEEKDAY = { 'እሁድ': 0, 'ሰኞ': 1, 'ማክሰኞ': 2, 'ረቡዕ': 3, 'ሐሙስ': 4, 'አርብ': 5, 'ቅዳሜ': 6 };
+        function techPrefNorm(x) { return String(x || '').replace(/[ኅሕ]/g, 'ህ').replace(/[ሐኀ]/g, 'ሀ').replace(/ሠ/g, 'ሰ').replace(/ዐ/g, 'አ'); }
+        function techPrefToday() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+        function techPrefDate(o) {
+            const key = (k) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(k || '')); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; };
+            const d0 = key(o.appointmentDate) || key(o.rescheduledDate); if (d0) return d0;
+            const pd = techPrefNorm(String(o.preferredDay || '').trim()); if (!pd) return null;
+            let mi = -1; ETH_MONTHS.forEach((nm, i) => { if (mi < 0 && pd.includes(techPrefNorm(nm))) mi = i; });
+            if (mi >= 0) {
+                const nums = (pd.match(/\d+/g) || []).map(Number);
+                const year4 = nums.find(x => x >= 1900 && x <= 2300), day = nums.find(x => x >= 1 && x <= 30);
+                if (day) {
+                    const make = (ey) => { const g = ethiopianToGregorian(ey, mi + 1, day); return new Date(g.getUTCFullYear(), g.getUTCMonth(), g.getUTCDate()); };
+                    if (year4) return make(year4);
+                    const cur = gregorianToEthiopian(new Date()).year; let d = make(cur);
+                    if (Math.round((d.getTime() - techPrefToday().getTime()) / 86400000) < -180) d = make(cur + 1);
+                    return d;
+                }
+            }
+            for (const name of Object.keys(TECH_PREF_WEEKDAY)) {
+                if (pd.startsWith(techPrefNorm(name))) {
+                    const c = o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : new Date();
+                    const base = new Date(c.getFullYear(), c.getMonth(), c.getDate());
+                    base.setDate(base.getDate() + ((TECH_PREF_WEEKDAY[name] - base.getDay() + 7) % 7));
+                    return base;
+                }
+            }
+            return null;
+        }
+        let techPrefReturning = false;
+        async function techReturnFutureAssigned() {
+            if (techPrefReturning || !technicianId || !Array.isArray(myOrders)) return;
+            const list = myOrders.filter(o => o.status === 'Assigned' && !o.workTag && !o.completionOption && !o.appointmentActivatedAt && o.assignedBy !== 'appointment'
+                && !o.onHold && !o.holdRequest && !(o.rescheduledFrom && o.rescheduledDate)
+                && (() => { const d = techPrefDate(o); return !!d && Math.round((d.getTime() - techPrefToday().getTime()) / 86400000) > 0; })());
+            if (!list.length) return;
+            techPrefReturning = true;
+            try {
+                for (const o of list) {
+                    const d = techPrefDate(o);
+                    await db.collection('orders').doc(o.id).update({
+                        status: 'Pending', technician: '', onHold: false,
+                        scheduledTechnician: technicianName, scheduledTechnicianId: technicianId || null,
+                        scheduledReleaseDate: getDateKey(d), scheduledBy: 'auto', scheduledAt: new Date()
+                    });
+                    o.status = 'Pending'; o.technician = '';
+                }
+                try { techFreeLockClear(); } catch (e) {}
+                showToast('📅 ' + list.length + ' ስራ ቀጠሮ ስለሆነ ወደ አድሚን የቀጠሮ ካርድ ተመልሷል — ቀኑ ሲደርስ ለእርስዎ ይመደባል', 'success');
+                try { renderMyJobs(); renderAllJobs(); techUpdateStats(); } catch (e) {}
+            } catch (e) { console.warn('future job return failed', e); }
+            finally { techPrefReturning = false; }
+        }
         // 🔔 ቀጠሮው ሲደርስ ስራው በራሱ «ተመድቧል» ይሆናል፣ ሁኔታውም «✅ በስራ ላይ» ይበራል
         let techApptActivating = false;
         async function techActivateDueAppointments() {
@@ -10341,6 +10397,31 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             finally { techApptActivating = false; }
         }
         setInterval(function () { try { techActivateDueAppointments(); } catch (e) {} }, 30000);
+        // 📅 አድሚን/«መድብ» ገጽ ለዚህ ሰራተኛ የያዘው ስራ (scheduledTechnician) ቀኑ ሲደርስ በራሱ ይመደባል (Worker ካልሰራ እንኳ)
+        let techHeldReleasing = false;
+        async function techReleaseHeldAppointments() {
+            if (techHeldReleasing || !technicianName) return;
+            techHeldReleasing = true;
+            try {
+                const todayKey = getBizDateKey();
+                const snap = await db.collection('orders').where('scheduledTechnician', '==', technicianName).get();
+                let n = 0;
+                for (const d of snap.docs) {
+                    const o = d.data();
+                    if (o.status !== 'Pending' || o.technician || !o.scheduledReleaseDate || String(o.scheduledReleaseDate) > todayKey) continue;
+                    await d.ref.update({ status: 'Assigned', technician: technicianName, assignedAt: new Date(), assignedBy: 'appointment', scheduledTechnician: null, scheduledTechnicianId: null, scheduledReleaseDate: null });
+                    n++;
+                }
+                if (n) {
+                    try { techFreeLockClear(); } catch (e) {}
+                    if (currentStatus !== 'off-duty') { currentStatus = 'working'; techApplyStatusUI('working'); saveStatus('working'); }
+                    showToast('⏰ የቀጠሮ ስራ ጊዜ ደርሷል — ተመድቦልዎታል', 'success');
+                }
+            } catch (e) { console.warn('held appointment release failed', e); }
+            finally { techHeldReleasing = false; }
+        }
+        setTimeout(function () { try { techReleaseHeldAppointments(); } catch (e) {} }, 8000);
+        setInterval(function () { try { techReleaseHeldAppointments(); } catch (e) {} }, 300000);
         const TECH_CLOSED_STATUSES = ['Completed', 'PriceNotAgreed', 'Rescheduled', 'NotToday', 'Other', 'PhoneNoAnswer'];
         function techOpenJobs() {
             return myOrders.filter(o => !TECH_CLOSED_STATUSES.includes(o.status) && !isFutureAppointment(o));
