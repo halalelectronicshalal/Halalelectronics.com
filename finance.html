@@ -1332,12 +1332,22 @@ async function releaseTechTransactions(report) {
     return n;
 }
 
+async function heApproveAllowed() {
+    try {
+        const se = heGetSession(); const id = se && se.staff && se.staff.id;
+        if (!id) return true;
+        const d = await db.collection('staff').doc(id).get();
+        if (d.exists && d.data().canApprove === false) { showToast('⛔ ሪፖርት የማጽደቅ መብትዎ ተከልክሏል — ባለቤቱን ያነጋግሩ', 'error'); return false; }
+    } catch (e) { console.warn('approve-permission check failed', e); }
+    return true;
+}
 async function approveReport(reportId, techId) {
     if (!heIsAdminSession()) { showToast('⛔ ሪፖርት ማጽደቅ የሚችለው አድሚን ብቻ ነው', 'error'); return; }
+    if (!(await heApproveAllowed())) return;
     try {
         const report = allDailyReports.find(r => r.id === reportId);
         if (!techId && report) techId = report.technicianId;
-        await db.collection('dailyReports').doc(reportId).update({ approved: true, approvedAt: new Date(), approvedBy: (heGetSession() && heGetSession().staff && heGetSession().staff.id) || '', reopenedForApproval: false });
+        await db.collection('dailyReports').doc(reportId).update({ approved: true, approvedVia: 'admin-click', approvedAt: new Date(), approvedBy: (heGetSession() && heGetSession().staff && heGetSession().staff.id) || '', reopenedForApproval: false });
         try { await releaseTechTransactions(report); } catch (relErr) { console.error('release transactions failed', relErr); showToast('⚠️ ሪፖርቱ ጸድቋል፣ ነገር ግን ገቢ/ወጪ ወደ ዝርዝሩ ማስገባት አልተቻለም: ' + (relErr && relErr.message ? relErr.message : relErr), 'error'); }
         if (techId) { try { await db.collection('staff').doc(techId).update({ lastApprovedDateKey: report ? report.dateKey : null }); } catch (e) { console.warn('lastApprovedDateKey update skipped', e); } }
         try { await db.collection('activity').add({ user: heUserName(), action: 'approve_report', details: `የ ${report ? report.technicianName : ''} ሪፖርት ጸደቀ (${report ? report.dateKey : ''})`, timestamp: new Date() }); } catch (e) {}
@@ -2853,12 +2863,22 @@ async function releaseTechTransactions(report) {
     return n;
 }
 
+async function heApproveAllowed() {
+    try {
+        const se = heGetSession(); const id = se && se.staff && se.staff.id;
+        if (!id) return true;
+        const d = await db.collection('staff').doc(id).get();
+        if (d.exists && d.data().canApprove === false) { showToast('⛔ ሪፖርት የማጽደቅ መብትዎ ተከልክሏል — ባለቤቱን ያነጋግሩ', 'error'); return false; }
+    } catch (e) { console.warn('approve-permission check failed', e); }
+    return true;
+}
 async function approveReport(reportId, techId) {
     if (!heIsAdminSession()) { showToast('⛔ ሪፖርት ማጽደቅ የሚችለው አድሚን ብቻ ነው', 'error'); return; }
+    if (!(await heApproveAllowed())) return;
     try {
         const report = allDailyReports.find(r => r.id === reportId);
         if (!techId && report) techId = report.technicianId;
-        await db.collection('dailyReports').doc(reportId).update({ approved: true, approvedAt: new Date(), approvedBy: (heGetSession() && heGetSession().staff && heGetSession().staff.id) || '' });
+        await db.collection('dailyReports').doc(reportId).update({ approved: true, approvedVia: 'admin-click', approvedAt: new Date(), approvedBy: (heGetSession() && heGetSession().staff && heGetSession().staff.id) || '' });
         try { await releaseTechTransactions(report); } catch (relErr) { console.error('release transactions failed', relErr); showToast('⚠️ ሪፖርቱ ጸድቋል፣ ነገር ግን ገቢ/ወጪ ወደ ዝርዝሩ ማስገባት አልተቻለም: ' + (relErr && relErr.message ? relErr.message : relErr), 'error'); }
         if (techId) { try { await db.collection('staff').doc(techId).update({ lastApprovedDateKey: report ? report.dateKey : null }); } catch (e) { console.warn('lastApprovedDateKey update skipped', e); } }
         try { await db.collection('activity').add({ user: heUserName(), action: 'approve_report', details: `የ ${report ? report.technicianName : ''} ሪፖርት ጸደቀ (${report ? report.dateKey : ''})`, timestamp: new Date() }); } catch (e) {}
