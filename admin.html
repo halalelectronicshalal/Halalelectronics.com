@@ -1582,6 +1582,7 @@ document.addEventListener('click', function (e) {
                 <!-- ✅ NEW: ያልጸደቁ የቴክኒሻን ሪፖርቶች (ከላይ በግልጽ ይታያል፤ ምንም ከሌለ ይደበቃል) -->
                 <div id="pendingReportsCard"></div>
                 <div id="holdRequestsCard"></div>
+                <div id="returnRequestsCard"></div>
 
                 <!-- Stats -->
                 <div class="stats-grid" id="dashboardStats">
@@ -4347,6 +4348,7 @@ document.addEventListener('click', function (e) {
                 renderDashNewOrders();
                 try { admReturnFutureAssigned(); } catch (e) {}
                 try { admRenderHoldRequests(); } catch (e) { console.warn('hold requests card failed', e); }
+                try { admRenderReturnRequests(); } catch (e) { console.warn('return requests card failed', e); }
                 renderTechnicians();
                 try { resyncLiveTechPins(); } catch (e) {} // 🗺️ ተመደበ/ተጠናቀቀ ሲሆን የካርታ ፒኖች ይታደሳሉ
                 updateChart();
@@ -5139,6 +5141,65 @@ document.addEventListener('click', function (e) {
             }
             try { await db.collection('orders').doc(orderId).update(upd); showToast('✅ ተመዝግቧል', 'success'); }
             catch (err) { showToast('❌ ' + err.message, 'error'); }
+        }
+
+        // ============================================================
+        // ↩️ «ረ. ስራ መልስ» ጥያቄዎች — ቴክኒሻኑ ምክንያት ጽፎ ሲያጠናቅቅ ስራው ከእሱ ጋር ይቆያል፤ አድሚን ሲያጸድቅ ብቻ ይመለሳል
+        //    ውድቅ ሲደረግ አድሚኑ ምክንያት ይጽፋል → ለቴክኒሻኑ በ push እና በስራው ካርድ ላይ ይደርሰዋል
+        // ============================================================
+        function admRenderReturnRequests() {
+            const box = document.getElementById('returnRequestsCard');
+            if (!box) return;
+            const list = (allOrders || []).filter(o => o && o.returnRequest && o.returnRequest.status === 'pending');
+            if (!list.length) { box.innerHTML = ''; return; }
+            const e = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            const rows = list.map(o => `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px; background:#fff; border:1px solid var(--border); border-radius:10px; margin-bottom:8px;">
+                    <div style="flex:1; min-width:170px;">
+                        <strong>👷 ${e(o.technician || o.returnRequest.by || '—')}</strong> — ${e(o.fullName || '—')} (${e(o.appliance || '—')})
+                        <div style="font-size:0.8rem; color:var(--text-muted);">↩️ ስራ መመለስ ጠይቋል · 🆔 #${e(String(o.id).substring(0, 8))}</div>
+                        <div style="font-size:0.85rem; margin-top:4px; white-space:pre-wrap;">📝 ምክንያት፦ ${e(o.returnRequest.reason || '—')}</div>
+                    </div>
+                    <button class="btn btn-success btn-sm" onclick="admDecideReturn('${o.id}', true)"><i class="fas fa-check"></i> አጽድቅ (ስራው ይመለስ)</button>
+                    <button class="btn btn-danger btn-sm" onclick="admDecideReturn('${o.id}', false)"><i class="fas fa-times"></i> ውድቅ</button>
+                </div>`).join('');
+            box.innerHTML = `<div class="card" style="margin-bottom:14px; border:1px solid #EF4444;"><div class="card-header"><h3>↩️ «ስራ መልስ» ማጽደቂያ (${list.length})</h3></div><div style="padding:10px;">${rows}</div></div>`;
+        }
+        async function admDecideReturn(orderId, approve) {
+            const o = (allOrders || []).find(x => x.id === orderId);
+            if (!o || !o.returnRequest || o.returnRequest.status !== 'pending') return;
+            const now = new Date();
+            const who = (typeof heGetSession === 'function' && heGetSession() && heGetSession().staff && heGetSession().staff.name) || 'አድሚን';
+            const techId = o.technicianId || o.returnRequest.byId || '';
+            const techName = o.technician || o.returnRequest.by || '';
+            const short = String(orderId).substring(0, 8);
+            const reason = o.returnRequest.reason || '';
+            let upd, pushTitle, pushBody;
+            if (approve) {
+                if (!confirm('ስራው ከቴክኒሻኑ ወጥቶ ወደ አድሚን ዳሽቦርድ ይመለስ?')) return;
+                upd = {
+                    status: 'Pending', technician: '', completionOption: 'return-job', onHold: false,
+                    returnedFrom: techName, returnedFromId: techId, returnReason: reason, returnedAt: now,
+                    'returnRequest.status': 'approved', 'returnRequest.decidedAt': now, 'returnRequest.decidedBy': who
+                };
+                pushTitle = '✅ ስራ መመለስ ጸድቋል'; pushBody = `#${short} — ስራው ከእርስዎ ወጥቷል`;
+            } else {
+                const why = (prompt('ውድቅ የሚያደርጉበትን ምክንያት ይጻፉ (ለቴክኒሻኑ ይደርሰዋል)፦') || '').trim();
+                if (!why) { showToast('⚠️ ውድቅ ለማድረግ ምክንያት ያስፈልጋል', 'error'); return; }
+                upd = { 'returnRequest.status': 'rejected', 'returnRequest.rejectReason': why, 'returnRequest.decidedAt': now, 'returnRequest.decidedBy': who };
+                pushTitle = '❌ ስራ መመለስ ውድቅ ተደርጓል'; pushBody = `#${short} — ${why}`;
+            }
+            try {
+                await db.collection('orders').doc(orderId).update(upd);
+                showToast(approve ? '✅ ስራው ወደ አድሚን ተመልሷል' : '✅ ውድቅ ተደርጎ ለቴክኒሻኑ ተላከ', 'success');
+            } catch (err) { showToast('❌ ' + err.message, 'error'); return; }
+            try { db.collection('activity').add({ user: who, action: approve ? 'return_approved' : 'return_rejected', details: `ስራ #${short} — ${techName}: ${approve ? 'መመለስ ጸድቋል' : 'ውድቅ — ' + upd['returnRequest.rejectReason']}`, timestamp: now }).catch(() => {}); } catch (e) {}
+            try {
+                if (techId) await db.collection('pushQueue').add({ toStaffId: techId, title: pushTitle, body: pushBody, locationUrl: location.origin + location.pathname.replace(/[^/]*$/, 'technician.html'), createdAt: Date.now(), sent: false });
+            } catch (pe) { console.warn('return decision push failed (non-fatal)', pe); }
+            if (approve) {
+                try { callWorker('pushNotify', { audience: ['newOrders'], title: `↩️ ስራ ተመለሰ - ${techName}`, body: `#${short} — ${reason}`, url: new URL('new-orders.html', location.href).href }).catch(() => {}); } catch (e) {}
+                try { if (typeof sendCustomerSmsFor === 'function') sendCustomerSmsFor('return-job', orderId); } catch (e) {}
+            }
         }
 
         function renderPendingReportsCard() {
@@ -7486,7 +7547,7 @@ ${locationLine}
                 if (report && report.tgDeferred && !report.tgPhotosEarly && !report.tgSentAt && report.photosPending && !((phWr(report) || []).length || (phRc(report) || []).length) && !confirm('📸 የቴክኒሻኑ ፎቶዎች ገና እየተጫኑ ነው።\n\nጥቂት ቆይተው ቢያጸድቁ ፎቶዎቹ ከሪፖርቱ ጋር ወደ ቴሌግራም ይላካሉ።\n\nቢሆንም አሁን ይጽደቅ?')) return;
                 await db.collection('dailyReports').doc(reportId).update({
                     approved: true,
-                    approvedVia: 'admin-click',
+                    approvedVia: 'admin-click', approvedDevice: (function(){ try { return localStorage.getItem('he_device_id') || ''; } catch (e) { return ''; } })(), approvedUA: String(navigator.userAgent || '').slice(0, 120),
                     approvedAt: new Date(),
                     approvedBy: (heGetSession() && heGetSession().staff && heGetSession().staff.id) || '',
                     reopenedForApproval: false
