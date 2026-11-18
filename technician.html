@@ -1539,6 +1539,7 @@ document.addEventListener('click', function (e) {
                 <!-- ✅ NEW: ያልጸደቁ የቴክኒሻን ሪፖርቶች (ከላይ በግልጽ ይታያል፤ ምንም ከሌለ ይደበቃል) -->
                 <div id="pendingReportsCard"></div>
                 <div id="holdRequestsCard"></div>
+                <div id="returnRequestsCard"></div>
 
                 <!-- Stats -->
                 <div class="stats-grid" id="dashboardStats">
@@ -4353,6 +4354,7 @@ document.addEventListener('click', function (e) {
                 renderOrders();
                 renderDashNewOrders();
                 try { admRenderHoldRequests(); } catch (e) { console.warn('hold requests card failed', e); }
+                try { admRenderReturnRequests(); } catch (e) { console.warn('return requests card failed', e); }
                 renderTechnicians();
                 try { resyncLiveTechPins(); } catch (e) {} // 🗺️ ተመደበ/ተጠናቀቀ ሲሆን የካርታ ፒኖች ይታደሳሉ
                 updateChart();
@@ -4818,6 +4820,65 @@ document.addEventListener('click', function (e) {
             }
             try { await db.collection('orders').doc(orderId).update(upd); showToast('✅ ተመዝግቧል', 'success'); }
             catch (err) { showToast('❌ ' + err.message, 'error'); }
+        }
+
+        // ============================================================
+        // ↩️ «ረ. ስራ መልስ» ጥያቄዎች — ቴክኒሻኑ ምክንያት ጽፎ ሲያጠናቅቅ ስራው ከእሱ ጋር ይቆያል፤ አድሚን ሲያጸድቅ ብቻ ይመለሳል
+        //    ውድቅ ሲደረግ አድሚኑ ምክንያት ይጽፋል → ለቴክኒሻኑ በ push እና በስራው ካርድ ላይ ይደርሰዋል
+        // ============================================================
+        function admRenderReturnRequests() {
+            const box = document.getElementById('returnRequestsCard');
+            if (!box) return;
+            const list = (allOrders || []).filter(o => o && o.returnRequest && o.returnRequest.status === 'pending');
+            if (!list.length) { box.innerHTML = ''; return; }
+            const e = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            const rows = list.map(o => `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px; background:#fff; border:1px solid var(--border); border-radius:10px; margin-bottom:8px;">
+                    <div style="flex:1; min-width:170px;">
+                        <strong>👷 ${e(o.technician || o.returnRequest.by || '—')}</strong> — ${e(o.fullName || '—')} (${e(o.appliance || '—')})
+                        <div style="font-size:0.8rem; color:var(--text-muted);">↩️ ስራ መመለስ ጠይቋል · 🆔 #${e(String(o.id).substring(0, 8))}</div>
+                        <div style="font-size:0.85rem; margin-top:4px; white-space:pre-wrap;">📝 ምክንያት፦ ${e(o.returnRequest.reason || '—')}</div>
+                    </div>
+                    <button class="btn btn-success btn-sm" onclick="admDecideReturn('${o.id}', true)"><i class="fas fa-check"></i> አጽድቅ (ስራው ይመለስ)</button>
+                    <button class="btn btn-danger btn-sm" onclick="admDecideReturn('${o.id}', false)"><i class="fas fa-times"></i> ውድቅ</button>
+                </div>`).join('');
+            box.innerHTML = `<div class="card" style="margin-bottom:14px; border:1px solid #EF4444;"><div class="card-header"><h3>↩️ «ስራ መልስ» ማጽደቂያ (${list.length})</h3></div><div style="padding:10px;">${rows}</div></div>`;
+        }
+        async function admDecideReturn(orderId, approve) {
+            const o = (allOrders || []).find(x => x.id === orderId);
+            if (!o || !o.returnRequest || o.returnRequest.status !== 'pending') return;
+            const now = new Date();
+            const who = (typeof heGetSession === 'function' && heGetSession() && heGetSession().staff && heGetSession().staff.name) || 'አድሚን';
+            const techId = o.technicianId || o.returnRequest.byId || '';
+            const techName = o.technician || o.returnRequest.by || '';
+            const short = String(orderId).substring(0, 8);
+            const reason = o.returnRequest.reason || '';
+            let upd, pushTitle, pushBody;
+            if (approve) {
+                if (!confirm('ስራው ከቴክኒሻኑ ወጥቶ ወደ አድሚን ዳሽቦርድ ይመለስ?')) return;
+                upd = {
+                    status: 'Pending', technician: '', completionOption: 'return-job', onHold: false,
+                    returnedFrom: techName, returnedFromId: techId, returnReason: reason, returnedAt: now,
+                    'returnRequest.status': 'approved', 'returnRequest.decidedAt': now, 'returnRequest.decidedBy': who
+                };
+                pushTitle = '✅ ስራ መመለስ ጸድቋል'; pushBody = `#${short} — ስራው ከእርስዎ ወጥቷል`;
+            } else {
+                const why = (prompt('ውድቅ የሚያደርጉበትን ምክንያት ይጻፉ (ለቴክኒሻኑ ይደርሰዋል)፦') || '').trim();
+                if (!why) { showToast('⚠️ ውድቅ ለማድረግ ምክንያት ያስፈልጋል', 'error'); return; }
+                upd = { 'returnRequest.status': 'rejected', 'returnRequest.rejectReason': why, 'returnRequest.decidedAt': now, 'returnRequest.decidedBy': who };
+                pushTitle = '❌ ስራ መመለስ ውድቅ ተደርጓል'; pushBody = `#${short} — ${why}`;
+            }
+            try {
+                await db.collection('orders').doc(orderId).update(upd);
+                showToast(approve ? '✅ ስራው ወደ አድሚን ተመልሷል' : '✅ ውድቅ ተደርጎ ለቴክኒሻኑ ተላከ', 'success');
+            } catch (err) { showToast('❌ ' + err.message, 'error'); return; }
+            try { db.collection('activity').add({ user: who, action: approve ? 'return_approved' : 'return_rejected', details: `ስራ #${short} — ${techName}: ${approve ? 'መመለስ ጸድቋል' : 'ውድቅ — ' + upd['returnRequest.rejectReason']}`, timestamp: now }).catch(() => {}); } catch (e) {}
+            try {
+                if (techId) await db.collection('pushQueue').add({ toStaffId: techId, title: pushTitle, body: pushBody, locationUrl: location.origin + location.pathname.replace(/[^/]*$/, 'technician.html'), createdAt: Date.now(), sent: false });
+            } catch (pe) { console.warn('return decision push failed (non-fatal)', pe); }
+            if (approve) {
+                try { callWorker('pushNotify', { audience: ['newOrders'], title: `↩️ ስራ ተመለሰ - ${techName}`, body: `#${short} — ${reason}`, url: new URL('new-orders.html', location.href).href }).catch(() => {}); } catch (e) {}
+                try { if (typeof sendCustomerSmsFor === 'function') sendCustomerSmsFor('return-job', orderId); } catch (e) {}
+            }
         }
 
         function renderPendingReportsCard() {
@@ -6465,7 +6526,7 @@ ${locationLine}
                 if (report && report.tgDeferred && !report.tgPhotosEarly && !report.tgSentAt && report.photosPending && !((phWr(report) || []).length || (phRc(report) || []).length) && !confirm('📸 የቴክኒሻኑ ፎቶዎች ገና እየተጫኑ ነው።\n\nጥቂት ቆይተው ቢያጸድቁ ፎቶዎቹ ከሪፖርቱ ጋር ወደ ቴሌግራም ይላካሉ።\n\nቢሆንም አሁን ይጽደቅ?')) return;
                 await db.collection('dailyReports').doc(reportId).update({
                     approved: true,
-                    approvedVia: 'admin-click',
+                    approvedVia: 'admin-click', approvedDevice: (function(){ try { return localStorage.getItem('he_device_id') || ''; } catch (e) { return ''; } })(), approvedUA: String(navigator.userAgent || '').slice(0, 120),
                     approvedAt: new Date(),
                     approvedBy: (heGetSession() && heGetSession().staff && heGetSession().staff.id) || ''
                 });
@@ -10501,6 +10562,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                             ${reason ? `<div style="grid-column: span 2;"><span class="label">📝 ምክንያት:</span> <span class="value">${techEsc(reason)}</span></div>` : ''}
                         </div>
                         ${(Array.isArray(o.operatorNotes) && o.operatorNotes.length) ? `<div style="background:#EEF2FF; border-radius:8px; padding:8px 10px; margin:6px 0; font-size:0.85rem;"><strong>✍️ ከኦፕሬተር መልእክት:</strong>${o.operatorNotes.map(n => `<div style="margin-top:4px; white-space:pre-wrap;">💬 ${techEsc(n.text || '')} <small style="color:#64748B;">— ${techEsc(n.by || '')}</small></div>`).join('')}</div>` : ''}
+                        ${techReturnBanner(o)}
                         <div class="actions">
                             <a href="tel:${techEsc(o.phone || '')}" class="btn btn-primary btn-sm"><i class="fas fa-phone"></i> ደውል</a>
                             <button class="btn btn-success btn-sm" onclick="techHeldComplete('${o.id}')"><i class="fas fa-check-circle"></i> አጠናቅ</button>
@@ -10590,6 +10652,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                             <span class="coords">${coords}${accuracyBadge}</span>
                         </div>
                         ${hasLocation && accuracy > 200 ? `<div style="font-size:0.75rem; color:var(--emergency); padding:2px 4px;">⚠️ ይህ ቦታ ትክክለኛ ላይሆን ይችላል። ከመሄድዎ በፊት ደንበኛን በስልክ ያረጋግጡ</div>` : ''}
+                        ${techReturnBanner(order)}
                         <div class="actions">
                             ${hasLocation ? `<a href="https://www.google.com/maps/dir/?api=1&destination=${order.customerLat},${order.customerLng}" target="_blank" class="btn btn-secondary btn-sm"><i class="fas fa-diamond-turn-right"></i> 🧭 Navigate</a>` : ''}
                             <a href="tel:${order.phone}" class="btn btn-primary btn-sm"><i class="fas fa-phone"></i> ደውል</a>
@@ -10641,6 +10704,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // START COMPLETION
         // ============================================================
         window.startCompletion = function(orderId) {
+            try { const _rq = (myOrders || []).find(o => o.id === orderId); if (_rq && _rq.returnRequest && _rq.returnRequest.status === 'pending') { showToast('⏳ የመመለስ ጥያቄዎ አድሚን እስኪወስን እየጠበቀ ነው — እስከዚያ ማጠናቀቅ አይቻልም', 'info'); return; } } catch (e) {}
             if (!checkRulesAccepted()) {
                 showToast('እባክዎ መጀመሪያ ህጎቹን ያንብቡ እና ይስማሙ', 'error');
                 return;
@@ -11341,46 +11405,47 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (!reason) { showToast('እባክዎ ምክንያት ይጻፉ', 'error'); return; }
             const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
             if (!orderId) return;
-            if (!confirm('ይህ ስራ ወደ አድሚን ዳሽቦርድ ይመለሳል (ከእርስዎ ይወጣል)። እርግጠኛ ነዎት?')) return;
+            const _cur = (myOrders || []).find(o => o.id === orderId);
+            if (_cur && _cur.returnRequest && _cur.returnRequest.status === 'pending') { showToast('⏳ የመመለስ ጥያቄዎ አድሚን እስኪወስን እየጠበቀ ነው', 'info'); return; }
+            if (!confirm('የመመለስ ጥያቄዎ ከምክንያቱ ጋር ወደ አድሚን ይላካል። አድሚን እስኪያጸድቅ ስራው ከእርስዎ ጋር ይቆያል። ይላክ?')) return;
             returnJobBusy = true;
             const btn = document.getElementById('submitReturnJob');
             if (btn) btn.disabled = true;
             try {
                 await db.collection('orders').doc(orderId).update({
-                    status: 'Pending',
-                    technician: '',
-                    completionOption: 'return-job',
-                    onHold: false,   // 📦 ከመጠባበቂያ ካርድ ይወጣል (ወደ አድሚን ተመልሷል)
-                    returnedFrom: technicianName,
-                    returnedFromId: technicianId || '',
-                    returnReason: reason,
-                    returnedAt: new Date()
+                    returnRequest: { status: 'pending', reason: reason, by: technicianName, byId: technicianId || '', requestedAt: new Date() }
                 });
-                sendCustomerSmsFor('return-job', orderId);
                 db.collection('activity').add({
                     user: technicianName,
-                    action: 'return_order',
-                    details: `ስራ #${orderId.substring(0,8)} ወደ አድሚን ተመለሰ — ምክንያት: ${reason}`,
+                    action: 'return_order_request',
+                    details: `ስራ #${orderId.substring(0,8)} ለመመለስ ጥያቄ — ምክንያት: ${reason}`,
                     timestamp: new Date()
                 }).catch(() => {});
                 try {
                     const adminsSnap = await db.collection('staff').where('role', '==', 'admin').where('status', '==', 'active').get();
                     await Promise.all(adminsSnap.docs.filter(d => d.data().fcmToken).map(d => db.collection('pushQueue').add({
                         toStaffId: d.id,
-                        title: `↩️ ስራ ተመለሰ - ${technicianName}`,
+                        title: `↩️ ስራ ለመመለስ ጥያቄ - ${technicianName}`,
                         body: `#${orderId.substring(0,8)} — ${reason}`,
                         locationUrl: ADMIN_PAGE_URL(),
                         createdAt: Date.now(),
                         sent: false
                     })));
-                } catch (pushErr) { console.warn('Return job admin push failed (non-fatal)', pushErr); }
-                // 🔔 ስራው ወደ አድሚን ስለተመለሰ ለስራ መዳቢም (እንደገና ለመመደብ)
-                try { callWorker('pushNotify', { audience: ['newOrders'], title: `↩️ ስራ ተመለሰ - ${technicianName}`, body: `#${orderId.substring(0,8)} — ${reason}`, url: new URL('new-orders.html', location.href).href }).catch(() => {}); } catch (e) {}
-                showToast('✅ ስራው ወደ አድሚን ዳሽቦርድ ተመልሷል', 'success');
+                } catch (pushErr) { console.warn('Return request admin push failed (non-fatal)', pushErr); }
+                showToast('✅ ጥያቄዎ ተልኳል — አድሚን እስኪያጸድቅ ይጠብቁ', 'success');
                 resetCompletionForm();
                 try { renderMyJobs(); } catch (e) {}
             } catch (error) { showToast('❌ ' + error.message, 'error'); }
             finally { returnJobBusy = false; if (btn) btn.disabled = false; }
+        }
+
+        // ↩️ በስራ ካርድ ላይ የመመለስ ጥያቄ ሁኔታ (በመጠባበቅ ላይ / ውድቅ ተደርጓል + የአድሚን ምክንያት)
+        function techReturnBanner(o) {
+            const r = o && o.returnRequest;
+            if (!r) return '';
+            if (r.status === 'pending') return `<div style="background:#FEF3C7; border:1px solid #F59E0B; border-radius:8px; padding:8px 10px; margin:6px 0; font-size:0.85rem;">⏳ <strong>የመመለስ ጥያቄዎ አድሚን እስኪያጸድቅ እየጠበቀ ነው</strong><div style="white-space:pre-wrap;">📝 ${techEsc(r.reason || '')}</div></div>`;
+            if (r.status === 'rejected') return `<div style="background:#FEE2E2; border:1px solid #EF4444; border-radius:8px; padding:8px 10px; margin:6px 0; font-size:0.85rem;">❌ <strong>የመመለስ ጥያቄዎ ውድቅ ተደርጓል — ስራውን ይቀጥሉ</strong><div style="white-space:pre-wrap;">💬 አድሚን፦ ${techEsc(r.rejectReason || '')}</div></div>`;
+            return '';
         }
 
         async function submitNoAnswer() {
