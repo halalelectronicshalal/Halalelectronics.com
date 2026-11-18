@@ -1530,6 +1530,7 @@ document.addEventListener('click', function (e) {
                 <a href="#" data-tab="technicians"><i class="fas fa-user-cog"></i> ቴክኒሻኖች</a>
                 <a href="#" data-tab="messages"><i class="fas fa-comments"></i> መልእክቶች <span class="badge" id="msgBadge">0</span></a>
                 <a href="#" data-tab="staff"><i class="fas fa-user-tie"></i> ሠራተኞች</a>
+                <a href="#" data-tab="admins"><i class="fas fa-user-shield"></i> አድሚኖች (መብት እና መሳሪያ)</a>
                 <a href="#" data-tab="inventory"><i class="fas fa-boxes"></i> እቃዎች</a>
                 <a href="#" data-tab="finance"><i class="fas fa-money-bill-wave"></i> ፋይናንስ</a>
                 <a href="#" data-tab="reports"><i class="fas fa-chart-line"></i> ሪፖርቶች</a>
@@ -2227,6 +2228,17 @@ document.addEventListener('click', function (e) {
             <!-- ============================================================
             TAB: ACTIVITY LOG
             ============================================================ -->
+            <div id="tab-admins" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-user-shield"></i> 🛡️ አድሚኖች — መብት እና መሳሪያዎች</h3>
+                        <button class="btn btn-outline btn-sm" onclick="admRenderAdminsTab()"><i class="fas fa-sync"></i> አድስ</button>
+                    </div>
+                    <p class="text-muted" style="font-size:0.82rem; margin:0 0 10px;">እያንዳንዱ አድሚን በስንት ስልክ/ፒሲ እንደገባ ከዚህ ዝመና ጀምሮ ይመዘገባል። «ማጽደቅ» መብት ማሳጣት ወይም ወደ ቴክኒሻን መቀየር ይቻላል።</p>
+                    <div id="admAdminsBody"><div class="text-center text-muted">በመጫን ላይ...</div></div>
+                </div>
+            </div>
+
             <div id="tab-activity" class="tab-content">
                 <div class="card">
                     <div class="card-header">
@@ -3471,6 +3483,7 @@ document.addEventListener('click', function (e) {
             document.getElementById('adminName').textContent = 'አስተዳዳሪ';
             initDashboard();
             if (staffId) registerPushToken(staffId);
+            if (staffId) { try { admRecordDevice(staffId); } catch (e) {} }
             if (window.AppLock) window.AppLock.start('admin', staffId);
         }
 
@@ -4098,6 +4111,7 @@ document.addEventListener('click', function (e) {
                     setTimeout(loadTechMap, 300);
                 }
                 if (tab === 'messages') { try { renderAdminChat(); } catch (e) {} }
+                if (tab === 'admins') { try { admRenderAdminsTab(); } catch (e) {} }
             }
         }
 
@@ -4108,6 +4122,7 @@ document.addEventListener('click', function (e) {
                 'customers': '👤 ደንበኞች',
                 'technicians': '🔧 ቴክኒሻኖች',
                 'staff': '👔 ሠራተኞች',
+                'admins': '🛡️ አድሚኖች',
                 'inventory': '📦 እቃዎች',
                 'finance': '💰 ፋይናንስ',
                 'reports': '📊 ሪፖርቶች',
@@ -4644,6 +4659,16 @@ document.addEventListener('click', function (e) {
             if (btn) btn.disabled = false;
         }
         // 🏢 ወደ ድርጅቱ የገባ ገቢ (ዛሬ / ትላንት) — የጸደቁ ሪፖርቶች companyAmount ድምር፣ በሪፖርቱ dateKey (የስራ ቀን)
+        // 🏦 «ወደ ድርጅት የገባ» — ከሪፖርቱ «ወደ ድርጅት የገባ» መስክ (deposited)። ከሌለ ብቻ ለድርጅት ድርሻ (companyAmount)።
+        function admDepositedOf(r) {
+            if (!r) return 0;
+            if (r.deposited !== undefined && r.deposited !== null && r.deposited !== '') {
+                const d = parseFloat(r.deposited);
+                if (isFinite(d)) return d;
+            }
+            const c = parseFloat(r.companyAmount);
+            return isFinite(c) ? c : 0;
+        }
         function admUpdateCompanyIncomeCards() {
             const elT = document.getElementById('statCompanyToday');
             const elY = document.getElementById('statCompanyYesterday');
@@ -4664,7 +4689,8 @@ document.addEventListener('click', function (e) {
                 try { const d = r.submittedAt && r.submittedAt.toDate ? r.submittedAt.toDate() : null; return d ? getBizDateKey(d) : ''; } catch (e) { return ''; }
             };
             const amtOf = (r) => {
-                let a = parseFloat(r.companyAmount);
+                const hasDep = r.deposited !== undefined && r.deposited !== null && r.deposited !== '' && isFinite(parseFloat(r.deposited));
+                let a = hasDep ? parseFloat(r.deposited) : parseFloat(r.companyAmount);
                 if (!isFinite(a)) { const p = parseFloat(r.profit), t = parseFloat(r.techShareAmount); a = (isFinite(p) ? p : 0) - (isFinite(t) ? t : 0); }
                 return isFinite(a) ? a : 0;
             };
@@ -7107,6 +7133,105 @@ ${locationLine}
 
 
         // ============================================================
+        // 🛡️ አድሚኖች ታብ — (1) አድሚን በየትኛው ስልክ/ፒሲ እንደገባ መመዝገብ፣ (2) «ማጽደቅ» መብት ማሳጣት/መመለስ፣ (3) ወደ ቴክኒሻን መቀየር
+        //   የመሳሪያ መዝገብ በራሱ የአድሚኑ staff ሰነድ ውስጥ `adminDevices` ላይ ይጻፋል (ሌላ ምንም አይነካም)።
+        // ============================================================
+        function admDeviceId() {
+            let id = '';
+            try { id = localStorage.getItem('he_device_id') || ''; } catch (e) {}
+            if (!id) {
+                id = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+                try { localStorage.setItem('he_device_id', id); } catch (e) {}
+            }
+            return id;
+        }
+        function admDeviceInfo() {
+            const ua = navigator.userAgent || '';
+            const phone = /Android|iPhone|iPad|iPod|Mobi/i.test(ua);
+            const os = /Android/i.test(ua) ? 'Android' : /iPhone|iPad|iPod/i.test(ua) ? 'iOS' : /Windows/i.test(ua) ? 'Windows' : /Mac OS/i.test(ua) ? 'Mac' : /Linux/i.test(ua) ? 'Linux' : '';
+            const br = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+            return { kind: phone ? 'phone' : 'pc', label: (phone ? '📱 ስልክ' : '💻 ፒሲ') + ' · ' + [os, br].filter(Boolean).join(' · ') };
+        }
+        async function admRecordDevice(staffId) {
+            try {
+                if (!staffId || typeof db === 'undefined') return;
+                const did = admDeviceId(), inf = admDeviceInfo();
+                const upd = {};
+                upd['adminDevices.' + did + '.kind'] = inf.kind;
+                upd['adminDevices.' + did + '.label'] = inf.label;
+                upd['adminDevices.' + did + '.lastSeen'] = new Date();
+                let first = false;
+                try { first = !localStorage.getItem('he_device_first_' + staffId); if (first) localStorage.setItem('he_device_first_' + staffId, '1'); } catch (e) {}
+                if (first) upd['adminDevices.' + did + '.firstSeen'] = new Date();
+                await db.collection('staff').doc(staffId).update(upd);
+            } catch (e) { console.warn('device record failed', e); }
+        }
+        async function admRenderAdminsTab() {
+            const box = document.getElementById('admAdminsBody');
+            if (!box) return;
+            box.innerHTML = '<div class="text-center text-muted">በመጫን ላይ...</div>';
+            try {
+                const snap = await db.collection('staff').where('role', '==', 'admin').get();
+                const me = (heGetSession() && heGetSession().staff && heGetSession().staff.id) || '';
+                const list = []; snap.forEach(d => list.push({ id: d.id, ...d.data() }));
+                if (!list.length) { box.innerHTML = '<div class="text-center text-muted">አድሚን አልተገኘም</div>'; return; }
+                const tsOf = (v) => v && v.toDate ? v.toDate() : (v instanceof Date ? v : null);
+                const dFmt = (d) => { try { return d ? formatEthDateTime(d) : '—'; } catch (e) { return d ? d.toLocaleString() : '—'; } };
+                const active = list.filter(a => a.status !== 'rejected' && a.status !== 'inactive').length;
+                let html = `<div class="text-muted" style="margin-bottom:8px;">ጠቅላላ አድሚኖች፦ <strong>${list.length}</strong> (ንቁ ${active})</div>`;
+                list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+                list.forEach(a => {
+                    const devs = Object.entries(a.adminDevices || {}).map(([k, v]) => ({ k, ...(v || {}), seen: tsOf((v || {}).lastSeen) }))
+                        .sort((x, y) => (y.seen ? y.seen.getTime() : 0) - (x.seen ? x.seen.getTime() : 0));
+                    const ph = devs.filter(d => d.kind === 'phone').length, pc = devs.filter(d => d.kind !== 'phone').length;
+                    const denied = a.canApprove === false;
+                    const isMe = a.id === me;
+                    const isOwner = typeof OWNER_PHONE !== 'undefined' && normalizePhone(a.phone || '') === OWNER_PHONE;
+                    html += `<div style="border:1px solid var(--border); border-radius:10px; padding:12px; margin-bottom:10px;">
+                        <div class="flex-between" style="gap:8px; flex-wrap:wrap;">
+                            <div><strong>${escHtml(a.name || '—')}</strong> ${isMe ? '<span class="status-badge status-completed">እርስዎ</span>' : ''} ${isOwner ? '<span class="status-badge status-pending">ባለቤት</span>' : ''}
+                                <div class="text-muted" style="font-size:0.8rem;">${escHtml(a.phone || '')} · ${escHtml(a.status || 'active')}</div></div>
+                            <div>${denied ? '<span class="status-badge status-pending">⛔ ማጽደቅ ተከልክሏል</span>' : '<span class="status-badge status-completed">✅ ማጽደቅ ይችላል</span>'}</div>
+                        </div>
+                        <div style="margin-top:8px; font-size:0.85rem;"><strong>📲 መሳሪያዎች፦</strong> ${devs.length ? `${devs.length} (📱 ${ph} ስልክ · 💻 ${pc} ፒሲ)` : '<span class="text-muted">ገና አልተመዘገበም (ከዚህ ዝመና በኋላ ሲገባ ይመዘገባል)</span>'}</div>
+                        ${devs.map(d => `<div class="text-muted" style="font-size:0.78rem; margin-left:12px;">• ${escHtml(d.label || '')} — መጨረሻ፦ ${escHtml(dFmt(d.seen))}</div>`).join('')}
+                        ${(isMe || isOwner) ? '<div class="text-muted" style="font-size:0.75rem; margin-top:8px;">ራስዎን/ባለቤቱን እዚህ መለወጥ አይቻልም</div>' : `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+                            <button class="btn ${denied ? 'btn-success' : 'btn-outline'} btn-sm" onclick="admSetApprovePerm('${a.id}', ${denied ? 'true' : 'false'})">${denied ? '✅ የማጽደቅ መብት መልስ' : '⛔ የማጽደቅ መብት አሳጣ'}</button>
+                            <button class="btn btn-danger btn-sm" onclick="admDemoteAdmin('${a.id}')"><i class="fas fa-user-minus"></i> ወደ ቴክኒሻን ቀይር</button>
+                        </div>`}
+                    </div>`;
+                });
+                box.innerHTML = html;
+            } catch (e) { box.innerHTML = '<div class="text-center text-muted">❌ ' + escHtml(e.message || String(e)) + '</div>'; }
+        }
+        async function admSetApprovePerm(id, allow) {
+            if (!heIsAdminSession()) { showToast('⛔ አድሚን ብቻ', 'error'); return; }
+            const me = (heGetSession() && heGetSession().staff && heGetSession().staff.id) || '';
+            if (id === me) { showToast('ራስዎን መለወጥ አይቻልም', 'error'); return; }
+            if (!confirm(allow ? 'የማጽደቅ መብቱ ይመለስለት?' : 'ይህ አድሚን ሪፖርት ማጽደቅ እንዳይችል ይደረግ?')) return;
+            try {
+                await db.collection('staff').doc(id).update({ canApprove: allow ? true : false });
+                showToast(allow ? '✅ መብቱ ተመልሷል' : '⛔ የማጽደቅ መብት ተከልክሏል', 'success');
+                admRenderAdminsTab();
+            } catch (e) { showToast('❌ ' + (e.message || e), 'error'); }
+        }
+        async function admDemoteAdmin(id) {
+            if (!heIsAdminSession()) { showToast('⛔ አድሚን ብቻ', 'error'); return; }
+            const me = (heGetSession() && heGetSession().staff && heGetSession().staff.id) || '';
+            if (id === me) { showToast('ራስዎን መለወጥ አይቻልም', 'error'); return; }
+            try {
+                const snap = await db.collection('staff').where('role', '==', 'admin').get();
+                if (snap.size <= 1) { showToast('⚠️ ብቸኛውን አድሚን መቀየር አይቻልም', 'error'); return; }
+            } catch (e) { showToast('❌ ' + (e.message || e), 'error'); return; }
+            if (!confirm('ይህ ሰው ወደ «ቴክኒሻን» ይቀየር? ከዚያ በኋላ አድሚን ገጽ መግባት አይችልም።')) return;
+            try {
+                await db.collection('staff').doc(id).update({ role: 'technician', demotedFromAdminAt: new Date() });
+                showToast('✅ ወደ ቴክኒሻን ተቀይሯል', 'success');
+                admRenderAdminsTab();
+            } catch (e) { showToast('❌ ' + (e.message || e), 'error'); }
+        }
+
+        // ============================================================
         // 🔍 ያለ አድሚን ፈቃድ የጸደቁ ሪፖርቶችን መፈለግ እና ወደ «አልጸደቀም» መመለስ (አድሚን ብቻ)
         //   አጠራጣሪ = የጸደቀ ሆኖ (1) በ activity ውስጥ «approve_report» መዝገብ የሌለው፣ ወይም
         //   (2) approvedAt ከ submittedAt በ2 ደቂቃ ውስጥ የሆነ። approvedBy ያለው (አድሚን ያጸደቀው) አይጠቆምም።
@@ -7341,8 +7466,19 @@ ${locationLine}
                 ? ` <button class="btn btn-primary" onclick="resendReportTelegram('${r.id}')"><i class="fab fa-telegram-plane"></i> 📤 ወደ ቴሌግራም ላክ</button>` : '';
         }
 
+        // 🔐 «ማጽደቅ» መብት ተከልክሎ ከሆነ (staff.canApprove === false) አድሚኑ ሪፖርት ማጽደቅ አይችልም። ማንበብ ካልተቻለ አይከለክልም።
+        async function heApproveAllowed() {
+            try {
+                const s = heGetSession(); const id = s && s.staff && s.staff.id;
+                if (!id) return true;
+                const d = await db.collection('staff').doc(id).get();
+                if (d.exists && d.data().canApprove === false) { showToast('⛔ ሪፖርት የማጽደቅ መብትዎ ተከልክሏል — ባለቤቱን ያነጋግሩ', 'error'); return false; }
+            } catch (e) { console.warn('approve-permission check failed', e); }
+            return true;
+        }
         async function approveReport(reportId, techId, fromCard) {
             if (!heIsAdminSession()) { showToast('⛔ ሪፖርት ማጽደቅ የሚችለው አድሚን ብቻ ነው', 'error'); return; }
+            if (!(await heApproveAllowed())) return;
             try {
                 const report = allDailyReports.find(r => r.id === reportId);
                 if (!techId && report) techId = report.technicianId;
@@ -7350,6 +7486,7 @@ ${locationLine}
                 if (report && report.tgDeferred && !report.tgPhotosEarly && !report.tgSentAt && report.photosPending && !((phWr(report) || []).length || (phRc(report) || []).length) && !confirm('📸 የቴክኒሻኑ ፎቶዎች ገና እየተጫኑ ነው።\n\nጥቂት ቆይተው ቢያጸድቁ ፎቶዎቹ ከሪፖርቱ ጋር ወደ ቴሌግራም ይላካሉ።\n\nቢሆንም አሁን ይጽደቅ?')) return;
                 await db.collection('dailyReports').doc(reportId).update({
                     approved: true,
+                    approvedVia: 'admin-click',
                     approvedAt: new Date(),
                     approvedBy: (heGetSession() && heGetSession().staff && heGetSession().staff.id) || '',
                     reopenedForApproval: false
@@ -7500,7 +7637,7 @@ ${locationLine}
                 row.jobs += (r.jobs || 0);
                 row.income += (r.totalIncome ?? r.income ?? 0);
                 row.expense += (r.totalExpense || 0);
-                row.companyAmount += (r.companyAmount || 0);
+                row.companyAmount += admDepositedOf(r);
                 row.techShareAmount += (r.techShareAmount || 0);
                 row.reports += 1;
                 if (!r.approved) row.unapproved += 1;
@@ -9631,8 +9768,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             csv += finCsvLine(['ቀን', 'ቴክኒሻን', 'ስራዎች', 'ገቢ (ብር)', 'ወጪ (ብር)', 'ለድርጅት (ብር)', 'ለሰራተኛ (ብር)', 'ሁኔታ']);
             reports.forEach(r => {
                 const inc = finNum(r.totalIncome ?? r.income), exp = finNum(r.totalExpense);
-                rInc += inc; rExp += exp; rCo += finNum(r.companyAmount); rTech += finNum(r.techShareAmount);
-                csv += finCsvLine([techSummaryDateLabel(r.dateKey), r.technicianName || '', r.jobs ?? r.completedCount ?? 0, inc.toFixed(2), exp.toFixed(2), finNum(r.companyAmount).toFixed(2), finNum(r.techShareAmount).toFixed(2), r.approved ? 'ጸድቋል' : 'አልጸደቀም']);
+                rInc += inc; rExp += exp; rCo += admDepositedOf(r); rTech += finNum(r.techShareAmount);
+                csv += finCsvLine([techSummaryDateLabel(r.dateKey), r.technicianName || '', r.jobs ?? r.completedCount ?? 0, inc.toFixed(2), exp.toFixed(2), admDepositedOf(r).toFixed(2), finNum(r.techShareAmount).toFixed(2), r.approved ? 'ጸድቋል' : 'አልጸደቀም']);
             });
             csv += finCsvLine(['', 'ጠቅላላ', '', rInc.toFixed(2), rExp.toFixed(2), rCo.toFixed(2), rTech.toFixed(2), '']);
 
@@ -9732,7 +9869,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             x.debtsPaid.forEach(d => { const ck = finToKey(d.createdAt); csv += L([d.person || '—', d.phone || '', finDebtTypeLabel(d), fx(finNum(d.amount)), d.note || '', ck ? formatEthDate(new Date(ck)) : '']); });
 
             csv += '\r\n' + L(['4. የቴክኒሻን ዕለታዊ ሪፖርቶች']) + L(['ቴክኒሻን', 'ስራዎች', 'ገቢ (ብር)', 'ወጪ (ብር)', 'ለድርጅት (ብር)', 'ለሰራተኛ (ብር)', 'ማብራሪያ', 'ሁኔታ']);
-            x.reports.forEach(r => { csv += L([r.technicianName || '', r.jobs ?? r.completedCount ?? 0, fx(finNum(r.totalIncome ?? r.income)), fx(finNum(r.totalExpense)), fx(finNum(r.companyAmount)), fx(finNum(r.techShareAmount)), r.remarks || r.notes || '', r.approved ? 'ጸድቋል' : 'አልጸደቀም']); });
+            x.reports.forEach(r => { csv += L([r.technicianName || '', r.jobs ?? r.completedCount ?? 0, fx(finNum(r.totalIncome ?? r.income)), fx(finNum(r.totalExpense)), fx(admDepositedOf(r)), fx(finNum(r.techShareAmount)), r.remarks || r.notes || '', r.approved ? 'ጸድቋል' : 'አልጸደቀም']); });
 
             csv += '\r\n' + L(['5. በዚህ ቀን የገቡ ትዕዛዞች']) + L(['ሰዓት', 'ደንበኛ', 'እቃ', 'ሁኔታ']);
             x.orderCreated.forEach(o => { csv += L([time(o.createdAt), o.fullName || '—', o.appliance || '—', o.status || 'Pending']); });
