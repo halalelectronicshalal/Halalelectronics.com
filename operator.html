@@ -14,6 +14,18 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script>
+/* 📅 ቀን በኢትዮጵያ ካላንደር ብቻ — «YYYY-MM-DD» ቁልፍን ወደ ኢትዮጵያ ቀን ይቀይራል (ማሳያ ላይ ብቻ፤ የተቀመጠው ዳታ አይነካም) */
+window.heEthDay = function (k) {
+    try {
+        var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(k == null ? '' : k));
+        if (!m) return k == null ? '' : k;
+        if (typeof formatEthDate === 'function') return formatEthDate(new Date(+m[1], +m[2] - 1, +m[3]));
+        if (typeof toEth === 'function') { var d0 = new Date(+m[1], +m[2] - 1, +m[3]), e0 = toEth(d0); return e0.day + ' ' + ETH_MONTHS[e0.month - 1] + ' ' + e0.year; }
+    } catch (e) {}
+    return k == null ? '' : k;
+};
+</script>
+<script>
 /* 📜 የስራ እንቅስቃሴ ታሪክ — በ orders ላይ የሚደረግ እያንዳንዱ ለውጥ (መፈጠር፣ መመደብ፣ መመለስ፣ ውጤት) በ order.history ውስጥ ሰዓት እና ማን እንዳደረገው ይመዘገባል። */
 (function () {
     if (window.__heOrdHist || !window.firebase || !firebase.firestore) return;
@@ -35,7 +47,7 @@
         else if (st === 'Pending') txt = d.returnReason ? ('↩️ ከ ' + (d.returnedFrom || 'ቴክኒሻን') + ' ተመለሰ — ምክንያት: ' + d.returnReason) : '⏳ ወደ ያልተመደበ ተመልሷል';
         else if (st === 'Completed') txt = '✅ ተጠናቋል' + (d.price != null ? ' — ' + d.price + ' ብር' : '');
         else if (st === 'PriceNotAgreed') txt = '💰 ዋጋ አልተስማሙም';
-        else if (st === 'Rescheduled') txt = '📅 ለሌላ ቀን ተላልፏል' + (d.rescheduledDate ? ' (' + d.rescheduledDate + ')' : '');
+        else if (st === 'Rescheduled') txt = '📅 ለሌላ ቀን ተላልፏል' + (d.rescheduledDate ? ' (' + heEthDay(d.rescheduledDate) + ')' : '');
         else if (st === 'NotToday') txt = '📝 ዛሬ አይመቻቸውም' + (d.notTodayReason ? ' — ' + d.notTodayReason : '');
         else if (st === 'Other') txt = '📌 ሌላ ምክንያት' + (d.otherReason ? ' — ' + d.otherReason : '');
         else txt = '🔄 ሁኔታ ወደ «' + st + '» ተቀየረ';
@@ -628,7 +640,7 @@ async function lookupPhoneHistory(rawPhone) {
 function stageText(o) {
   const st = o.status || 'Pending', t = o.technician || '';
   if (st === 'Pending') {
-    if (o.isAppointment && o.rescheduledDate) return `📅 ቀጠሮ ተይዟል (${o.rescheduledDate}${o.rescheduledTime ? ' ' + o.rescheduledTime : ''})${t ? ' — ቴክኒሻን: ' + t : ''}`;
+    if (o.isAppointment && o.rescheduledDate) return `📅 ቀጠሮ ተይዟል (${heEthDay(o.rescheduledDate)}${o.rescheduledTime ? ' ' + o.rescheduledTime : ''})${t ? ' — ቴክኒሻን: ' + t : ''}`;
     if (!t && o.returnedAt) return '↩️ ከቴክኒሻን ተመልሷል — በአድሚን/መዳቢ እጅ ነው (እንደገና አልተመደበም)';
     return t ? `📋 ለ${t} ተመድቧል (ገና አልጀመረም)` : '⏳ በመጠባበቅ ላይ — ገና ቴክኒሻን አልተመደበም';
   }
@@ -646,7 +658,7 @@ function jobDest(o) {
 // ኦፕሬተሩ ለደንበኛው የሚናገረው አጭር ማብራሪያ
 function stageSay(o) {
   const st = o.status || 'Pending', t = o.technician || '';
-  if (st === 'Pending' && o.isAppointment && o.rescheduledDate) return `ቀጠሮዎ ${o.rescheduledDate}${o.rescheduledTime ? ' ' + o.rescheduledTime : ''} ላይ ነው${t ? '፤ ቴክኒሻኑ ' + t + ' ነው' : ''}። ለቴክኒሻኑ አሳውቀናል።`;
+  if (st === 'Pending' && o.isAppointment && o.rescheduledDate) return `ቀጠሮዎ ${heEthDay(o.rescheduledDate)}${o.rescheduledTime ? ' ' + o.rescheduledTime : ''} ላይ ነው${t ? '፤ ቴክኒሻኑ ' + t + ' ነው' : ''}። ለቴክኒሻኑ አሳውቀናል።`;
   if (st === 'Pending' && !t) return o.returnedAt ? 'ስራዎ ከቴክኒሻኑ ወደ አድሚን ተመልሷል፤ እንደገና ቴክኒሻን እየተመደበለት ነው። ለአድሚን አሳውቀናል።' : 'ስራዎ ተመዝግቧል፤ ቴክኒሻን ለመመደብ በሂደት ላይ ነው። ለመዳቢው አሳውቀናል።';
   if (st === 'Pending' || st === 'Assigned') return `ስራዎ ለቴክኒሻን ${t} ተመድቧል። አሁን አሳውቀነዋል፤ ተመልሶ ይደውልልዎታል።`;
   return `ስራዎ ገና አልተጠናቀቀም (${(ST_AM[st] || [st])[0].replace(/^\S+\s/, '')})፤ በቴክኒሻን ${t || ''} ጋር ይገኛል። አሳውቀነዋል።`;
