@@ -40,6 +40,17 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js">
     </script>
 <script>
+/* 📅 ቀን በኢትዮጵያ ካላንደር ብቻ — «YYYY-MM-DD» ቁልፍን ወደ ኢትዮጵያ ቀን ይቀይራል (ማሳያ ላይ ብቻ፤ የተቀመጠው ዳታ አይነካም) */
+window.heEthDay = function (k) {
+    try {
+        var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(k == null ? '' : k));
+        if (!m) return k == null ? '' : k;
+        if (typeof formatEthDate === 'function') return formatEthDate(new Date(+m[1], +m[2] - 1, +m[3]));
+    } catch (e) {}
+    return k == null ? '' : k;
+};
+</script>
+<script>
 /* 📜 የስራ እንቅስቃሴ ታሪክ — በ orders ላይ የሚደረግ እያንዳንዱ ለውጥ (መፈጠር፣ መመደብ፣ መመለስ፣ ውጤት) በ order.history ውስጥ ሰዓት እና ማን እንዳደረገው ይመዘገባል። */
 (function () {
     if (window.__heOrdHist || !window.firebase || !firebase.firestore) return;
@@ -52,6 +63,7 @@
             if (PAGE.indexOf('operator') === 0) { return (typeof me !== 'undefined' && me && me.name) ? me.name : 'ኦፕሬተር'; }
             if (PAGE.indexOf('new-orders') === 0) { var s = (typeof heGetSession === 'function') ? heGetSession() : null; return (s && s.staff && s.staff.name) ? s.staff.name + ' (መዳቢ)' : 'ስራ መዳቢ'; }
         } catch (e) {}
+        try { var _s = (typeof heGetSession === 'function') ? heGetSession() : null; if (_s && _s.staff && _s.staff.name) return String(_s.staff.name); } catch (e) {}
         return 'አስተዳዳሪ';
     }
     function mk(d) {
@@ -61,7 +73,7 @@
         else if (st === 'Pending') txt = d.returnReason ? ('↩️ ከ ' + (d.returnedFrom || 'ቴክኒሻን') + ' ተመለሰ — ምክንያት: ' + d.returnReason) : '⏳ ወደ ያልተመደበ ተመልሷል';
         else if (st === 'Completed') txt = '✅ ተጠናቋል' + (d.price != null ? ' — ' + d.price + ' ብር' : '');
         else if (st === 'PriceNotAgreed') txt = '💰 ዋጋ አልተስማሙም';
-        else if (st === 'Rescheduled') txt = '📅 ለሌላ ቀን ተላልፏል' + (d.rescheduledDate ? ' (' + d.rescheduledDate + ')' : '');
+        else if (st === 'Rescheduled') txt = '📅 ለሌላ ቀን ተላልፏል' + (d.rescheduledDate ? ' (' + heEthDay(d.rescheduledDate) + ')' : '');
         else if (st === 'NotToday') txt = '📝 ዛሬ አይመቻቸውም' + (d.notTodayReason ? ' — ' + d.notTodayReason : '');
         else if (st === 'Other') txt = '📌 ሌላ ምክንያት' + (d.otherReason ? ' — ' + d.otherReason : '');
         else txt = '🔄 ሁኔታ ወደ «' + st + '» ተቀየረ';
@@ -1557,6 +1569,7 @@ document.addEventListener('click', function (e) {
                     <span class="page-title" id="pageTitle">📊 ዳሽቦርድ</span>
                 </div>
                 <div class="right">
+                    <button type="button" id="appRefreshBtn" class="btn btn-outline btn-sm" title="አፑን አድስ" aria-label="አፑን አድስ" onclick="admRefreshApp()" style="padding:5px 9px;"><i class="fas fa-sync-alt" id="appRefreshIcon"></i></button>
                     <span class="badge-live"><i class="fas fa-circle" style="font-size:0.4rem;"></i> LIVE</span>
                     <!-- ✅ NEW: ሁልጊዜ የሚታይ የማሳወቂያ 🔔 (አዲስ ትዕዛዝ + ምዝገባ + ሪፖርት በአንድ ላይ ይቆጠራል) -->
                     <div class="notif-bell" id="notifBell" onclick="toggleNotifDropdown(event)">
@@ -2896,7 +2909,14 @@ document.addEventListener('click', function (e) {
         const WORKER_BASE_URL = "https://halalelectronics.ashenafi6275.workers.dev";
         const HE_ROLE = (typeof window !== 'undefined' && window.APP_ROLE) || 'operator';
         const HE_SESSION_KEY = 'he_session_' + HE_ROLE;
-        function heGetSession() {
+        function heActorName() {
+            try {
+                const s = (typeof heGetSession === 'function') ? heGetSession() : null;
+                if (s && s.staff && s.staff.name) return String(s.staff.name);
+            } catch (e) {}
+            return 'አስተዳዳሪ';
+        }
+                function heGetSession() {
             try {
                 const s = JSON.parse(localStorage.getItem(HE_SESSION_KEY) || 'null');
                 if (!s || !s.token || !s.staff || !s.exp || s.exp * 1000 < Date.now()) return null;
@@ -3392,7 +3412,7 @@ document.addEventListener('click', function (e) {
                     await db.collection('staff').doc(id).update({ warning: { active: true, reason: reason.trim().slice(0, 140), at: new Date(), by: 'አስተዳዳሪ' } });
                     showToast('🚩 ዋርኒግ ተመዝግቧል', 'success');
                 }
-                db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'staff_warning', details: `${t.name}: ዋርኒግ ተቀይሯል`, timestamp: new Date() }).catch(() => {});
+                db.collection('activity').add({ user: heActorName(), action: 'staff_warning', details: `${t.name}: ዋርኒግ ተቀይሯል`, timestamp: new Date() }).catch(() => {});
             } catch (e) { showToast('❌ ' + e.message, 'error'); }
         }
 
@@ -4070,7 +4090,7 @@ document.addEventListener('click', function (e) {
             }
 
             db.collection('activity').add({
-                user: 'አስተዳዳሪ',
+                user: heActorName(),
                 action: 'change_password',
                 details: 'የይለፍ ቃል ተቀይሯል',
                 timestamp: new Date()
@@ -4467,7 +4487,7 @@ document.addEventListener('click', function (e) {
                 const wasOp = !!(t && t.isPhoneOperator), wasPages = Array.isArray(t && t.pages) ? t.pages : [];
                 if (JSON.stringify(wasPages) !== JSON.stringify(pages)) await db.collection('staff').doc(id).update({ pages });
                 if (wasOp !== (pick === 'operator')) await db.collection('staff').doc(id).update({ isPhoneOperator: pick === 'operator' });
-                await db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'set_page_permissions', details: `የስራ ዘርፍ ተቀይሯል (${pick || 'ቴክኒሻን'})`, timestamp: new Date() });
+                await db.collection('activity').add({ user: heActorName(), action: 'set_page_permissions', details: `የስራ ዘርፍ ተቀይሯል (${pick || 'ቴክኒሻን'})`, timestamp: new Date() });
                 showToast('✅ የስራ ዘርፍ ተቀምጧል', 'success');
                 closeModal();
             } catch (e) { showToast('❌ ' + e.message, 'error'); }
@@ -4478,7 +4498,7 @@ document.addEventListener('click', function (e) {
             try {
                 await db.collection('staff').doc(id).update({ status: 'active', approvedAt: new Date() });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'approve_registration',
                     details: `ተመዝጋቢ ፀድቋል`,
                     timestamp: new Date()
@@ -4494,7 +4514,7 @@ document.addEventListener('click', function (e) {
             try {
                 await db.collection('staff').doc(id).update({ status: 'rejected' });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'reject_registration',
                     details: `ተመዝጋቢ ውድቅ ተደርጓል`,
                     timestamp: new Date()
@@ -4651,7 +4671,7 @@ document.addEventListener('click', function (e) {
                 renderRankResetInfo();
                 try { renderTechnicians(); } catch (e) {}
                 try {
-                    await db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'reset_rank', details: 'የቴክኒሻን ደረጃ (ራንክ) እንዳዲስ ተጀምሯል', timestamp: new Date() });
+                    await db.collection('activity').add({ user: heActorName(), action: 'reset_rank', details: 'የቴክኒሻን ደረጃ (ራንክ) እንዳዲስ ተጀምሯል', timestamp: new Date() });
                 } catch (e) {}
                 showToast('✅ ደረጃ እንዳዲስ ተጀምሯል', 'success');
             } catch (e) {
@@ -5250,10 +5270,22 @@ document.addEventListener('click', function (e) {
         // ============================================================
         function admEsc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
         function admHasCorrection(r) { return !!(r && r.correctionRequest && r.correctionRequest.text); }
+        // 👁️ ከሪፖርት ዝርዝር ውስጥ የአንድን ስራ ዝርዝር ለማየት
+        async function admReportJobView(orderId) {
+            try {
+                let o = (typeof allOrders !== 'undefined' && Array.isArray(allOrders)) ? allOrders.find(x => x.id === orderId) : null;
+                if (!o) {
+                    const d = await db.collection('orders').doc(orderId).get();
+                    if (!d.exists) { showToast('የስራው ዝርዝር አልተገኘም', 'error'); return; }
+                    if (typeof allOrders !== 'undefined' && Array.isArray(allOrders)) allOrders.push({ id: d.id, ...d.data() });
+                }
+                viewOrder(orderId);
+            } catch (e) { showToast('ዝርዝሩን ማሳየት አልተቻለም', 'error'); }
+        }
         function admReportJobsHtml(r) {
             return (r.jobStatuses || []).map((j, i) => {
                 const done = j.status === 'completed';
-                let h = `<div style="font-size:0.85rem; padding:4px 0;">${i + 1}. ${admEsc(j.customer || '—')} — ${done ? '✅ ተሰርቷል' : '❌ አልተሰራም' + (j.reason ? ' (' + admEsc(j.reason) + ')' : '')}${j.overnight ? ` <span style="background:#FEE2E2; color:#B91C1C; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">⏰ ያደረ — ከ${admEsc(j.jobDate || '')} የተመዘገበ</span>` : ''}`;
+                let h = `<div style="font-size:0.85rem; padding:4px 0;">${i + 1}. ${admEsc(j.customer || '—')} — ${done ? '✅ ተሰርቷል' : '❌ አልተሰራም' + (j.reason ? ' (' + admEsc(j.reason) + ')' : '')}${j.orderId ? ` <button type="button" class="btn btn-outline btn-sm" title="የስራ ዝርዝር ይመልከቱ" aria-label="የስራ ዝርዝር" onclick="admReportJobView('${j.orderId}')" style="padding:2px 8px; margin-left:4px;"><i class="fas fa-eye"></i></button>` : ''}${j.overnight ? ` <span style="background:#FEE2E2; color:#B91C1C; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">⏰ ያደረ — ከ${admEsc(j.jobDate || '')} የተመዘገበ</span>` : ''}`;
                 if (j.convertedFromNotCompleted) h += `<div style="color:#047857; font-size:0.8rem;">🔄 ከቆይታ በኋላ ወደ «ተሰራ» ተቀይሯል — ገቢ ${admEsc(j.lateIncome)} | ወጪ ${admEsc(j.lateExpense)} ብር</div>`;
                 return h + `</div>`;
             }).join('');
@@ -5341,7 +5373,7 @@ document.addEventListener('click', function (e) {
                 if (rep.approved) { showToast('⚠️ ሪፖርቱ ጸድቋል — መሰረዝ አይቻልም', 'error'); return; }
                 if (!confirm(`የ ${rep.technicianName || rep.technician || ''} ሪፖርት (${rep.date || rep.dateKey || ''}) ይሰረዝ?\n\nከተሰረዘ በኋላ ቴክኒሻኑ ስራዎቹን እንደገና ሪፖርት ማድረግ ይችላል። ይህ ሊመለስ አይችልም።`)) return;
                 await ref.delete();
-                try { db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'delete_daily_report', details: `የ ${rep.technicianName || ''} ያልጸደቀ ሪፖርት ተሰረዘ (${rep.dateKey || ''}, ገቢ: ${rep.totalIncome != null ? rep.totalIncome : (rep.income || 0)})`, timestamp: new Date() }); } catch (e) {}
+                try { db.collection('activity').add({ user: heActorName(), action: 'delete_daily_report', details: `የ ${rep.technicianName || ''} ያልጸደቀ ሪፖርት ተሰረዘ (${rep.dateKey || ''}, ገቢ: ${rep.totalIncome != null ? rep.totalIncome : (rep.income || 0)})`, timestamp: new Date() }); } catch (e) {}
                 showToast('🗑️ ሪፖርቱ ተሰርዟል', 'success');
                 closeModal();
             } catch (e) { showToast('❌ ' + e.message, 'error'); }
@@ -5386,7 +5418,7 @@ document.addEventListener('click', function (e) {
                     correctionRequest: cr, hasCorrectionRequest: !!cr,
                     editedByAdmin: true, editedAt: new Date()
                 });
-                try { db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'edit_daily_report', details: `ሪፖርት #${reportId.substring(0, 8)} በእርማት ጥያቄ ተስተካክሏል (ገቢ:${income}, ወጪ:${expense})`, timestamp: new Date() }); } catch (e) {}
+                try { db.collection('activity').add({ user: heActorName(), action: 'edit_daily_report', details: `ሪፖርት #${reportId.substring(0, 8)} በእርማት ጥያቄ ተስተካክሏል (ገቢ:${income}, ወጪ:${expense})`, timestamp: new Date() }); } catch (e) {}
                 showToast('✅ ሪፖርቱ ተስተካክሏል', 'success');
                 if (thenApprove) { await approveReport(reportId, rep.technicianId || '', true); }
             } catch (e) { showToast('❌ ' + e.message, 'error'); }
@@ -5988,7 +6020,7 @@ document.addEventListener('focusout', function (e) {
         function schedHoldTag(o) {
             if (o && o.needsAdminAssign && o.status === 'Pending' && !(o.scheduledTechnician && o.scheduledReleaseDate)) return corrAdminTag(o);
             if (!o || !o.scheduledTechnician || !o.scheduledReleaseDate) return '';
-            return `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#EFF6FF; color:#1E40AF; font-size:0.78rem;">📌 ለ <b>${escHtml(o.scheduledTechnician)}</b> ተይዟል — ቀኑ (${escHtml(o.scheduledReleaseDate)}) ሲደርስ ለሰራተኛው በራሱ ይላካል</div>`;
+            return `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#EFF6FF; color:#1E40AF; font-size:0.78rem;">📌 ለ <b>${escHtml(o.scheduledTechnician)}</b> ተይዟል — ቀኑ (${escHtml(heEthDay(o.scheduledReleaseDate))}${o.scheduledReleaseTime ? ' ⏰ ' + escHtml(o.scheduledReleaseTime) : ''}) ሲደርስ ለሰራተኛው በራሱ ይላካል</div>`;
         }
         async function assignOrder(orderId) {
             // ✅ NEW: ከ Dashboard ላይ ካለው quick-assign select ወይም ከ Orders ትር ላይ ካለው select ይነበብ
@@ -6018,7 +6050,7 @@ document.addEventListener('focusout', function (e) {
                         scheduledTechnician: techName, scheduledTechnicianId: (_t0 && _t0.id) || null,
                         scheduledReleaseDate: _hold.key, scheduledBy: 'admin', scheduledAt: new Date()
                     });
-                    try { await db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'hold_order', details: `ትዕዛዝ #${orderId.substring(0,8)} ለ ${techName} ተይዟል (ቀጠሮ ${_hold.key})`, timestamp: new Date() }); } catch (e) {}
+                    try { await db.collection('activity').add({ user: heActorName(), action: 'hold_order', details: `ትዕዛዝ #${orderId.substring(0,8)} ለ ${techName} ተይዟል (ቀጠሮ ${_hold.key})`, timestamp: new Date() }); } catch (e) {}
                     showToast(`📅 ቀጠሮ ስለሆነ ለ ${techName} ተይዟል — ${_hold.key} ሲደርስ ለሰራተኛው በራሱ ይላካል`, 'success');
                     try { renderOrders(); } catch (e) {}
                     try { renderDashNewOrders(); } catch (e) {}
@@ -6046,11 +6078,11 @@ document.addEventListener('focusout', function (e) {
                     assignedAt: new Date(),
                     assignedBy: 'admin'
                 };
-                if (_ord0 && _ord0.scheduledReleaseDate) { _upd.scheduledTechnician = null; _upd.scheduledTechnicianId = null; _upd.scheduledReleaseDate = null; } // ተይዞ የነበረ → አሁን ተመደበ
+                if (_ord0 && _ord0.scheduledReleaseDate) { _upd.scheduledTechnician = null; _upd.scheduledTechnicianId = null; _upd.scheduledReleaseDate = null; _upd.scheduledReleaseTime = null; } // ተይዞ የነበረ → አሁን ተመደበ
                 await db.collection('orders').doc(orderId).update(_upd);
 
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'assign_order',
                     details: `ትዕዛዝ #${orderId.substring(0,8)} ለ ${techName} ተመድቧል`,
                     timestamp: new Date()
@@ -6479,7 +6511,7 @@ ${locationLine}
                 });
 
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'complete_order',
                     details: `ትዕዛዝ #${orderId.substring(0,8)} ተጠናቋል, ${price} ብር`,
                     timestamp: new Date()
@@ -6509,7 +6541,7 @@ ${locationLine}
             try {
                 await db.collection('orders').doc(orderId).delete();
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'delete_order',
                     details: `ትዕዛዝ #${orderId.substring(0,8)} ተሰርዟል`,
                     timestamp: new Date()
@@ -6726,7 +6758,7 @@ ${locationLine}
             try {
                 await db.collection('staff').doc(id).delete();
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'delete_technician',
                     details: `ቴክኒሻን ተሰርዟል`,
                     timestamp: new Date()
@@ -7058,7 +7090,7 @@ ${locationLine}
             }
             try {
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ', action: 'send_message',
+                    user: heActorName(), action: 'send_message',
                     details: `መልእክት ተላከ → ${targetId === 'all' ? 'ለሁሉም (' + targets.length + ')' : targets[0].name}`,
                     timestamp: new Date()
                 });
@@ -7196,6 +7228,24 @@ ${locationLine}
         // ============================================================
         // 🛡️ አድሚኖች ታብ — (1) አድሚን በየትኛው ስልክ/ፒሲ እንደገባ መመዝገብ፣ (2) «ማጽደቅ» መብት ማሳጣት/መመለስ፣ (3) ወደ ቴክኒሻን መቀየር
         //   የመሳሪያ መዝገብ በራሱ የአድሚኑ staff ሰነድ ውስጥ `adminDevices` ላይ ይጻፋል (ሌላ ምንም አይነካም)።
+        // 🔄 አፑን ማደስ — የተቀመጠ ካሽ (cache) ያጸዳል፣ አዲስ ስሪት ካለ ይወስዳል፣ ገጹን እንደገና ይጭናል (መግቢያዎ አይጠፋም)
+        async function admRefreshApp() {
+            try { const ic = document.getElementById('appRefreshIcon'); if (ic) ic.classList.add('fa-spin'); } catch (e) {}
+            try {
+                if ('serviceWorker' in navigator) {
+                    const regs = await navigator.serviceWorker.getRegistrations();
+                    await Promise.all(regs.map(r => r.update().catch(() => {})));
+                }
+            } catch (e) {}
+            try {
+                if (window.caches && caches.keys) {
+                    const ks = await caches.keys();
+                    await Promise.all(ks.map(k => caches.delete(k)));
+                }
+            } catch (e) {}
+            location.reload();
+        }
+
         // ============================================================
         function admDeviceId() {
             let id = '';
@@ -7346,7 +7396,7 @@ ${locationLine}
                 try {
                     tx += await admRevertReport(id); ok++;
                     const r = (allDailyReports || []).find(x => x.id === id);
-                    try { await db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'revert_report_approval', details: `የ ${r ? r.technicianName : ''} ሪፖርት ወደ «አልጸደቀም» ተመለሰ (${r ? r.dateKey : ''})`, timestamp: new Date() }); } catch (e) {}
+                    try { await db.collection('activity').add({ user: heActorName(), action: 'revert_report_approval', details: `የ ${r ? r.technicianName : ''} ሪፖርት ወደ «አልጸደቀም» ተመለሰ (${r ? r.dateKey : ''})`, timestamp: new Date() }); } catch (e) {}
                 } catch (e) { console.warn('revert failed', id, e); }
             }
             showToast(`✅ ${ok}/${ids.length} ሪፖርት ተመለሰ (${tx} ገቢ/ወጪ)`, 'success');
@@ -7560,7 +7610,7 @@ ${locationLine}
                 try { await releaseTechTransactions(report); }
                 catch (relErr) { console.error('release transactions failed', relErr); showToast('⚠️ ሪፖርቱ ጸድቋል፣ ነገር ግን ገቢ/ወጪ ወደ ዝርዝሩ ማስገባት አልተቻለም: ' + (relErr && relErr.message ? relErr.message : relErr), 'error'); }
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'approve_report',
                     details: `የ ${report ? report.technicianName : ''} ሪፖርት ጸደቀ (${report ? report.dateKey : ''})`,
                     timestamp: new Date()
@@ -7871,7 +7921,7 @@ ${locationLine}
                     ? { financeExcluded: true, financeExcludedAt: new Date() }
                     : { financeExcluded: false, financeExcludedAt: null });
                 r.financeExcluded = !!exclude; // ወዲያውኑ ለማሳየት (snapshot ቀጥሎ ያድሰዋል)
-                db.collection('activity').add({ user: 'አስተዳዳሪ', action: exclude ? 'finance_exclude_report' : 'finance_restore_report',
+                db.collection('activity').add({ user: heActorName(), action: exclude ? 'finance_exclude_report' : 'finance_restore_report',
                     details: `ሪፖርት #${reportId.substring(0, 8)} (${r.technicianName || ''} ${r.dateKey || ''}) ${exclude ? 'ከፋይናንስ ወጥቷል' : 'ወደ ፋይናንስ ተመልሷል'}`, timestamp: new Date() }).catch(() => {});
                 showToast(exclude ? '✅ ከፋይናንስ ወጥቷል' : '✅ ወደ ፋይናንስ ተመልሷል', 'success');
                 try { updateFinanceStats(); showTechIncomeSummary(); } catch (e) {}
@@ -7961,7 +8011,7 @@ ${locationLine}
                     editedAt: new Date()
                 });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'edit_daily_report',
                     details: `ሪፖርት #${reportId.substring(0,8)} ተስተካክሏል (ገቢ:${income}, ወጪ:${expense})`,
                     timestamp: new Date()
@@ -8173,7 +8223,7 @@ ${locationLine}
             try {
                 const r = await callWorker('sendSms', { phone: to, message: text });
                 if (!(r && (r.success || r.acknowledge === 'success'))) throw new Error((r && (r.message || r.error)) || 'አልተላከም');
-                db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'customer_sms', details: `ለ ${c.name || ''} (${c.phone}) SMS ተላከ`, timestamp: new Date() }).catch(() => {});
+                db.collection('activity').add({ user: heActorName(), action: 'customer_sms', details: `ለ ${c.name || ''} (${c.phone}) SMS ተላከ`, timestamp: new Date() }).catch(() => {});
                 showToast('✅ SMS ተልኳል', 'success'); closeModal();
             } catch (e) { btn.disabled = false; showToast('❌ ' + (e.message || e), 'error'); }
         }
@@ -8217,7 +8267,7 @@ ${locationLine}
                     } catch (e) { failed = failed.concat(chunk.map(x => x.phone)); console.warn('bulk sms batch failed', e); }
                 }
             } finally { cancel.disabled = false; cancel.textContent = 'ዝጋ'; }
-            db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'bulk_sms', details: `ለደንበኞች በጅምላ SMS፦ ${sent} ተላከ፣ ${failed.length} አልተላከም`, timestamp: new Date() }).catch(() => {});
+            db.collection('activity').add({ user: heActorName(), action: 'bulk_sms', details: `ለደንበኞች በጅምላ SMS፦ ${sent} ተላከ፣ ${failed.length} አልተላከም`, timestamp: new Date() }).catch(() => {});
             prog.innerHTML = `✅ <strong>${sent}</strong> ተልኳል` + (failed.length ? ` · ❌ <strong>${failed.length}</strong> አልተላከም<br><span style="font-size:0.75rem; word-break:break-all;">${failed.join(', ')}</span>` : '');
             btn.style.display = 'none';
             showToast(failed.length ? `ተልኳል ${sent}፤ አልተላከም ${failed.length}` : `✅ ለ ${sent} ደንበኞች ተልኳል`, failed.length ? 'error' : 'success');
@@ -8281,7 +8331,7 @@ ${locationLine}
                     items[k] = { enabled: document.getElementById('custSmsOn_' + k).checked, text: document.getElementById('custSmsTxt_' + k).value.trim() };
                 });
                 await db.collection('settings').doc('customer_sms').set({ officePhone: document.getElementById('custSmsOffice').value.trim(), items, updatedAt: new Date() }, { merge: true });
-                db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'customer_sms_settings', details: 'የደንበኛ ራስ-ሰር SMS ጽሁፎች ተስተካክለዋል', timestamp: new Date() }).catch(() => {});
+                db.collection('activity').add({ user: heActorName(), action: 'customer_sms_settings', details: 'የደንበኛ ራስ-ሰር SMS ጽሁፎች ተስተካክለዋል', timestamp: new Date() }).catch(() => {});
                 showToast('✅ ተቀምጧል', 'success');
             } catch (e) { showToast('❌ ' + (e.message || e), 'error'); }
             finally { btn.disabled = false; }
@@ -8431,7 +8481,7 @@ ${locationLine}
                 return `<div style="padding:8px 0; border-bottom:1px solid var(--border-light); font-size:0.88rem; line-height:1.55;">
                     <div><strong>📅 ጥያቄ የቀረበበት ቀን: ${escHtml(when)}</strong> ${r.status ? `<span class="status-badge ${getStatusClass(r.status)}">${escHtml(r.status)}</span>` : ''} <span style="font-size:0.75rem;">${escHtml(typeLbl[r.type] || '')}</span></div>
                     <div>🔌 ${escHtml(r.appliance || '—')}${r.problem ? ' — 🛠️ ' + escHtml(r.problem) : ''}</div>
-                    ${r.appt && r.appt !== (d ? (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')) : '') ? `<div>🗓️ ቀጠሮ: ${escHtml(r.appt)}</div>` : ''}
+                    ${r.appt && r.appt !== (d ? (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')) : '') ? `<div>🗓️ ቀጠሮ: ${escHtml(heEthDay(r.appt))}</div>` : ''}
                     ${r.tech ? `<div>👨‍🔧 ቴክኒሻን: ${escHtml(r.tech)}</div>` : ''}
                     ${r.address ? `<div>📍 ${escHtml(r.address)}</div>` : ''}
                     ${r.price ? `<div>💰 ${escHtml(r.price)} ብር</div>` : ''}
@@ -8475,7 +8525,7 @@ ${locationLine}
                     updatedAt: new Date()
                 }, { merge: true });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'add_customer',
                     details: `${name} (${phone}) ተጨምሯል`,
                     timestamp: new Date()
@@ -8721,7 +8771,7 @@ ${locationLine}
         function admStage(o) {
             const st = o.status || 'Pending', t = o.technician || '';
             if (st === 'Pending') {
-                if (o.isAppointment && o.rescheduledDate) return `📅 ቀጠሮ ተይዟል (${o.rescheduledDate}${o.rescheduledTime ? ' ' + o.rescheduledTime : ''})${t ? ' — ቴክኒሻን: ' + t : ''}`;
+                if (o.isAppointment && o.rescheduledDate) return `📅 ቀጠሮ ተይዟል (${heEthDay(o.rescheduledDate)}${o.rescheduledTime ? ' ' + o.rescheduledTime : ''})${t ? ' — ቴክኒሻን: ' + t : ''}`;
                 if (!t && o.returnedAt) return '↩️ ከቴክኒሻን ተመልሷል — በአድሚን እጅ ነው (እንደገና አልተመደበም)';
                 return t ? `📋 ለ${t} ተመድቧል (ገና አልጀመረም)` : '⏳ በመጠባበቅ ላይ — ገና ቴክኒሻን አልተመደበም';
             }
@@ -8730,7 +8780,7 @@ ${locationLine}
         }
         function admSay(o) {
             const st = o.status || 'Pending', t = o.technician || '';
-            if (st === 'Pending' && o.isAppointment && o.rescheduledDate) return `ቀጠሮዎ ${o.rescheduledDate}${o.rescheduledTime ? ' ' + o.rescheduledTime : ''} ላይ ነው${t ? '፤ ቴክኒሻኑ ' + t + ' ነው' : ''}። አሳውቀናል።`;
+            if (st === 'Pending' && o.isAppointment && o.rescheduledDate) return `ቀጠሮዎ ${heEthDay(o.rescheduledDate)}${o.rescheduledTime ? ' ' + o.rescheduledTime : ''} ላይ ነው${t ? '፤ ቴክኒሻኑ ' + t + ' ነው' : ''}። አሳውቀናል።`;
             if (st === 'Pending' && !t) return o.returnedAt ? 'ስራዎ ከቴክኒሻኑ ተመልሷል፤ አሁን ሌላ ቴክኒሻን እንመድባለን።' : 'ስራዎ ተመዝግቧል፤ ቴክኒሻን ለመመደብ በሂደት ላይ ነው። ለመዳቢው አሳውቀናል።';
             if (st === 'Pending' || st === 'Assigned') return `ስራዎ ለቴክኒሻን ${t} ተመድቧል። አሁን አሳውቀነዋል፤ ተመልሶ ይደውልልዎታል።`;
             return `ስራዎ ገና አልተጠናቀቀም (${(ADM_STATUS_AM[st] || st).replace(/^\S+\s/, '')})፤ በቴክኒሻን ${t} ጋር ይገኛል። አሳውቀናል።`;
@@ -8807,7 +8857,7 @@ ${locationLine}
                 } else {
                     try { await callWorker('pushNotify', { audience: ['newOrders'], title, body, url: new URL('new-orders.html', location.href).href }); delivered = true; } catch (e) { console.warn('dispatcher push failed', e); }
                 }
-                try { await db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'customer_called_again', details: `📞 ደንበኛ ደውሏል — ስራ #${orderId.substring(0, 8)} (${o.fullName || ''}) → ${dest.label}: ${text}`, timestamp: new Date() }); } catch (e) {}
+                try { await db.collection('activity').add({ user: heActorName(), action: 'customer_called_again', details: `📞 ደንበኛ ደውሏል — ስራ #${orderId.substring(0, 8)} (${o.fullName || ''}) → ${dest.label}: ${text}`, timestamp: new Date() }); } catch (e) {}
                 if (delivered) { showToast('✅ መልእክቱ ተልኳል (አዲስ ትዕዛዝ አልተፈጠረም)', 'success'); if (btn) btn.textContent = '✅ ተልኳል'; }
                 else { showToast('❌ መልእክት መላክ አልተቻለም', 'error'); if (btn) btn.disabled = false; }
             } catch (ex) { showToast('❌ ' + ex.message, 'error'); if (btn) btn.disabled = false; }
@@ -8914,7 +8964,7 @@ ${locationLine}
                 catch (custErr) { console.warn('customer history failed (non-fatal)', custErr); }
 
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'add_phone_order',
                     details: `📞 በስልክ ትዕዛዝ ተመዘገበ: ${fullName} - ${appliance}`,
                     timestamp: new Date()
@@ -8972,7 +9022,7 @@ ${locationLine}
             try {
                 await db.collection('staff').doc(id).delete();
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'delete_staff',
                     details: `ሠራተኛ ተሰርዟል`,
                     timestamp: new Date()
@@ -9056,7 +9106,7 @@ ${locationLine}
                 await db.collection('staff').add(staffData);
 
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'invite_user',
                     details: `${email} (${role}) ተጋብዟል`,
                     timestamp: new Date()
@@ -9225,7 +9275,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     createdAt: new Date()
                 });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'add_inventory',
                     details: `${fields.name} (${fields.partNumber}) ተጨምሯል`,
                     timestamp: new Date()
@@ -9259,7 +9309,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     updatedAt: new Date()
                 });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'update_inventory',
                     details: `${fields.name} (${fields.partNumber}) ተስተካክሏል`,
                     timestamp: new Date()
@@ -9382,7 +9432,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     showFinPwMsg('✅ የፋይናንስ ይለፍ ቃል በተሳካ ሁኔታ ተቀይሯል!', 'success');
                     showToast('✅ የፋይናንስ ይለፍ ቃል ተቀይሯል!', 'success');
                     try {
-                        db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'change_finance_password', details: 'የፋይናንስ ይለፍ ቃል ተቀይሯል', timestamp: new Date() });
+                        db.collection('activity').add({ user: heActorName(), action: 'change_finance_password', details: 'የፋይናንስ ይለፍ ቃል ተቀይሯል', timestamp: new Date() });
                     } catch (e) {}
                 } else {
                     const map = {
@@ -9576,7 +9626,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     }
                     log += `✅ ሪፖርቶች ከፋይናንስ ወጥተዋል: ${n} (ሪፖርቶቹ አልተሰረዙም)\n`; say(log);
                 }
-                db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'finance_reset',
+                db.collection('activity').add({ user: heActorName(), action: 'finance_reset',
                     details: `ፋይናንስ እንደ አዲስ ተጀምሯል (ግቤት:${txs.length}, ብድር:${debts.length}, ሪፖርት:${reps.length})`, timestamp: new Date() }).catch(() => {});
                 showToast('✅ ፋይናንስ እንደ አዲስ ተጀምሯል', 'success');
                 setTimeout(() => { try { updateFinanceStats(); updateDebtStats(); renderTransactions(); renderDebts(); showTechIncomeSummary(); refreshFinanceResetUI(); closeModal(); } catch (e) {} }, 600);
@@ -9600,7 +9650,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     await batch.commit();
                 }
                 list.forEach(r => { r.financeExcluded = false; });
-                db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'finance_restore_reports', details: `${list.length} ሪፖርቶች ወደ ፋይናንስ ተመልሰዋል`, timestamp: new Date() }).catch(() => {});
+                db.collection('activity').add({ user: heActorName(), action: 'finance_restore_reports', details: `${list.length} ሪፖርቶች ወደ ፋይናንስ ተመልሰዋል`, timestamp: new Date() }).catch(() => {});
                 showToast('✅ ተመልሷል', 'success');
                 try { updateFinanceStats(); showTechIncomeSummary(); refreshFinanceResetUI(); } catch (e) {}
             } catch (e) { showToast('❌ ' + e.message, 'error'); }
@@ -9680,7 +9730,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     editedByAdmin: true, editedAt: new Date()
                 });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ', action: 'edit_transaction',
+                    user: heActorName(), action: 'edit_transaction',
                     details: `ግቤት ${desc} ተስተካክሏል`, timestamp: new Date()
                 });
                 showToast('✅ ግቤቱ ተስተካክሏል!', 'success');
@@ -9695,7 +9745,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (!confirm('እርግጠኛ ነዎት ይህን ግቤት መሰረዝ ይፈልጋሉ?' + (tx && tx.orderId ? '\n\n(ትዕዛዙ ራሱ አይሰረዝም፤ የፋይናንስ ግቤቱ ብቻ ይሰረዛል)' : ''))) return;
             try {
                 await db.collection('transactions').doc(txId).delete();
-                db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'delete_transaction',
+                db.collection('activity').add({ user: heActorName(), action: 'delete_transaction',
                     details: `ግቤት ተሰርዟል: ${tx ? (tx.description || '') + ' ' + (tx.amount || 0) + ' ብር' : txId}`, timestamp: new Date() }).catch(() => {});
                 showToast('✅ ግቤቱ ተሰርዟል', 'success');
             } catch (error) {
@@ -9963,7 +10013,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     createdAt: new Date()
                 });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'add_transaction',
                     details: `${desc} - ${amount} ብር (${type})`,
                     timestamp: new Date()
@@ -10054,7 +10104,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     createdAt: new Date()
                 });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'add_debt',
                     details: `${person} - ${amount} ብር (${type === 'payable' ? 'የምንከፍለው' : 'የሚከፍለን'})`,
                     timestamp: new Date()
@@ -10561,7 +10611,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     updatedBy: 'አስተዳዳሪ'
                 });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'update_rules',
                     details: 'የቴክኒሻን ህግና ደንብ ተቀይሯል',
                     timestamp: new Date()
@@ -10610,7 +10660,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     await db.collection(collectionMap[type]).doc(doc.id).delete();
                 }
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'clear_all',
                     details: `ሁሉም ${type} ተሰርዘዋል`,
                     timestamp: new Date()
@@ -10708,7 +10758,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 }
 
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ', action: 'reset_app',
+                    user: heActorName(), action: 'reset_app',
                     details: 'አፑ እንዳዲስ ተጀምሯል (ከዋናው አካውንት ውጪ ሁሉም ዳታ ተሰርዟል)',
                     timestamp: new Date()
                 });
@@ -12284,7 +12334,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 🔌 *እቃ:* ${orderData.appliance || '—'}
                 🛠️ *ችግር:* ${orderData.problem || '—'}
 
-                📆 *አዲስ ቀን:* ${newDate}
+                📆 *አዲስ ቀን:* ${heEthDay(newDate)}
                 👨‍🔧 *ቴክኒሻን:* ${technicianName}
                 🔄 *እንደ አዲስ ትዕዛዝ ተፈጥሯል*
                 📅 ${formatEthDateTime(new Date())}
