@@ -29,6 +29,17 @@ html,body{overflow-x:hidden;max-width:100%}.he-wrap,.card,.modal{min-width:0;max
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script>
+/* 📅 ቀን በኢትዮጵያ ካላንደር ብቻ — «YYYY-MM-DD» ቁልፍን ወደ ኢትዮጵያ ቀን ይቀይራል (ማሳያ ላይ ብቻ፤ የተቀመጠው ዳታ አይነካም) */
+window.heEthDay = function (k) {
+    try {
+        var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(k == null ? '' : k));
+        if (!m) return k == null ? '' : k;
+        if (typeof formatEthDate === 'function') return formatEthDate(new Date(+m[1], +m[2] - 1, +m[3]));
+    } catch (e) {}
+    return k == null ? '' : k;
+};
+</script>
+<script>
 /* 📜 የስራ እንቅስቃሴ ታሪክ — በ orders ላይ የሚደረግ እያንዳንዱ ለውጥ (መፈጠር፣ መመደብ፣ መመለስ፣ ውጤት) በ order.history ውስጥ ሰዓት እና ማን እንዳደረገው ይመዘገባል። */
 (function () {
     if (window.__heOrdHist || !window.firebase || !firebase.firestore) return;
@@ -50,7 +61,7 @@ html,body{overflow-x:hidden;max-width:100%}.he-wrap,.card,.modal{min-width:0;max
         else if (st === 'Pending') txt = d.returnReason ? ('↩️ ከ ' + (d.returnedFrom || 'ቴክኒሻን') + ' ተመለሰ — ምክንያት: ' + d.returnReason) : '⏳ ወደ ያልተመደበ ተመልሷል';
         else if (st === 'Completed') txt = '✅ ተጠናቋል' + (d.price != null ? ' — ' + d.price + ' ብር' : '');
         else if (st === 'PriceNotAgreed') txt = '💰 ዋጋ አልተስማሙም';
-        else if (st === 'Rescheduled') txt = '📅 ለሌላ ቀን ተላልፏል' + (d.rescheduledDate ? ' (' + d.rescheduledDate + ')' : '');
+        else if (st === 'Rescheduled') txt = '📅 ለሌላ ቀን ተላልፏል' + (d.rescheduledDate ? ' (' + heEthDay(d.rescheduledDate) + ')' : '');
         else if (st === 'NotToday') txt = '📝 ዛሬ አይመቻቸውም' + (d.notTodayReason ? ' — ' + d.notTodayReason : '');
         else if (st === 'Other') txt = '📌 ሌላ ምክንያት' + (d.otherReason ? ' — ' + d.otherReason : '');
         else txt = '🔄 ሁኔታ ወደ «' + st + '» ተቀየረ';
@@ -480,7 +491,7 @@ async function _assignOrderCore(orderId) {
             assignedAt: new Date(),
             assignedBy: (heGetSession().staff.role === 'admin' ? 'admin' : 'office')
         };
-        if (_ord && _ord.scheduledReleaseDate) { _upd.scheduledTechnician = null; _upd.scheduledTechnicianId = null; _upd.scheduledReleaseDate = null; } // ተይዞ የነበረ → አሁን ተመደበ
+        if (_ord && _ord.scheduledReleaseDate) { _upd.scheduledTechnician = null; _upd.scheduledTechnicianId = null; _upd.scheduledReleaseDate = null; _upd.scheduledReleaseTime = null; } // ተይዞ የነበረ → አሁን ተመደበ
         await db.collection('orders').doc(orderId).update(_upd);
         // 🟢 ለቴክኒሻኑ ስራ ተመድቧል → «ነፃ ነኝ» ዝርዝር ውስጥ አይታይም (አዲስ «ነፃ ነኝ» እስከሚልክ)
         try {
@@ -820,7 +831,7 @@ function corrAdminTagHtml(o) {
 function holdTagHtml(o) {
     if (o && o.needsAdminAssign && o.status === 'Pending' && !(o.scheduledTechnician && o.scheduledReleaseDate)) return corrAdminTagHtml(o);
     if (!o || !o.scheduledTechnician || !o.scheduledReleaseDate) return '';
-    return `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#EFF6FF; color:#1E40AF; font-size:0.78rem;">📌 ለ <b>${escHtml(o.scheduledTechnician)}</b> ተይዟል — ቀኑ (${escHtml(o.scheduledReleaseDate)}) ሲደርስ ለሰራተኛው በራሱ ይላካል</div>`;
+    return `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#EFF6FF; color:#1E40AF; font-size:0.78rem;">📌 ለ <b>${escHtml(o.scheduledTechnician)}</b> ተይዟል — ቀኑ (${escHtml(heEthDay(o.scheduledReleaseDate))}${o.scheduledReleaseTime ? ' ⏰ ' + escHtml(o.scheduledReleaseTime) : ''}) ሲደርስ ለሰራተኛው በራሱ ይላካል</div>`;
 }
 async function _holdOrderForDate(orderId, techName, hold) {
     const t = allTechnicians.find(x => x.name === techName);
