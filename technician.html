@@ -40,6 +40,17 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js">
     </script>
 <script>
+/* 📅 ቀን በኢትዮጵያ ካላንደር ብቻ — «YYYY-MM-DD» ቁልፍን ወደ ኢትዮጵያ ቀን ይቀይራል (ማሳያ ላይ ብቻ፤ የተቀመጠው ዳታ አይነካም) */
+window.heEthDay = function (k) {
+    try {
+        var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(k == null ? '' : k));
+        if (!m) return k == null ? '' : k;
+        if (typeof formatEthDate === 'function') return formatEthDate(new Date(+m[1], +m[2] - 1, +m[3]));
+    } catch (e) {}
+    return k == null ? '' : k;
+};
+</script>
+<script>
 /* 📜 የስራ እንቅስቃሴ ታሪክ — በ orders ላይ የሚደረግ እያንዳንዱ ለውጥ (መፈጠር፣ መመደብ፣ መመለስ፣ ውጤት) በ order.history ውስጥ ሰዓት እና ማን እንዳደረገው ይመዘገባል። */
 (function () {
     if (window.__heOrdHist || !window.firebase || !firebase.firestore) return;
@@ -52,6 +63,7 @@
             if (PAGE.indexOf('operator') === 0) { return (typeof me !== 'undefined' && me && me.name) ? me.name : 'ኦፕሬተር'; }
             if (PAGE.indexOf('new-orders') === 0) { var s = (typeof heGetSession === 'function') ? heGetSession() : null; return (s && s.staff && s.staff.name) ? s.staff.name + ' (መዳቢ)' : 'ስራ መዳቢ'; }
         } catch (e) {}
+        try { var _s = (typeof heGetSession === 'function') ? heGetSession() : null; if (_s && _s.staff && _s.staff.name) return String(_s.staff.name); } catch (e) {}
         return 'አስተዳዳሪ';
     }
     function mk(d) {
@@ -61,7 +73,7 @@
         else if (st === 'Pending') txt = d.returnReason ? ('↩️ ከ ' + (d.returnedFrom || 'ቴክኒሻን') + ' ተመለሰ — ምክንያት: ' + d.returnReason) : '⏳ ወደ ያልተመደበ ተመልሷል';
         else if (st === 'Completed') txt = '✅ ተጠናቋል' + (d.price != null ? ' — ' + d.price + ' ብር' : '');
         else if (st === 'PriceNotAgreed') txt = '💰 ዋጋ አልተስማሙም';
-        else if (st === 'Rescheduled') txt = '📅 ለሌላ ቀን ተላልፏል' + (d.rescheduledDate ? ' (' + d.rescheduledDate + ')' : '');
+        else if (st === 'Rescheduled') txt = '📅 ለሌላ ቀን ተላልፏል' + (d.rescheduledDate ? ' (' + heEthDay(d.rescheduledDate) + ')' : '');
         else if (st === 'NotToday') txt = '📝 ዛሬ አይመቻቸውም' + (d.notTodayReason ? ' — ' + d.notTodayReason : '');
         else if (st === 'Other') txt = '📌 ሌላ ምክንያት' + (d.otherReason ? ' — ' + d.otherReason : '');
         else txt = '🔄 ሁኔታ ወደ «' + st + '» ተቀየረ';
@@ -2347,6 +2359,14 @@ document.addEventListener('click', function (e) {
                                 <strong id="doneAutoIncome" style="font-size:1.1rem; color:var(--success);">0 ብር</strong>
                             </div>
                             <div class="sub-row">
+                                <label>📊 የባለሙያ ድርሻ (%) <span style="font-weight:400; font-size:0.75rem; color:var(--text-muted);">(አማራጭ — ባዶ ከሆነ ሙሉው ለሠራተኛ)</span></label>
+                                <input type="number" id="donePct" placeholder="ለም: 50" inputmode="decimal" min="0" max="100" step="any" />
+                            </div>
+                            <div class="sub-row" id="doneAutoShareBox" style="background:var(--bg); border-radius:8px; padding:10px 12px; display:none; justify-content:space-between; align-items:center;">
+                                <span style="font-weight:600;">👨‍🔧 የባለሙያ ድርሻ — በራሱ ይሰላል</span>
+                                <strong id="doneAutoShare" style="font-size:1.05rem; color:var(--success);">0 ብር</strong>
+                            </div>
+                            <div class="sub-row">
                                 <label>📝 ማብራሪያ</label>
                                 <textarea id="doneNotes" placeholder="ስለ ስራው ማብራሪያ (አማራጭ)"></textarea>
                             </div>
@@ -2374,8 +2394,12 @@ document.addEventListener('click', function (e) {
                                     <label>🧾 ወጪ</label>
                                     <input type="number" id="doneRefExpense" placeholder="0" inputmode="decimal" min="0" />
                                 </div>
+                                <div class="sub-row">
+                                <label>📊 የባለሙያ ድርሻ (%) <span style="font-weight:400; font-size:0.75rem; color:var(--text-muted);">(አማራጭ — ባዶ ከሆነ ሙሉው ለሠራተኛ)</span></label>
+                                <input type="number" id="doneRefPct" placeholder="ለም: 50" inputmode="decimal" min="0" max="100" step="any" />
+                            </div>
                                 <div class="sub-row" style="background:var(--bg); border-radius:8px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center;">
-                                    <span style="font-weight:600;">👨‍🔧 ለሠራተኛ የሚገባ (ገቢ − ወጪ) — በራሱ ይሰላል</span>
+                                    <span style="font-weight:600;">👨‍🔧 ለሠራተኛ የሚገባ ((ገቢ − ወጪ) × ድርሻ %) — በራሱ ይሰላል</span>
                                     <strong id="doneRefStaff" style="font-size:1.05rem; color:var(--success);">0 ብር</strong>
                                 </div>
                             </div>
@@ -2402,8 +2426,12 @@ document.addEventListener('click', function (e) {
                                     <label>🧾 ወጪ</label>
                                     <input type="number" id="doneCorExpense" placeholder="0" inputmode="decimal" min="0" />
                                 </div>
+                                <div class="sub-row">
+                                <label>📊 የባለሙያ ድርሻ (%) <span style="font-weight:400; font-size:0.75rem; color:var(--text-muted);">(አማራጭ — ባዶ ከሆነ ሙሉው ለሠራተኛ)</span></label>
+                                <input type="number" id="doneCorPct" placeholder="ለም: 50" inputmode="decimal" min="0" max="100" step="any" />
+                            </div>
                                 <div class="sub-row" style="background:var(--bg); border-radius:8px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center;">
-                                    <span style="font-weight:600;">👨‍🔧 ለሠራተኛ የሚገባ (ገቢ − ወጪ) — በራሱ ይሰላል</span>
+                                    <span style="font-weight:600;">👨‍🔧 ለሠራተኛ የሚገባ ((ገቢ − ወጪ) × ድርሻ %) — በራሱ ይሰላል</span>
                                     <strong id="doneCorStaff" style="font-size:1.05rem; color:var(--success);">0 ብር</strong>
                                 </div>
                             </div>
@@ -2655,6 +2683,7 @@ document.addEventListener('click', function (e) {
                             <div class="field">
                                 <label>📊 8️⃣ የባለሙያ ድርሻ (%) <b style="color:var(--primary,#1d4ed8);">ፐርሰንት</b> <span style="color:var(--emergency,#dc2626); font-size:0.75rem;">* ገቢ ካለ ግዴታ</span></label>
                                 <input type="text" inputmode="numeric" maxlength="2" id="reportTechSharePercent" placeholder="ለም: 50 (ፐርሰንት — እስከ 2 አሃዝ)" />
+                                <small id="techPctAutoNote" style="color:var(--success); font-size:0.75rem; display:block; margin-top:2px;"></small>
                             </div>
                             <div class="field">
                                 <label>👨‍🔧 የባለሙያ ድርሻ (ብር)</label>
@@ -2844,7 +2873,14 @@ document.addEventListener('click', function (e) {
         const WORKER_BASE_URL = "https://halalelectronics.ashenafi6275.workers.dev";
         const HE_ROLE = (typeof window !== 'undefined' && window.APP_ROLE) || 'operator';
         const HE_SESSION_KEY = 'he_session_' + HE_ROLE;
-        function heGetSession() {
+        function heActorName() {
+            try {
+                const s = (typeof heGetSession === 'function') ? heGetSession() : null;
+                if (s && s.staff && s.staff.name) return String(s.staff.name);
+            } catch (e) {}
+            return 'አስተዳዳሪ';
+        }
+                function heGetSession() {
             try {
                 const s = JSON.parse(localStorage.getItem(HE_SESSION_KEY) || 'null');
                 if (!s || !s.token || !s.staff || !s.exp || s.exp * 1000 < Date.now()) return null;
@@ -3258,7 +3294,7 @@ document.addEventListener('click', function (e) {
                     await db.collection('staff').doc(id).update({ warning: { active: true, reason: reason.trim().slice(0, 140), at: new Date(), by: 'አስተዳዳሪ' } });
                     showToast('🚩 ዋርኒግ ተመዝግቧል', 'success');
                 }
-                db.collection('activity').add({ user: 'አስተዳዳሪ', action: 'staff_warning', details: `${t.name}: ዋርኒግ ተቀይሯል`, timestamp: new Date() }).catch(() => {});
+                db.collection('activity').add({ user: heActorName(), action: 'staff_warning', details: `${t.name}: ዋርኒግ ተቀይሯል`, timestamp: new Date() }).catch(() => {});
             } catch (e) { showToast('❌ ' + e.message, 'error'); }
         }
 
@@ -4083,7 +4119,7 @@ document.addEventListener('click', function (e) {
             }
 
             db.collection('activity').add({
-                user: 'አስተዳዳሪ',
+                user: heActorName(),
                 action: 'change_password',
                 details: 'የይለፍ ቃል ተቀይሯል',
                 timestamp: new Date()
@@ -4421,7 +4457,7 @@ document.addEventListener('click', function (e) {
             try {
                 await db.collection('staff').doc(id).update({ status: 'active', approvedAt: new Date() });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'approve_registration',
                     details: `ተመዝጋቢ ፀድቋል`,
                     timestamp: new Date()
@@ -4437,7 +4473,7 @@ document.addEventListener('click', function (e) {
             try {
                 await db.collection('staff').doc(id).update({ status: 'rejected' });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'reject_registration',
                     details: `ተመዝጋቢ ውድቅ ተደርጓል`,
                     timestamp: new Date()
@@ -4918,7 +4954,7 @@ document.addEventListener('click', function (e) {
             if (!r) return;
             const n = (v) => (v == null || v === '') ? '—' : escHtml(v);
             const jobs = (r.jobStatuses || []).map((j, i) =>
-                `<div style="font-size:0.85rem;">${i + 1}. ${escHtml(j.customer || '—')} — ${j.status === 'completed' ? '✅ ተሰርቷል' : '❌ አልተሰራም' + (j.reason ? ' (' + escHtml(j.reason) + ')' : '')}${j.onHold ? ' <span style="color:#92400E; font-weight:700;">📦 ያልተጠናቀቀ — ከቴክኒሻኑ ጋር ተይዟል</span>' : ''}${(j.completedAfterHold && j.completedDateEth) ? ' <span style="color:#047857; font-weight:700;">✅ ከመጠባበቂያ የተጠናቀቀው: ' + escHtml(j.completedDateEth) + '</span>' : ''}${j.assignedDateEth ? '<div style="font-size:0.75rem; color:var(--text-muted);">📅 የተመደበበት ቀን: ' + escHtml(j.assignedDateEth) + '</div>' : ''}</div>`).join('');
+                `<div style="font-size:0.85rem;">${i + 1}. ${escHtml(j.customer || '—')} — ${j.status === 'completed' ? '✅ ተሰርቷል' : '❌ አልተሰራም' + (j.reason ? ' (' + escHtml(j.reason) + ')' : '')}${j.orderId ? ` <button type="button" class="btn btn-outline btn-sm" title="የስራ ዝርዝር ይመልከቱ" aria-label="የስራ ዝርዝር" onclick="techReportJobView('${j.orderId}')" style="padding:2px 8px; margin-left:4px;"><i class="fas fa-eye"></i></button>` : ''}${j.onHold ? ' <span style="color:#92400E; font-weight:700;">📦 ያልተጠናቀቀ — ከቴክኒሻኑ ጋር ተይዟል</span>' : ''}${(j.completedAfterHold && j.completedDateEth) ? ' <span style="color:#047857; font-weight:700;">✅ ከመጠባበቂያ የተጠናቀቀው: ' + escHtml(j.completedDateEth) + '</span>' : ''}${j.assignedDateEth ? '<div style="font-size:0.75rem; color:var(--text-muted);">📅 የተመደበበት ቀን: ' + escHtml(j.assignedDateEth) + '</div>' : ''}</div>`).join('');
             const gallery = (urls, label) => (urls && urls.length)
                 ? `<div style="font-size:0.8rem; margin-top:10px; color:var(--text-muted);">${label}</div><div class="photo-gallery">${urls.map(u => `<img src="${u}" alt="" onclick="window.open('${u}','_blank')" />`).join('')}</div>` : '';
             const html = `
@@ -5291,7 +5327,7 @@ document.addEventListener('click', function (e) {
                 });
 
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'assign_order',
                     details: `ትዕዛዝ #${orderId.substring(0,8)} ለ ${techName} ተመድቧል`,
                     timestamp: new Date()
@@ -5712,7 +5748,7 @@ ${locationLine}
                 });
 
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'complete_order',
                     details: `ትዕዛዝ #${orderId.substring(0,8)} ተጠናቋል, ${price} ብር`,
                     timestamp: new Date()
@@ -5742,7 +5778,7 @@ ${locationLine}
             try {
                 await db.collection('orders').doc(orderId).delete();
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'delete_order',
                     details: `ትዕዛዝ #${orderId.substring(0,8)} ተሰርዟል`,
                     timestamp: new Date()
@@ -5939,7 +5975,7 @@ ${locationLine}
             try {
                 await db.collection('staff').doc(id).delete();
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'delete_technician',
                     details: `ቴክኒሻን ተሰርዟል`,
                     timestamp: new Date()
@@ -6189,7 +6225,7 @@ ${locationLine}
             }
             try {
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ', action: 'send_message',
+                    user: heActorName(), action: 'send_message',
                     details: `መልእክት ተላከ → ${targetId === 'all' ? 'ለሁሉም (' + targets.length + ')' : targets[0].name}`,
                     timestamp: new Date()
                 });
@@ -6538,7 +6574,7 @@ ${locationLine}
                 try { await releaseTechTransactions(report); }
                 catch (relErr) { console.error('release transactions failed', relErr); showToast('⚠️ ሪፖርቱ ጸድቋል፣ ነገር ግን ገቢ/ወጪ ወደ ዝርዝሩ ማስገባት አልተቻለም: ' + (relErr && relErr.message ? relErr.message : relErr), 'error'); }
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'approve_report',
                     details: `የ ${report ? report.technicianName : ''} ሪፖርት ጸደቀ (${report ? report.dateKey : ''})`,
                     timestamp: new Date()
@@ -6917,7 +6953,7 @@ ${locationLine}
                     editedAt: new Date()
                 });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'edit_daily_report',
                     details: `ሪፖርት #${reportId.substring(0,8)} ተስተካክሏል (ገቢ:${income}, ወጪ:${expense})`,
                     timestamp: new Date()
@@ -7238,7 +7274,7 @@ ${locationLine}
                 return `<div style="padding:8px 0; border-bottom:1px solid var(--border-light); font-size:0.88rem; line-height:1.55;">
                     <div><strong>📅 ጥያቄ የቀረበበት ቀን: ${escHtml(when)}</strong> ${r.status ? `<span class="status-badge ${getStatusClass(r.status)}">${escHtml(r.status)}</span>` : ''} <span style="font-size:0.75rem;">${escHtml(typeLbl[r.type] || '')}</span></div>
                     <div>🔌 ${escHtml(r.appliance || '—')}${r.problem ? ' — 🛠️ ' + escHtml(r.problem) : ''}</div>
-                    ${r.appt && r.appt !== (d ? (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')) : '') ? `<div>🗓️ ቀጠሮ: ${escHtml(r.appt)}</div>` : ''}
+                    ${r.appt && r.appt !== (d ? (d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')) : '') ? `<div>🗓️ ቀጠሮ: ${escHtml(heEthDay(r.appt))}</div>` : ''}
                     ${r.tech ? `<div>👨‍🔧 ቴክኒሻን: ${escHtml(r.tech)}</div>` : ''}
                     ${r.address ? `<div>📍 ${escHtml(r.address)}</div>` : ''}
                     ${r.price ? `<div>💰 ${escHtml(r.price)} ብር</div>` : ''}
@@ -7282,7 +7318,7 @@ ${locationLine}
                     updatedAt: new Date()
                 }, { merge: true });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'add_customer',
                     details: `${name} (${phone}) ተጨምሯል`,
                     timestamp: new Date()
@@ -7413,7 +7449,7 @@ ${locationLine}
                 catch (custErr) { console.warn('customer history failed (non-fatal)', custErr); }
 
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'add_phone_order',
                     details: `📞 በስልክ ትዕዛዝ ተመዘገበ: ${fullName} - ${appliance}`,
                     timestamp: new Date()
@@ -7471,7 +7507,7 @@ ${locationLine}
             try {
                 await db.collection('staff').doc(id).delete();
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'delete_staff',
                     details: `ሠራተኛ ተሰርዟል`,
                     timestamp: new Date()
@@ -7555,7 +7591,7 @@ ${locationLine}
                 await db.collection('staff').add(staffData);
 
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'invite_user',
                     details: `${email} (${role}) ተጋብዟል`,
                     timestamp: new Date()
@@ -7724,7 +7760,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     createdAt: new Date()
                 });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'add_inventory',
                     details: `${fields.name} (${fields.partNumber}) ተጨምሯል`,
                     timestamp: new Date()
@@ -7758,7 +7794,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     updatedAt: new Date()
                 });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'update_inventory',
                     details: `${fields.name} (${fields.partNumber}) ተስተካክሏል`,
                     timestamp: new Date()
@@ -7915,7 +7951,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     editedByAdmin: true, editedAt: new Date()
                 });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ', action: 'edit_transaction',
+                    user: heActorName(), action: 'edit_transaction',
                     details: `ግቤት ${desc} ተስተካክሏል`, timestamp: new Date()
                 });
                 showToast('✅ ግቤቱ ተስተካክሏል!', 'success');
@@ -8053,7 +8089,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     createdAt: new Date()
                 });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'add_transaction',
                     details: `${desc} - ${amount} ብር (${type})`,
                     timestamp: new Date()
@@ -8143,7 +8179,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     createdAt: new Date()
                 });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'add_debt',
                     details: `${person} - ${amount} ብር (${type === 'payable' ? 'የምንከፍለው' : 'የሚከፍለን'})`,
                     timestamp: new Date()
@@ -8637,7 +8673,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     updatedBy: 'አስተዳዳሪ'
                 });
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'update_rules',
                     details: 'የቴክኒሻን ህግና ደንብ ተቀይሯል',
                     timestamp: new Date()
@@ -8686,7 +8722,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     await db.collection(collectionMap[type]).doc(doc.id).delete();
                 }
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ',
+                    user: heActorName(),
                     action: 'clear_all',
                     details: `ሁሉም ${type} ተሰርዘዋል`,
                     timestamp: new Date()
@@ -8784,7 +8820,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 }
 
                 await db.collection('activity').add({
-                    user: 'አስተዳዳሪ', action: 'reset_app',
+                    user: heActorName(), action: 'reset_app',
                     details: 'አፑ እንዳዲስ ተጀምሯል (ከዋናው አካውንት ውጪ ሁሉም ዳታ ተሰርዟል)',
                     timestamp: new Date()
                 });
@@ -9375,6 +9411,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 _pc.maxLength = 2;
                 _pc.addEventListener('input', function () { const v = this.value.replace(/[^0-9]/g, '').slice(0, 2); if (v !== this.value) this.value = v; });
                 bindDecimalField(_pc);
+                // ተጠቃሚው ራሱ ፐርሰንቱን ከጻፈ በ «አጠናቅ» የገባውን ድርሻ አይተካውም
+                _pc.addEventListener('input', function (ev) { if (ev && ev.isTrusted !== false) { if (String(this.value || '').trim() === '') { delete this.dataset.userPct; } else { this.dataset.userPct = '1'; } delete this.dataset.autoPct; } });
             }, 'bindDecimalField reportTechSharePercent');
             safe(() => { bindDecimalField(document.getElementById('reportDeposited')); }, 'bindDecimalField reportDeposited');
 
@@ -9544,9 +9582,35 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             document.getElementById('reportProfit').value = profit.toFixed(2);
 
             // የባለሙያ ድርሻ (%) ተነስቶ የብር መጠን ራሱ ይሰላል (0-100 ብቻ እንዲሆን እንገድባለን)
-            let sharePercent = parseFloat(document.getElementById('reportTechSharePercent').value) || 0;
+            const _pcEl = document.getElementById('reportTechSharePercent');
+            let sharePercent = parseFloat(_pcEl.value) || 0;
             sharePercent = Math.max(0, Math.min(100, sharePercent));
-            const techShareAmount = profit * (sharePercent / 100);
+            let techShareAmount = profit * (sharePercent / 100);
+            // 📊 በ «አጠናቅ» ለእያንዳንዱ ስራ የገባ የባለሙያ ድርሻ (%) — ተጠቃሚው በሪፖርቱ % እራሱ ካልጻፈ እና ገቢውን በእጅ ካልቀየረ ብቻ
+            try {
+                const _incEl = document.getElementById('reportTotalIncome');
+                const _jobs = Array.isArray(window.techReportPctJobs) ? window.techReportPctJobs : [];
+                const _note = document.getElementById('techPctAutoNote');
+                const _usePer = !_pcEl.dataset.userPct && !(_incEl && _incEl.dataset.userEdited) && _jobs.some(j => j.pct !== null);
+                if (_usePer) {
+                    let sh = 0, pr = 0;
+                    _jobs.forEach(j => { if (j.pct !== null) { sh += j.amount; pr += j.profit; } });
+                    techShareAmount = sh + (profit - pr) * (sharePercent / 100);
+                    const _all = _jobs.every(j => j.pct !== null);
+                    if (_all && profit !== 0) {
+                        const eff = Math.max(0, Math.min(100, techShareAmount / profit * 100));
+                        _pcEl.value = String(Math.round(eff * 100) / 100);
+                        _pcEl.dataset.autoPct = '1';
+                        if (_note) _note.textContent = '✅ ከ «አጠናቅ» ለእያንዳንዱ ስራ በገባው ድርሻ (%) በራስ-ሰር ተሰልቷል — ካስፈለገ ቁጥሩን መቀየር ይችላሉ';
+                    } else {
+                        if (_pcEl.dataset.autoPct) { _pcEl.value = ''; delete _pcEl.dataset.autoPct; }
+                        if (_note) _note.textContent = '✅ በ «አጠናቅ» ድርሻ (%) የገባላቸው ስራዎች በራስ-ሰር ተሰልተዋል፤ ቀሪዎቹ በዚህ % ይሰላሉ';
+                    }
+                } else {
+                    if (_pcEl.dataset.autoPct) { delete _pcEl.dataset.autoPct; }
+                    if (_note) _note.textContent = '';
+                }
+            } catch (e) { console.warn('per-job share calc failed', e); }
             const companyAmount = profit - techShareAmount;
             document.getElementById('reportTechShareAmount').value = techShareAmount.toFixed(2);
             document.getElementById('reportCompanyAmount').value = companyAmount.toFixed(2);
@@ -9798,6 +9862,25 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 })();
             });
         }
+        // 🔒 «ነጻ ነኝ» ማለት ሲከለከል ምክንያቱ በ toast + ከሁኔታ ቁልፎች በታች በሚቆይ ማስታወቂያ (ቆይቶ እንዲነበብ) ይታያል
+        function techFreeBlocked(msg, type) {
+            try { showToast(String(msg).split('\n')[0], type || 'error'); } catch (e) {}
+            try {
+                const btn = document.querySelector('.status-btn');
+                if (!btn) return;
+                const host = btn.parentElement;
+                let box = document.getElementById('techFreeBlockBanner');
+                if (!box) {
+                    box = document.createElement('div');
+                    box.id = 'techFreeBlockBanner';
+                    box.style.cssText = 'margin:10px 0; padding:10px 12px; border-radius:10px; background:#FEF2F2; border:1px solid #EF4444; color:#991B1B; font-size:0.88rem; white-space:pre-wrap; line-height:1.5;';
+                    host.parentNode.insertBefore(box, host.nextSibling);
+                }
+                box.textContent = String(msg);
+                clearTimeout(box._t);
+                box._t = setTimeout(function () { try { box.remove(); } catch (e) {} }, 90000);
+            } catch (e) {}
+        }
         function techFreeLockKey() { return 'halal_free_sent_' + (technicianId || ''); }
         function techFreeLockGet() { try { const v = localStorage.getItem(techFreeLockKey()); if (!v) return false; const t = parseInt(v, 10); if (t && getBizDateKey(new Date(t)) < getBizDateKey()) { localStorage.removeItem(techFreeLockKey()); return false; } return true; } catch (e) { return false; } }
         function techFreeLockSet() { try { localStorage.setItem(techFreeLockKey(), String(Date.now())); } catch (e) {} }
@@ -9806,7 +9889,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             document.querySelectorAll('.status-btn').forEach(btn => {
                 btn.addEventListener('click', async function() {
                     if (!checkRulesAccepted()) {
-                        showToast('እባክዎ መጀመሪያ ህጎቹን ያንብቡ እና ይስማሙ', 'error');
+                        techFreeBlocked('🔒 መጀመሪያ ህጎቹን ያንብቡ እና ይስማሙ — ያለዚያ ሁኔታ መቀየር አይቻልም', 'error');
                         return;
                     }
 
@@ -9820,33 +9903,35 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         // 🔒 አንዴ «ነጻ» ብሎ ከላከ ድጋሜ መላክ አይችልም — ስራ ተመድቦ እስኪጠናቀቅ ድረስ
                         // 🌙 ያደረ ሪፖርት ፍተሻ መጀመሪያ (ከ 2:30 በኋላ)፦ ሪፖርት ካልላከ «ነጻ» ማለት አይችልም፤ ከላከ ይቀጥላል
                         if (!(await techWaitSentReports())) {
-                            showToast('⏳ ሪፖርቶችዎን ማረጋገጥ አልተቻለም። ኢንተርኔትዎን ይፈትሹና ደግመው ይሞክሩ', 'error');
+                            techFreeBlocked('⏳ ሪፖርቶችዎን ማረጋገጥ አልተቻለም። ኢንተርኔትዎን ይፈትሹና ደግመው ይሞክሩ', 'error');
                             return;
                         }
                         const _ovb = techOvernightBlockers() || { unreported: [], unapproved: [] };
                         if (_ovb.missingDaily && !_ovb.unreported.length) {
-                            showToast('🔒 ዕለታዊ ሪፖርት አልላኩም! ስራ ባይኖርዎትም በዜሮ ሪፖርት መላክ ግዴታ ነው፤ መጀመሪያ ሪፖርት ያድርጉ፣ ከዚያ «ነጻ ነኝ» ማለት ይችላሉ', 'error');
+                            techFreeBlocked('🔒 ዕለታዊ ሪፖርት አልላኩም! ስራ ባይኖርዎትም በዜሮ ሪፖርት መላክ ግዴታ ነው፤ መጀመሪያ ሪፖርት ያድርጉ፣ ከዚያ «ነጻ ነኝ» ማለት ይችላሉ', 'error');
                             try { document.querySelector('[data-tab="report"]').click(); } catch (e) {}
                             return;
                         }
                         if (_ovb.unreported.length) {
-                            showToast('🔒 ያደረ ያልተላከ ሪፖርት አለዎት (' + _ovb.unreported.length + ' ስራ)! መጀመሪያ ሪፖርት ያድርጉ፣ ከዚያ «ነጻ ነኝ» ማለት ይችላሉ', 'error');
+                            techFreeBlocked('🔒 ያደረ ያልተላከ ሪፖርት አለዎት (' + _ovb.unreported.length + ' ስራ)! መጀመሪያ ሪፖርት ያድርጉ፣ ከዚያ «ነጻ ነኝ» ማለት ይችላሉ', 'error');
                             try { document.querySelector('[data-tab="report"]').click(); } catch (e) {}
                             return;
                         }
                         if (techFreeLockGet()) {
-                            showToast('✅ «ነጻ ነኝ» ብለው ቀድሞ ልከዋል። ድጋሜ መላክ የሚችሉት ስራ ከጨረሱ በኋላ ነው', 'info');
+                            techFreeBlocked('✅ «ነጻ ነኝ» ብለው ቀድሞ ልከዋል። ድጋሜ መላክ የሚችሉት ስራ ከጨረሱ በኋላ ነው', 'info');
                             return;
                         }
                         // 📵 «ስልክ አይነሳም» ውሳኔ (እኔጋር ይቆይ / ይመለስ) የአድሚን ማጽደቅ እየጠበቀ ከሆነ «ነጻ ነኝ» አይቻልም — አድሚን ሲያጸድቅ ብቻ
                         const awaitingPhoneApproval = myOrders.some(o => o.status === 'PhoneNoAnswer' && o.holdRequest && o.holdRequest.status === 'pending');
                         if (awaitingPhoneApproval) {
-                            showToast('⏳ «ስልክ አይነሳም» ውሳኔዎ የአድሚን ማጽደቅ እየጠበቀ ነው — አድሚን ሲያጸድቅ «ነጻ ነኝ» ማለት ይችላሉ', 'error');
+                            techFreeBlocked('⏳ «ስልክ አይነሳም» ውሳኔዎ የአድሚን ማጽደቅ እየጠበቀ ነው — አድሚን ሲያጸድቅ «ነጻ ነኝ» ማለት ይችላሉ', 'error');
                             return;
                         }
-                        const hasUnfinishedJob = myOrders.some(o => o.status === 'Assigned' && !isFutureAppointment(o));
-                        if (hasUnfinishedJob) {
-                            showToast('🔒 የተመደበልዎት ስራ አለ! መጀመሪያ ስራውን ያጠናቅቁ (ወይም ውጤቱን ያስመዝግቡ) ከዚያ "ነፃ" ማለት ይችላሉ', 'error');
+                        const _unfinished = myOrders.filter(o => o.status === 'Assigned' && !isFutureAppointment(o));
+                        if (_unfinished.length) {
+                            const _lines = _unfinished.slice(0, 4).map(o => '• #' + String(o.id).substring(0, 8) + ' ' + (o.fullName || '—') + ' (' + (o.appliance || '—') + ')'
+                                + (o.returnRequest && o.returnRequest.status === 'pending' ? ' — ⏳ የመመለስ ጥያቄዎ አድሚን እስኪያጸድቅ እየጠበቀ ነው' : '')).join('\n');
+                            techFreeBlocked('🔒 «ነጻ ነኝ» ማለት አይችሉም — የተመደበልዎት ያልተጠናቀቀ ስራ አለ፦\n' + _lines + '\nመጀመሪያ ስራውን ያጠናቅቁ (ወይም ውጤቱን ያስመዝግቡ)', 'error');
                             return;
                         }
                     }
@@ -10489,8 +10574,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 let n = 0;
                 for (const d of snap.docs) {
                     const o = d.data();
-                    if (o.status !== 'Pending' || o.technician || !o.scheduledReleaseDate || String(o.scheduledReleaseDate) > todayKey) continue;
-                    await d.ref.update({ status: 'Assigned', technician: technicianName, assignedAt: new Date(), assignedBy: 'appointment', scheduledTechnician: null, scheduledTechnicianId: null, scheduledReleaseDate: null });
+                    if (o.status !== 'Pending' || o.technician || !o.scheduledReleaseDate) continue;
+                    // ሰዓት ካለው (ለሌላ ቀን ቀጠሮ) ቀን + ሰዓቱ መድረስ አለበት፤ ሰዓት ከሌለው ቀኑ ብቻ
+                    const _tm = /^(\d{1,2}):(\d{2})/.exec(String(o.scheduledReleaseTime || ''));
+                    const _dm = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(o.scheduledReleaseDate));
+                    if (_tm && _dm) { if (new Date(+_dm[1], +_dm[2] - 1, +_dm[3], +_tm[1], +_tm[2], 0, 0).getTime() > Date.now()) continue; }
+                    else if (String(o.scheduledReleaseDate) > todayKey) continue;
+                    await d.ref.update({ status: 'Assigned', technician: technicianName, assignedAt: new Date(), assignedBy: 'appointment', scheduledTechnician: null, scheduledTechnicianId: null, scheduledReleaseDate: null, scheduledReleaseTime: null });
                     n++;
                 }
                 if (n) {
@@ -10502,8 +10592,17 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             finally { techHeldReleasing = false; }
         }
         setTimeout(function () { try { techReleaseHeldAppointments(); } catch (e) {} }, 8000);
-        setInterval(function () { try { techReleaseHeldAppointments(); } catch (e) {} }, 300000);
+        setInterval(function () { try { techReleaseHeldAppointments(); } catch (e) {} }, 60000);
         const TECH_CLOSED_STATUSES = ['Completed', 'PriceNotAgreed', 'Rescheduled', 'NotToday', 'Other', 'PhoneNoAnswer'];
+        // ✅ አጠናቅ የተባለ + በአድሚን የጸደቀ (ሪፖርቱ approved) ስራ ከዳሽቦርድ ዝርዝሮች ይጠፋል።
+        //    ስልክ አይነሳም (PhoneNoAnswer) እና ቀጠሮ (Rescheduled / ቀኑ የደረሰ = እንደገና ክፍት ስራ) አይደበቁም።
+        function techApprovedGone(o) {
+            try {
+                if (!o || !['Completed', 'PriceNotAgreed', 'NotToday', 'Other'].includes(o.status)) return false;
+                if (!techSentReportsLoaded) return false;
+                return techApprovedReportedKeys().has(o.id + '|' + (o.status === 'Completed' ? 'C' : 'N'));
+            } catch (e) { return false; }
+        }
         function techOpenJobs() {
             return myOrders.filter(o => !TECH_CLOSED_STATUSES.includes(o.status) && !isFutureAppointment(o));
         }
@@ -10610,7 +10709,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
             const apptJobs = myOrders.filter(o => isFutureAppointment(o) && !TECH_CLOSED_STATUSES.includes(o.status));
             const apptHtml = false /* ቀጠሮ ጊዜው ሲደርስ ብቻ ወደ ቴክኒሻኑ ይገባል */ && apptJobs.length ? `<div style="margin-top:10px; padding:8px 10px; background:#eff6ff; border-radius:8px; font-size:0.8rem; color:#1e40af;">📅 <strong>ቀጠሮዎች (${apptJobs.length})</strong> — ቀኑ ሲደርስ ወደ ስራዎች ይገባሉ፦<br>` +
-                apptJobs.map(o => `• ${o.fullName || '—'} (${o.appliance || '—'}) — ${o.rescheduledDate}`).join('<br>') + `</div>` : '';
+                apptJobs.map(o => `• ${o.fullName || '—'} (${o.appliance || '—'}) — ${heEthDay(o.rescheduledDate)}`).join('<br>') + `</div>` : '';
             if (pendingJobs.length === 0) {
                 container.innerHTML = '<p class="text-center text-muted">ምንም የተመደበ ስራ የለም 🎉</p>' + apptHtml;
                 return;
@@ -10671,13 +10770,14 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         function renderAllJobs() {
             const container = document.getElementById('allJobsContainer');
 
-            if (myOrders.length === 0) {
+            const _shownOrders = myOrders.filter(o => !techApprovedGone(o));
+            if (_shownOrders.length === 0) {
                 container.innerHTML = '<p class="text-center text-muted">ምንም ስራ የለም</p>';
                 return;
             }
 
             let html = '';
-            myOrders.forEach(order => {
+            _shownOrders.forEach(order => {
                 const statusClass = order.status === 'Completed' ? 'status-completed' :
                     order.status === 'Assigned' ? 'status-assigned' : 'status-pending';
 
@@ -10771,7 +10871,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             });
 
             document.getElementById('submitDone').addEventListener('click', submitDone);
-            ['donePrice', 'doneExpense'].forEach(id => {
+            ['donePrice', 'doneExpense', 'donePct'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) { el.addEventListener('input', updateDoneAutoIncome); el.addEventListener('change', updateDoneAutoIncome); }
             });
@@ -10794,7 +10894,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
             // ሀ: ሪፈራል / እርማት (አማራጭ) — ገቢ − ወጪ = ለሠራተኛ የሚገባ
             ['doneRef', 'doneCor'].forEach(p => {
-                ['Income', 'Expense'].forEach(k => {
+                ['Income', 'Expense', 'Pct'].forEach(k => {
                     const el = document.getElementById(p + k);
                     if (el) { el.addEventListener('input', () => techExtraUpdate(p)); el.addEventListener('change', () => techExtraUpdate(p)); }
                 });
@@ -10827,7 +10927,9 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         function techExtraUpdate(p) {
             const inc = parseFloat(document.getElementById(p + 'Income').value) || 0;
             const exp = parseFloat(document.getElementById(p + 'Expense').value) || 0;
-            const net = inc - exp;
+            let net = inc - exp;
+            const _pr = (document.getElementById(p + 'Pct') || {}).value, _pc = parseFloat(_pr);
+            if (String(_pr || '').trim() !== '' && isFinite(_pc)) net = Math.round(net * Math.max(0, Math.min(100, _pc)) / 100 * 100) / 100;
             const el = document.getElementById(p + 'Staff');
             if (!el) return;
             el.textContent = net.toLocaleString() + ' ብር';
@@ -10861,7 +10963,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (sel.value !== 'Other') inp.value = '';
         }
         function techExtraClear(p) {
-            ['Count', 'Phone', 'Address', 'Income', 'Expense'].forEach(k => { const el = document.getElementById(p + k); if (el) el.value = ''; });
+            ['Count', 'Phone', 'Address', 'Income', 'Expense', 'Pct'].forEach(k => { const el = document.getElementById(p + k); if (el) el.value = ''; });
             techExtraRenderAppl(p);
             techExtraUpdate(p);
         }
@@ -10874,8 +10976,9 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const sel = rows.some(r => r.sel) ? 'x' : '';
             const incRaw = g('Income').value.trim();
             const expRaw = g('Expense').value.trim();
+            const pctRaw = (g('Pct') ? g('Pct').value : '').trim();
             const phoneRaw = (g('Phone') ? g('Phone').value : '').trim(), addrRaw = (g('Address') ? g('Address').value : '').trim();
-            if (!countRaw && !sel && !incRaw && !expRaw && !phoneRaw && !addrRaw) return { active: false };
+            if (!countRaw && !sel && !incRaw && !expRaw && !phoneRaw && !addrRaw && !pctRaw) return { active: false };
             const count = parseInt(countRaw, 10);
             if (!(count >= 1)) return { active: true, error: `${d.label}፦ የተሰራ ስራ ብዛት ያስገቡ` };
             if (rows.length !== count) return { active: true, error: `${d.label}፦ ለእያንዳንዱ ስራ መሳሪያ ይምረጡ` };
@@ -10890,10 +10993,15 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const income = parseFloat(incRaw) || 0;
             const expense = parseFloat(expRaw) || 0;
             if (income < 0 || expense < 0) return { active: true, error: `${d.label}፦ ገቢ/ወጪ ከ0 በታች መሆን አይችልም` };
+            let sharePercent = null;
+            if (pctRaw !== '') {
+                sharePercent = parseFloat(pctRaw);
+                if (!isFinite(sharePercent) || sharePercent < 0 || sharePercent > 100) return { active: true, error: `${d.label}፦ የባለሙያ ድርሻ (%) ከ0 እስከ 100 መሆን አለበት` };
+            }
             const phone = (g('Phone') ? g('Phone').value : '').trim();
             const address = (g('Address') ? g('Address').value : '').trim();
             if (phone && !/^[0-9+\-\s()]{7,20}$/.test(phone)) return { active: true, error: `${d.label}፦ የደንበኛ ስልክ ቁጥር ትክክል አይደለም` };
-            return { active: true, def: d, count, appliance: applianceNames, appliances, applianceText, phone, address, income, expense, staffShare: income - expense };
+            return { active: true, def: d, count, appliance: applianceNames, appliances, applianceText, phone, address, income, expense, sharePercent, staffShare: sharePercent === null ? (income - expense) : Math.round((income - expense) * sharePercent / 100 * 100) / 100 };
         }
         // ሪፖርት ውስጥ በራሱ እንዲገባ እንደ ተጠናቀቀ ስራ (መለያ: ሪፈራል/እርማት) ይመዘገባል
         function techExtraWrites(x, today) {
@@ -10915,6 +11023,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 expenseNote: `${label} — ${x.applianceText}`,
                 netIncome: x.staffShare,
                 staffShare: x.staffShare,
+                ...(x.sharePercent !== null && x.sharePercent !== undefined ? { techSharePercent: x.sharePercent, techShareAmount: x.staffShare } : {}),
                 jobCount: x.count,
                 workTag: x.def.tag,
                 workTagLabel: label,
@@ -10995,6 +11104,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (expenseNum < 0) { showToast('ወጪ ከ0 በታች መሆን አይችልም', 'error'); return; }
             if (expenseNum > priceNum && !confirm('ወጪው ከዋጋው ይበልጣል (ገቢው አሉታዊ ይሆናል)። መቀጠል ይፈልጋሉ?')) return;
             const netIncome = priceNum - expenseNum; // ገቢ = ዋጋ - ወጪ (በራስ-ሰር)
+            // 📊 የባለሙያ ድርሻ (%) — አማራጭ
+            const _pctRaw = String((document.getElementById('donePct') || {}).value || '').trim();
+            let mainSharePercent = null;
+            if (_pctRaw !== '' && !skipMain) {
+                mainSharePercent = parseFloat(_pctRaw);
+                if (!isFinite(mainSharePercent) || mainSharePercent < 0 || mainSharePercent > 100) { showToast('የባለሙያ ድርሻ (%) ከ0 እስከ 100 መሆን አለበት', 'error'); return; }
+            }
 
             const btn = document.getElementById('submitDone');
             const origHtml = btn.innerHTML;
@@ -11015,6 +11131,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     expense: expenseNum,
                     expenseNote: expenseNote,
                     netIncome: netIncome,
+                    ...(mainSharePercent !== null ? { techSharePercent: mainSharePercent, techShareAmount: Math.round(netIncome * mainSharePercent / 100 * 100) / 100 } : {}),
                     completedAt: new Date(),
                     completionOption: 'done',
                     technicianNotes: notes || '',
@@ -11073,6 +11190,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 document.getElementById('doneExpense').value = '';
                 document.getElementById('doneExpenseNote').value = '';
                 document.getElementById('doneNotes').value = '';
+                try { document.getElementById('donePct').value = ''; } catch (e) {}
                 techExtraClear('doneRef'); techExtraClear('doneCor');
                 updateDoneAutoIncome();
                 // ሪፈራል/እርማት ብቻ ከተመዘገበ የተመረጠው ስራ አልተጠናቀቀም — መለያው ይቆያል
@@ -11334,7 +11452,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     source: orderData.source || 'web',
                     createdById: orderData.createdById || '',
                     createdByName: orderData.createdByName || '',
-                    technician: technicianName,
+                    technician: '', // ሰዓቱ እስኪደርስ ወደ አድሚን (የቀጠሮ ካርድ) ተመልሶ ይቆያል — ሰዓቱ ሲደርስ ብቻ ለዚህ ቴክኒሻን ይመደባል
+                    scheduledTechnician: technicianName,
+                    scheduledTechnicianId: technicianId || null,
+                    scheduledReleaseDate: newDate,
+                    scheduledReleaseTime: newTime,
+                    scheduledBy: 'another-day',
+                    scheduledAt: new Date(),
                     isAppointment: true,
                     rescheduledFrom: orderId,
                     rescheduledDate: newDate,
@@ -11363,14 +11487,14 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 🔌 *እቃ:* ${orderData.appliance || '—'}
                 🛠️ *ችግር:* ${orderData.problem || '—'}
 
-                📆 *አዲስ ቀን:* ${newDate}
+                📆 *አዲስ ቀን:* ${heEthDay(newDate)}
                 ⏰ *ሰዓት:* ${newTime}
                 👨‍🔧 *ቴክኒሻን:* ${technicianName}
                 🔄 *እንደ አዲስ ትዕዛዝ ተፈጥሯል*
                 📅 ${formatEthDateTime(new Date())}
                 `);
                 } catch (tgErr) { console.warn('telegram notify failed', tgErr); }
-                showToast('✅ ለሌላ ቀን ተዘጋጅቷል — ቀኑ እና ሰዓቱ ሲደርስ በራሱ «በስራ ላይ» ይሆናል፤ እስከዚያ «ነፃ» ማለት ይችላሉ', 'success');
+                showToast('✅ ለሌላ ቀን ተዘጋጅቷል — ወደ አድሚን ተመልሷል፤ ቀኑ እና ሰዓቱ ሲደርስ ብቻ ለእርስዎ ይመደባል፤ እስከዚያ «ነፃ» ማለት ይችላሉ', 'success');
                 resetCompletionForm();
                 try { renderMyJobs(); } catch (e) {}
             } catch (error) { showToast('❌ ' + error.message, 'error'); }
@@ -11546,12 +11670,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
         function renderHistory() {
             const container = document.getElementById('historyContainer');
-            if (myHistory.length === 0) {
+            const _histShown = myHistory.filter(o => !techApprovedGone(o));
+            if (_histShown.length === 0) {
                 container.innerHTML = '<p class="text-center text-muted">ምንም የቀደመ ስራ የለም</p>';
                 return;
             }
             let html = '';
-            myHistory.forEach(order => {
+            _histShown.forEach(order => {
                 const date = order.completedAt?.toDate?.() || new Date();
                 html += `
                     <div class="history-item">
@@ -12053,6 +12178,14 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
             // ✅ NEW: Auto-aggregation - የተጠናቀቁ ስራዎች ገቢ (price) በራስ-ሰር ወደ ጠቅላላ ገቢ ይደመራል
             // ችግሩ ቀድሞ፦ ቴክኒሻን በ"አጠናቅ" ትር ላይ ዋጋ ካስገባ በኋላ በ"ሪፖርት" ትር ላይ ተመሳሳይ ቁጥር በድጋሚ በእጅ መጻፍ ነበረበት
+            // 📊 በ «አጠናቅ» የባለሙያ ድርሻ (%) የገባላቸው ስራዎች (ለሪፖርቱ ድርሻ ስሌት)
+            window.techReportPctJobs = completedJobs.map(o => {
+                const pc = parseFloat(o.techSharePercent);
+                const profit = (o.netIncome !== undefined && o.netIncome !== null && isFinite(parseFloat(o.netIncome))) ? parseFloat(o.netIncome) : ((parseFloat(o.price) || 0) - (parseFloat(o.expense) || 0));
+                const hasPct = (o.techSharePercent !== undefined && o.techSharePercent !== null && o.techSharePercent !== '' && isFinite(pc));
+                const amt = hasPct ? (isFinite(parseFloat(o.techShareAmount)) ? parseFloat(o.techShareAmount) : profit * pc / 100) : 0;
+                return { pct: hasPct ? pc : null, profit: profit, amount: amt };
+            });
             const autoIncome = completedJobs.reduce((sum, o) => sum + (parseFloat(o.price) || 0), 0);
             const incomeField = document.getElementById('reportTotalIncome');
             // ተጠቃሚው እራሱ አስቀድሞ ያልቀየረው ከሆነ ብቻ በራስ-ሰር እንሙላ (እጅግ ተጠቃሚ ካስተካከለው እንዳናፍርስበት)
@@ -12086,6 +12219,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 html += `
                     <div class="job-status-row">
                         <span class="job-info">${index+1}. ${order.fullName || '—'} - ${order.appliance || '—'}${techIsOvernightOrder(order) ? ` <span style="display:inline-block; background:#FEE2E2; color:#B91C1C; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">⏰ ያደረ — ከ${techEsc(techOrderDateKey(order))}</span>` : ''}${techIsHeld(order) ? ` <span style="display:inline-block; background:#FEF3C7; color:#92400E; border:1px solid #F59E0B; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">📦 ያልተጠናቀቀ — ከእኔ ጋር ተይዟል</span>` : ''}${order.completedAfterHold ? ` <span style="display:inline-block; background:#D1FAE5; color:#047857; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">✅ ከመጠባበቂያ የተጠናቀቀው: ${techEsc(formatEthDate(order.completedAt))}</span>` : ''}<br><small style="color:var(--text-muted);">📅 የተመደበበት ቀን: ${techEsc(formatEthDate(techAssignedTs(order)))}</small></span>
+                        <button type="button" class="btn btn-outline btn-sm" title="የስራ ዝርዝር ይመልከቱ" aria-label="የስራ ዝርዝር" onclick="techReportJobView('${order.id}')" style="padding:4px 9px;"><i class="fas fa-eye"></i></button>
                         <select class="job-status-select" data-order-id="${order.id}">
                             ${statusOptions}
                         </select>
@@ -12114,6 +12248,34 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         }
 
         // ============================================================
+        // 👁️ በሪፖርት «የስራ ዝርዝር» ውስጥ ያለ ስራን ዝርዝር (ቦታ፣ ስልክ፣ ችግር…) ለማየት
+        window.techReportJobView = async function (orderId) {
+            try {
+                let o = (Array.isArray(myOrders) ? myOrders : []).find(x => x.id === orderId) || (typeof allOrders !== 'undefined' && Array.isArray(allOrders) ? allOrders.find(x => x.id === orderId) : null);
+                if (!o) { try { const d = await db.collection('orders').doc(orderId).get(); if (d.exists) o = { id: d.id, ...d.data() }; } catch (e) {} }
+                if (!o) { showToast('የስራው ዝርዝር አልተገኘም', 'error'); return; }
+                const row = (label, val) => val ? `<div style="padding:6px 0; border-bottom:1px solid var(--border);"><span style="color:var(--text-muted); font-size:0.82rem;">${label}</span><div style="font-weight:600; white-space:pre-wrap; word-break:break-word;">${val}</div></div>` : '';
+                const lat = o.customerLat, lng = o.customerLng;
+                const map = (lat && lng) ? `<a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(lat + ',' + lng)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm" style="margin-top:4px;"><i class="fas fa-map-marker-alt"></i> በካርታ ክፈት</a>` : '';
+                const notes = (Array.isArray(o.operatorNotes) ? o.operatorNotes : []).map(n => techEsc((n && n.text) || '')).filter(Boolean).join('\n');
+                const stLabel = o.status === 'Completed' ? '✅ ተጠናቋል' : (o.status === 'Assigned' ? '🛠️ በስራ ላይ' : (o.status || '—'));
+                const appt = o.appointmentDate || o.rescheduledDate;
+                const body = '<div>'
+                    + row('🆔 የትዕዛዝ ቁጥር', '#' + techEsc(String(o.id).substring(0, 8)))
+                    + row('👤 ደንበኛ', techEsc(o.fullName || '—'))
+                    + row('📱 ስልክ', techEsc(o.phone || '—') + (o.altPhone ? ' · ☎️ ' + techEsc(o.altPhone) : '') + ' <a href="tel:' + techEsc(o.phone || '') + '" class="btn btn-outline btn-sm" style="margin-left:6px;"><i class="fas fa-phone"></i></a>')
+                    + row('📍 አድራሻ / ቦታ', techEsc(o.address || '—') + (map ? '<br>' + map : ''))
+                    + row('🔧 መሳሪያ', techEsc(o.appliance || '—'))
+                    + row('🛠️ ችግር', techEsc(o.problem || ''))
+                    + row('📌 ሁኔታ', techEsc(stLabel))
+                    + row('📅 የተመደበበት ቀን', techEsc(formatEthDate(techAssignedTs(o))))
+                    + (appt ? row('🗓️ ቀጠሮ', techEsc((window.heEthDay ? heEthDay(appt) : appt) + (o.rescheduledTime ? ' ' + o.rescheduledTime : ''))) : '')
+                    + (notes ? row('✍️ ከኦፕሬተር መልእክት', notes) : '')
+                    + '</div>';
+                openModal('👁️ የስራ ዝርዝር', body);
+            } catch (e) { console.warn('job view failed', e); showToast('ዝርዝሩን ማሳየት አልተቻለም', 'error'); }
+        };
+
         // 📅 የሪፖርት ቀን በራስ-ሰር = ዛሬ ባለው ቀን (በስልኩ የአካባቢ ሰዓት)
         // ቀደም ሲል toISOString() (UTC) ይጠቀም ስለነበር ከሌሊት 6:00 (ከ 12:00 ማታ እስከ 3:00 ሌሊት አካባቢ) ቀኑ
         // ወደ ትላንት ሊያዛባ ይችል ነበር። አሁን የአካባቢ ቀን ይጠቀማል፤ ቴክኒሻኑ እንዳይቀይረው ተቆልፏል።
@@ -12178,6 +12340,19 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (!el) return;
             el.textContent = net.toLocaleString() + ' ብር';
             el.style.color = net < 0 ? 'var(--emergency)' : 'var(--success)';
+            // 📊 የባለሙያ ድርሻ (%) ከገባ ድርሻው ይታያል
+            try {
+                const pRaw = (document.getElementById('donePct') || {}).value;
+                const box = document.getElementById('doneAutoShareBox'), sh = document.getElementById('doneAutoShare');
+                const pc = parseFloat(pRaw);
+                if (box && sh) {
+                    if (String(pRaw || '').trim() !== '' && isFinite(pc)) {
+                        box.style.display = 'flex';
+                        const amt = Math.round(net * Math.max(0, Math.min(100, pc)) / 100 * 100) / 100;
+                        sh.textContent = amt.toLocaleString() + ' ብር';
+                    } else { box.style.display = 'none'; }
+                }
+            } catch (e) {}
         }
 
         // ============================================================
@@ -12194,7 +12369,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (!o) return '';
             switch (o.status) {
                 case 'PriceNotAgreed': return 'ዋጋ አልተስማሙም' + (o.calledOffice === 'yes' ? ' (ቢሮ ተደውሏል)' : '');
-                case 'Rescheduled': return 'ለሌላ ቀን ተላልፏል' + (o.rescheduledDate ? ` (${o.rescheduledDate}${o.rescheduledTime ? ' ' + o.rescheduledTime : ''})` : '');
+                case 'Rescheduled': return 'ለሌላ ቀን ተላልፏል' + (o.rescheduledDate ? ` (${heEthDay(o.rescheduledDate)}${o.rescheduledTime ? ' ' + o.rescheduledTime : ''})` : '');
                 case 'NotToday': return 'ዛሬ አይመቻቸውም' + (o.notTodayReason ? ' — ' + o.notTodayReason : '');
                 case 'PhoneNoAnswer': return 'ስልክ አይነሳም' + (o.calledOffice ? ` (ከቢሮ ተደውሏል: ${o.calledOffice === 'yes' ? 'አዎ' : 'አይ'})` : '');
                 case 'Other': return o.otherReason || 'ሌላ';
@@ -12344,6 +12519,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const note = $('autoIncomeNote'); if (note) note.textContent = '';
             techSyncAutoExpenses([]);
             try { techRenderExtraWorkCard([]); } catch (e) {}
+            window.techReportPctJobs = [];
+            try { const _p = $('reportTechSharePercent'); if (_p && _p.dataset.autoPct) { _p.value = ''; } if (_p) { delete _p.dataset.autoPct; } } catch (e) {}
             calcProfit();
         }
 
@@ -12356,6 +12533,9 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
              'reportExpenseDetails', 'reportRemarks'].forEach(id => { if ($(id)) $(id).value = ''; });
             if ($('reportTotalIncome')) delete $('reportTotalIncome').dataset.userEdited;
             if ($('reportRemarks')) delete $('reportRemarks').dataset.userEdited;
+            window.techReportPctJobs = [];
+            if ($('reportTechSharePercent')) { delete $('reportTechSharePercent').dataset.userPct; delete $('reportTechSharePercent').dataset.autoPct; }
+            if ($('techPctAutoNote')) $('techPctAutoNote').textContent = '';
             try { techRenderExtraWorkCard([]); } catch (e) {}
             renderWorkTypeInputs(0);
             renderNotCompletedReasonInputs(0);
@@ -12713,6 +12893,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     return tb - ta;
                 });
                 renderTechSentReports();
+                try { renderAllJobs(); renderHistory(); } catch (e) {} // በአድሚን የጸደቁ ስራዎች ከዝርዝር ይጠፋሉ
                 try { if (document.getElementById('tab-report').classList.contains('active')) loadReportJobs(); } catch (e) {} // የተላኩት ስራዎች ከዝርዝሩ ይወጣሉ
             }, (err) => {
                 console.warn('sent reports listener', err);
@@ -12734,7 +12915,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     const canConvert = !done;
                     let h = `<div style="padding:8px 0; border-top:1px solid var(--border-light); font-size:0.82rem;">
                         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-                            <span>${i + 1}. ${techEsc(j.customer || '—')} - ${techEsc(j.appliance || '—')}${j.overnight ? ` <span style="background:#FEE2E2; color:#B91C1C; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">⏰ ያደረ — ከ${techEsc(j.jobDate || '')}</span>` : ''}${(!done && j.reason) ? ' <span style="color:var(--text-muted);">(' + techEsc(j.reason) + ')</span>' : ''}${j.onHold ? ' <span style="background:#FEF3C7; color:#92400E; border:1px solid #F59E0B; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">📦 ያልተጠናቀቀ — ከእኔ ጋር</span>' : ''}${(j.completedAfterHold && j.completedDateEth) ? ' <span style="color:#047857; font-size:0.72rem; font-weight:700;">✅ ከመጠባበቂያ የተጠናቀቀው: ' + techEsc(j.completedDateEth) + '</span>' : ''}${j.assignedDateEth ? '<br><small style="color:var(--text-muted);">📅 የተመደበበት ቀን: ' + techEsc(j.assignedDateEth) + '</small>' : ''}</span>
+                            <span>${i + 1}. ${techEsc(j.customer || '—')} - ${techEsc(j.appliance || '—')}${j.orderId ? ` <button type="button" class="btn btn-outline btn-sm" title="የስራ ዝርዝር ይመልከቱ" aria-label="የስራ ዝርዝር" onclick="techReportJobView('${j.orderId}')" style="padding:2px 8px; margin-left:4px;"><i class="fas fa-eye"></i></button>` : ''}${j.overnight ? ` <span style="background:#FEE2E2; color:#B91C1C; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">⏰ ያደረ — ከ${techEsc(j.jobDate || '')}</span>` : ''}${(!done && j.reason) ? ' <span style="color:var(--text-muted);">(' + techEsc(j.reason) + ')</span>' : ''}${j.onHold ? ' <span style="background:#FEF3C7; color:#92400E; border:1px solid #F59E0B; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">📦 ያልተጠናቀቀ — ከእኔ ጋር</span>' : ''}${(j.completedAfterHold && j.completedDateEth) ? ' <span style="color:#047857; font-size:0.72rem; font-weight:700;">✅ ከመጠባበቂያ የተጠናቀቀው: ' + techEsc(j.completedDateEth) + '</span>' : ''}${j.assignedDateEth ? '<br><small style="color:var(--text-muted);">📅 የተመደበበት ቀን: ' + techEsc(j.assignedDateEth) + '</small>' : ''}</span>
                             ${done ? `<span class="status-badge status-completed">✅ ተሰራ${doneLater ? ' — በሚቀጥለው ሪፖርት ይገባል' : ''}</span>`
                                    : `<select onchange="techSentStatusChange(this, '${r.id}', ${i})" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); font-size:0.8rem;"><option value="">❌ አልተጠናቀቀም</option><option value="done">✅ ተሰራ (ሀ)</option></select>`}
                         </div>`;
