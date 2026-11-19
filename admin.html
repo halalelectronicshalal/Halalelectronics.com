@@ -494,6 +494,55 @@ window.heEthDay = function (k) {
         }
         html[data-theme="dark"] img { filter: brightness(0.92) contrast(1.02); }
 
+        /* 🌙 ጨለማ ገጽታ — ቀድሞ በ CSS/inline የተጻፉ ቋሚ ነጭ/ፓስቴል ዳራዎች ከብርሃን ጽሁፍ ጋር ይደበዝዙ ነበር፤ እዚህ ይስተካከላሉ */
+        html[data-theme="dark"] body { background: var(--bg); color: var(--text); }
+        html[data-theme="dark"] .topbar,
+        html[data-theme="dark"] .eth-picker-part,
+        html[data-theme="dark"] .completion-options .option-btn,
+        html[data-theme="dark"] .report-form .uploaded-files .file-item,
+        html[data-theme="dark"] .apinfo .po { background: var(--card) !important; color: var(--text) !important; }
+        html[data-theme="dark"] .advice-section, html[data-theme="dark"] .advice-item, html[data-theme="dark"] .warranty { background: rgba(59,143,214,.14) !important; color: var(--text) !important; }
+        html[data-theme="dark"] .advice-section h4, html[data-theme="dark"] .advice-item .advice-header strong, html[data-theme="dark"] .header h1 { color: var(--primary-light) !important; }
+        html[data-theme="dark"] .status-active, html[data-theme="dark"] .status-completed, html[data-theme="dark"] .status-btn.free.active, html[data-theme="dark"] .apinfo .say { background: rgba(52,211,153,.18) !important; color: #6EE7B7 !important; }
+        html[data-theme="dark"] .status-free, html[data-theme="dark"] .status-expiring, html[data-theme="dark"] .status-pending, html[data-theme="dark"] .status-btn.working.active, html[data-theme="dark"] .apinfo.warn { background: rgba(251,191,36,.18) !important; color: #FCD34D !important; }
+        html[data-theme="dark"] .status-expired { background: rgba(240,96,90,.18) !important; color: #FCA5A5 !important; }
+        html[data-theme="dark"] .status-off, html[data-theme="dark"] .status-btn.off.active { background: rgba(148,163,184,.18) !important; color: #CBD5E1 !important; }
+        html[data-theme="dark"] .status-assigned, html[data-theme="dark"] .status-btn.active, html[data-theme="dark"] .completion-options .option-btn:hover, html[data-theme="dark"] .apinfo { background: rgba(59,143,214,.2) !important; color: #93C5FD !important; }
+        html[data-theme="dark"] .status-btn { background: var(--card); color: var(--text); }
+        html[data-theme="dark"] table, html[data-theme="dark"] th, html[data-theme="dark"] td { color: var(--text); }
+        html[data-theme="dark"] th { background: var(--border-light); }
+        /* inline style="background:#PASTEL" → ጥቁር ግልጽ ቀለም */
+        html[data-theme="dark"] [style*="background:#fff" i], html[data-theme="dark"] [style*="background: #fff" i],
+        html[data-theme="dark"] [style*="background:#FFFFFF" i], html[data-theme="dark"] [style*="background: #FFFFFF" i],
+        html[data-theme="dark"] [style*="background:white" i], html[data-theme="dark"] [style*="background: white" i],
+        html[data-theme="dark"] [style*="background:#F8FAFC" i], html[data-theme="dark"] [style*="background: #F8FAFC" i],
+        html[data-theme="dark"] [style*="background:#F1F5F9" i], html[data-theme="dark"] [style*="background: #F1F5F9" i],
+        html[data-theme="dark"] [style*="background:#F3F4F6" i], html[data-theme="dark"] [style*="background: #F3F4F6" i] { background: var(--card) !important; color: var(--text) !important; }
+        html[data-theme="dark"] [style*="background:#DBEAFE" i], html[data-theme="dark"] [style*="background: #DBEAFE" i],
+        html[data-theme="dark"] [style*="background:#EFF6FF" i], html[data-theme="dark"] [style*="background: #EFF6FF" i],
+        html[data-theme="dark"] [style*="background:#EEF2FF" i], html[data-theme="dark"] [style*="background: #EEF2FF" i] { background: rgba(59,143,214,.18) !important; color: #BFDBFE !important; }
+        html[data-theme="dark"] [style*="background:#DCFCE7" i], html[data-theme="dark"] [style*="background: #DCFCE7" i],
+        html[data-theme="dark"] [style*="background:#ECFDF5" i], html[data-theme="dark"] [style*="background: #ECFDF5" i] { background: rgba(52,211,153,.16) !important; color: #A7F3D0 !important; }
+        html[data-theme="dark"] [style*="background:#FEF9C3" i], html[data-theme="dark"] [style*="background: #FEF9C3" i],
+        html[data-theme="dark"] [style*="background:#FEF3C7" i], html[data-theme="dark"] [style*="background: #FEF3C7" i],
+        html[data-theme="dark"] [style*="background:#FFFBEB" i], html[data-theme="dark"] [style*="background: #FFFBEB" i],
+        html[data-theme="dark"] [style*="background:#fff7e6" i], html[data-theme="dark"] [style*="background: #fff7e6" i] { background: rgba(251,191,36,.16) !important; color: #FDE68A !important; }
+        html[data-theme="dark"] [style*="background:#FEE2E2" i], html[data-theme="dark"] [style*="background: #FEE2E2" i],
+        html[data-theme="dark"] [style*="background:#FEF2F2" i], html[data-theme="dark"] [style*="background: #FEF2F2" i] { background: rgba(240,96,90,.16) !important; color: #FECACA !important; }
+        /* inline ጥቁር/ጥቁር-ጥላ ጽሁፎች → ብርሃን */
+        html[data-theme="dark"] [style*="color:#92400E" i], html[data-theme="dark"] [style*="color: #92400E" i], html[data-theme="dark"] [style*="color:#b45309" i], html[data-theme="dark"] [style*="color: #b45309" i] { color: #FCD34D !important; }
+        html[data-theme="dark"] [style*="color:#166534" i], html[data-theme="dark"] [style*="color: #166534" i], html[data-theme="dark"] [style*="color:#065F46" i], html[data-theme="dark"] [style*="color: #065F46" i], html[data-theme="dark"] [style*="color:#047857" i], html[data-theme="dark"] [style*="color: #047857" i] { color: #6EE7B7 !important; }
+        html[data-theme="dark"] [style*="color:#1E40AF" i], html[data-theme="dark"] [style*="color: #1E40AF" i], html[data-theme="dark"] [style*="color:#1E3A8A" i], html[data-theme="dark"] [style*="color: #1E3A8A" i], html[data-theme="dark"] [style*="color:#0F4C81" i], html[data-theme="dark"] [style*="color: #0F4C81" i] { color: #93C5FD !important; }
+        html[data-theme="dark"] [style*="color:#B91C1C" i], html[data-theme="dark"] [style*="color: #B91C1C" i], html[data-theme="dark"] [style*="color:#991B1B" i], html[data-theme="dark"] [style*="color: #991B1B" i], html[data-theme="dark"] [style*="color:#7f1d1d" i], html[data-theme="dark"] [style*="color: #7f1d1d" i], html[data-theme="dark"] [style*="color:#DC2626" i], html[data-theme="dark"] [style*="color: #DC2626" i] { color: #FCA5A5 !important; }
+        html[data-theme="dark"] [style*="color:#333" i], html[data-theme="dark"] [style*="color: #333" i], html[data-theme="dark"] [style*="color:#111" i], html[data-theme="dark"] [style*="color:#374151" i], html[data-theme="dark"] [style*="color: #374151" i], html[data-theme="dark"] [style*="color:#475569" i], html[data-theme="dark"] [style*="color: #475569" i], html[data-theme="dark"] [style*="color:#1e293b" i], html[data-theme="dark"] [style*="color:#0F172A" i], html[data-theme="dark"] [style*="color:#64748B" i], html[data-theme="dark"] [style*="color: #64748B" i] { color: var(--text) !important; }
+        html[data-theme="dark"] [style*="color:#94A3B8" i], html[data-theme="dark"] [style*="color: #94A3B8" i] { color: var(--text-muted) !important; }
+        html[data-theme="dark"] [style*="border:1px solid #E2E8F0" i], html[data-theme="dark"] [style*="border: 1px solid #E2E8F0" i] { border-color: var(--border) !important; }
+        html[data-theme="dark"] .modal, html[data-theme="dark"] .modal-content, html[data-theme="dark"] .modal-box { background: var(--card); color: var(--text); }
+        html[data-theme="dark"] ::placeholder { color: var(--text-light); }
+        html[data-theme="dark"] input, html[data-theme="dark"] select, html[data-theme="dark"] textarea { border-color: var(--border); }
+        html[data-theme="dark"] option { background: var(--card); color: var(--text); }
+        html[data-theme="dark"] img { filter: none; } /* ፎቶዎች እንዳይደበዝዙ */
+
         /* ✅ FIX: Theme toggle button (☀️/🌙) - fixed, ማንኛውንም ነባር layout አይነካም
            ቀድሞ bottom:20px ብቻ ስለነበረ በቴክኒሻን ገፅ ላይ ካለው bottom-nav (ታችኛው ናቪጌሽን) ጋር
            ተደራርቦ ነበር - አሁን bottom-nav ካለ ከላዩ ላይ እንዲቀመጥ ተስተካክሏል */
@@ -521,16 +570,23 @@ window.heEthDay = function (k) {
 
 
         /* ✅ NEW: floating chat (ቴክስት) button + contacts panel - ከ ቀን/ማታ ቁልፍ አጠገብ */
-        .pwa-install-btn { right: 102px !important; }
+        .pwa-install-btn { right: 76px !important; }
         .chat-fab-btn {
-            position: fixed; bottom: calc(var(--bottom-nav-height, 0px) + 6px); right: 56px; z-index: 9999;
-            width: 40px; height: 40px; border-radius: 50%; background: var(--primary); color: #fff; border: none;
-            box-shadow: var(--shadow-lg); display: none; align-items: center; justify-content: center;
-            font-size: 1.05rem; cursor: pointer; transition: transform .2s ease;
+            position: fixed; bottom: calc(var(--bottom-nav-height, 0px) + 14px); right: 14px; z-index: 9999;
+            width: 54px; height: 54px; border-radius: 50%; color: #fff; border: 2px solid rgba(255,255,255,.55);
+            background: linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%);
+            box-shadow: 0 8px 24px rgba(15,76,129,.35), inset 0 1px 0 rgba(255,255,255,.35);
+            display: none; align-items: center; justify-content: center; font-size: 1.35rem; cursor: grab;
+            transition: transform .2s ease, box-shadow .2s ease, left .25s ease, right .25s ease; touch-action: none; user-select: none; -webkit-user-select: none;
+            animation: fabFloat 3.2s ease-in-out infinite;
         }
         .chat-fab-btn.show { display: flex; }
-        .chat-fab-btn:hover { transform: scale(1.08); }
-        .chat-fab-btn .fab-badge { position: absolute; top: -4px; right: -4px; background: var(--emergency); color: #fff; border-radius: 50px; font-size: .62rem; font-weight: 700; padding: 1px 5px; min-width: 16px; text-align: center; display: none; border: 2px solid var(--card); }
+        .chat-fab-btn:hover { transform: scale(1.1); box-shadow: 0 12px 30px rgba(15,76,129,.45), inset 0 1px 0 rgba(255,255,255,.4); }
+        .chat-fab-btn.dragging { cursor: grabbing; transform: scale(1.12); animation: none; transition: none; }
+        .chat-fab-btn.has-unread::before { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid var(--secondary); opacity: .7; animation: fabPulse 1.6s ease-out infinite; }
+        @keyframes fabFloat { 0%,100% { translate: 0 0; } 50% { translate: 0 -4px; } }
+        @keyframes fabPulse { 0% { transform: scale(.9); opacity: .8; } 100% { transform: scale(1.35); opacity: 0; } }
+        .chat-fab-btn .fab-badge { position: absolute; top: -4px; right: -4px; background: var(--emergency); color: #fff; border: 2px solid var(--card); border-radius: 50px; font-size: .62rem; font-weight: 700; padding: 1px 5px; min-width: 18px; text-align: center; display: none; }
         .chat-panel {
             position: fixed; bottom: calc(var(--bottom-nav-height, 0px) + 54px); right: 10px; z-index: 9998;
             width: 340px; max-width: calc(100vw - 24px); max-height: 70vh; display: none; flex-direction: column;
@@ -1418,7 +1474,6 @@ document.addEventListener('click', function (e) {
 </head>
 <body>
     <!-- ✅ NEW: Dark/Light mode toggle - ገፁ በሙሉ ላይ ይታያል -->
-    <button type="button" id="themeToggleBtn" class="theme-toggle-btn" title="ገጽታ ቀይር" aria-label="Toggle dark/light mode">🌙</button>
     <!-- ✅ NEW: ቴክስት (መልእክት) አይከን - ከ ቀን/ማታ ቁልፍ አጠገብ -->
     <button type="button" id="chatFabBtn" class="chat-fab-btn" title="መልእክት ላክ" aria-label="Messages" onclick="toggleChatPanel(event)">💬<span class="fab-badge" id="chatFabBadge">0</span></button>
     <div id="chatPanel" class="chat-panel" onclick="event.stopPropagation()">
@@ -1570,6 +1625,7 @@ document.addEventListener('click', function (e) {
                 </div>
                 <div class="right">
                     <button type="button" id="appRefreshBtn" class="btn btn-outline btn-sm" title="አፑን አድስ" aria-label="አፑን አድስ" onclick="admRefreshApp()" style="padding:5px 9px;"><i class="fas fa-sync-alt" id="appRefreshIcon"></i></button>
+                    <button type="button" id="themeToggleBtn" class="btn btn-outline btn-sm theme-top-btn" title="ቀን / ጨለማ" aria-label="Toggle dark/light mode" style="padding:5px 9px; line-height:1;">🌙</button>
                     <span class="badge-live"><i class="fas fa-circle" style="font-size:0.4rem;"></i> LIVE</span>
                     <!-- ✅ NEW: ሁልጊዜ የሚታይ የማሳወቂያ 🔔 (አዲስ ትዕዛዝ + ምዝገባ + ሪፖርት በአንድ ላይ ይቆጠራል) -->
                     <div class="notif-bell" id="notifBell" onclick="toggleNotifDropdown(event)">
@@ -2909,6 +2965,15 @@ document.addEventListener('click', function (e) {
         const WORKER_BASE_URL = "https://halalelectronics.ashenafi6275.workers.dev";
         const HE_ROLE = (typeof window !== 'undefined' && window.APP_ROLE) || 'operator';
         const HE_SESSION_KEY = 'he_session_' + HE_ROLE;
+        // 📊 በስራው ላይ የተመዘገበ የባለሙያ ድርሻ (%) — ስራው በሚታይበት ቦታ ሁሉ (ታሪክ) ይታያል
+        function hePctTxt(x) {
+            try {
+                if (!x || x.techSharePercent === undefined || x.techSharePercent === null || x.techSharePercent === '') return '';
+                const p = parseFloat(x.techSharePercent); if (!isFinite(p)) return '';
+                const a = parseFloat(x.techShareAmount);
+                return '📊 የባለሙያ ድርሻ ' + p + '%' + (isFinite(a) ? ' (' + a + ' ብር)' : '');
+            } catch (e) { return ''; }
+        }
         function heActorName() {
             try {
                 const s = (typeof heGetSession === 'function') ? heGetSession() : null;
@@ -3409,7 +3474,7 @@ document.addEventListener('click', function (e) {
                     const reason = prompt(`⚠️ ${t.name} ላይ ዋርኒግ ምልክት ለማድረግ ምክንያቱን ይጻፉ:`);
                     if (reason === null) return;
                     if (!reason.trim()) { showToast('ምክንያት መጻፍ ያስፈልጋል', 'error'); return; }
-                    await db.collection('staff').doc(id).update({ warning: { active: true, reason: reason.trim().slice(0, 140), at: new Date(), by: 'አስተዳዳሪ' } });
+                    await db.collection('staff').doc(id).update({ warning: { active: true, reason: reason.trim().slice(0, 140), at: new Date(), by: heActorName() } });
                     showToast('🚩 ዋርኒግ ተመዝግቧል', 'success');
                 }
                 db.collection('activity').add({ user: heActorName(), action: 'staff_warning', details: `${t.name}: ዋርኒግ ተቀይሯል`, timestamp: new Date() }).catch(() => {});
@@ -3478,7 +3543,7 @@ document.addEventListener('click', function (e) {
         if (APP_ROLE === 'admin' && heIsAdminSession()) {
             document.getElementById('loginContainer').style.display = 'none';
             document.getElementById('adminContainer').style.display = 'block';
-            document.getElementById('adminName').textContent = 'አስተዳዳሪ';
+            document.getElementById('adminName').textContent = heActorName();
             authReady.then(() => initDashboard());
         }
 
@@ -3501,7 +3566,7 @@ document.addEventListener('click', function (e) {
             
             document.getElementById('loginContainer').style.display = 'none';
             document.getElementById('adminContainer').style.display = 'block';
-            document.getElementById('adminName').textContent = 'አስተዳዳሪ';
+            document.getElementById('adminName').textContent = heActorName();
             initDashboard();
             if (staffId) registerPushToken(staffId);
             if (staffId) { try { admRecordDevice(staffId); } catch (e) {} }
@@ -4666,7 +4731,7 @@ document.addEventListener('click', function (e) {
             try {
                 await heEnsureAdminAuth(); // ሩልስ: settings መጻፍ አድሚን ብቻ → የአድሚን Firebase መግቢያ ያረጋግጣል
                 const now = new Date();
-                await db.collection('settings').doc('rank_reset').set({ resetAt: now, resetBy: 'አስተዳዳሪ' });
+                await db.collection('settings').doc('rank_reset').set({ resetAt: now, resetBy: heActorName() });
                 techRankResetAt = now;
                 renderRankResetInfo();
                 try { renderTechnicians(); } catch (e) {}
@@ -5285,7 +5350,7 @@ document.addEventListener('click', function (e) {
         function admReportJobsHtml(r) {
             return (r.jobStatuses || []).map((j, i) => {
                 const done = j.status === 'completed';
-                let h = `<div style="font-size:0.85rem; padding:4px 0;">${i + 1}. ${admEsc(j.customer || '—')} — ${done ? '✅ ተሰርቷል' : '❌ አልተሰራም' + (j.reason ? ' (' + admEsc(j.reason) + ')' : '')}${j.orderId ? ` <button type="button" class="btn btn-outline btn-sm" title="የስራ ዝርዝር ይመልከቱ" aria-label="የስራ ዝርዝር" onclick="admReportJobView('${j.orderId}')" style="padding:2px 8px; margin-left:4px;"><i class="fas fa-eye"></i></button>` : ''}${j.overnight ? ` <span style="background:#FEE2E2; color:#B91C1C; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">⏰ ያደረ — ከ${admEsc(j.jobDate || '')} የተመዘገበ</span>` : ''}`;
+                let h = `<div style="font-size:0.85rem; padding:4px 0;">${i + 1}. ${admEsc(j.customer || '—')} — ${done ? '✅ ተሰርቷል' : '❌ አልተሰራም' + (j.reason ? ' (' + admEsc(j.reason) + ')' : '')}${hePctTxt(j) ? ` <small style="color:var(--text-muted);">${hePctTxt(j)}</small>` : ''}${j.orderId ? ` <button type="button" class="btn btn-outline btn-sm" title="የስራ ዝርዝር ይመልከቱ" aria-label="የስራ ዝርዝር" onclick="admReportJobView('${j.orderId}')" style="padding:2px 8px; margin-left:4px;"><i class="fas fa-eye"></i></button>` : ''}${j.overnight ? ` <span style="background:#FEE2E2; color:#B91C1C; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">⏰ ያደረ — ከ${admEsc(j.jobDate || '')} የተመዘገበ</span>` : ''}`;
                 if (j.convertedFromNotCompleted) h += `<div style="color:#047857; font-size:0.8rem;">🔄 ከቆይታ በኋላ ወደ «ተሰራ» ተቀይሯል — ገቢ ${admEsc(j.lateIncome)} | ወጪ ${admEsc(j.lateExpense)} ብር</div>`;
                 return h + `</div>`;
             }).join('');
@@ -5460,7 +5525,7 @@ document.addEventListener('click', function (e) {
             const bodyEl = document.getElementById('notifDropdownBody');
             if (!countEl || !bodyEl) return;
 
-            const newOrdersCount = (allOrders || []).filter(o => o.status === 'Pending').length;
+            const newOrdersCount = (allOrders || []).filter(o => o.status === 'Pending' && !(o.returnReason || o.returnedAt || o.returnedFrom || o.returnedFromId || o.completionOption === 'return-job')).length;
             const pendingRegCount = (allPendingRegistrations || []).length;
             const unapprovedReportsCount = (allDailyReports || []).filter(r => !r.approved).length;
             const unreadMsgCount = (typeof adminUnreadTotal === 'function') ? adminUnreadTotal() : 0;
@@ -5626,6 +5691,53 @@ document.addEventListener('click', function (e) {
             else { const p = document.getElementById('chatPanel'); if (p && p.classList.contains('show') && !p.classList.contains('composing')) renderChatPanelList(); else { const b = document.getElementById('chatFabBadge'); if (b) { const n = adminUnreadTotal(); b.textContent = n > 99 ? '99+' : n; b.style.display = n > 0 ? 'block' : 'none'; } } }
         }, 1500);
 
+        // 💬 ተንሳፋፊ ቴክስት አይከን — ሊጎተት ይችላል፣ ወደ ቅርቡ ጠርዝ ይጣበቃል፣ ቦታው ይታወሳል፤ ያልተነበበ መልእክት ሲኖር ይመታል
+        (function () {
+            const KEY = 'he_chat_fab_pos';
+            const fab = document.getElementById('chatFabBtn'), panel = document.getElementById('chatPanel');
+            if (!fab) return;
+            function place(side, top) {
+                const h = window.innerHeight, w = 54;
+                top = Math.max(70, Math.min(h - w - 70, top));
+                fab.style.top = top + 'px'; fab.style.bottom = 'auto';
+                if (side === 'left') { fab.style.left = '14px'; fab.style.right = 'auto'; } else { fab.style.right = '14px'; fab.style.left = 'auto'; }
+                if (panel) {
+                    panel.style.top = 'auto'; panel.style.bottom = Math.max(12, h - top + 8) + 'px';
+                    if (side === 'left') { panel.style.left = '10px'; panel.style.right = 'auto'; } else { panel.style.right = '10px'; panel.style.left = 'auto'; }
+                    if (top < 340) { panel.style.bottom = 'auto'; panel.style.top = (top + w + 8) + 'px'; }
+                }
+            }
+            try { const sv = JSON.parse(localStorage.getItem(KEY) || 'null'); if (sv && sv.side) place(sv.side, sv.top); } catch (e) {}
+            let sx = 0, sy = 0, ox = 0, oy = 0, moved = false, down = false;
+            fab.addEventListener('pointerdown', function (e) {
+                down = true; moved = false; sx = e.clientX; sy = e.clientY;
+                const r = fab.getBoundingClientRect(); ox = r.left; oy = r.top;
+                try { fab.setPointerCapture(e.pointerId); } catch (x) {}
+            });
+            fab.addEventListener('pointermove', function (e) {
+                if (!down) return;
+                const dx = e.clientX - sx, dy = e.clientY - sy;
+                if (!moved && Math.abs(dx) + Math.abs(dy) < 6) return;
+                moved = true; fab.classList.add('dragging');
+                fab.style.left = (ox + dx) + 'px'; fab.style.top = (oy + dy) + 'px'; fab.style.right = 'auto'; fab.style.bottom = 'auto';
+            });
+            function end() {
+                if (!down) return; down = false; fab.classList.remove('dragging');
+                if (!moved) return;
+                const r = fab.getBoundingClientRect();
+                const side = (r.left + r.width / 2) < window.innerWidth / 2 ? 'left' : 'right';
+                place(side, r.top);
+                try { localStorage.setItem(KEY, JSON.stringify({ side: side, top: Math.round(r.top) })); } catch (e) {}
+                fab._justDragged = true; setTimeout(function () { fab._justDragged = false; }, 250);
+            }
+            fab.addEventListener('pointerup', end); fab.addEventListener('pointercancel', end);
+            // ከተጎተተ በኋላ የሚመጣውን click አግድ (panel እንዳይከፈት)
+            fab.addEventListener('click', function (e) { if (fab._justDragged) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+            // ያልተነበበ ካለ ይመታል
+            setInterval(function () { const b = document.getElementById('chatFabBadge'); fab.classList.toggle('has-unread', !!(b && b.style.display === 'block')); }, 1500);
+            window.addEventListener('resize', function () { try { const sv = JSON.parse(localStorage.getItem(KEY) || 'null'); if (sv && sv.side) place(sv.side, sv.top); } catch (e) {} });
+        })();
+
         // ============================================================
         // RENDER RECENT ORDERS
         // ============================================================
@@ -5751,7 +5863,7 @@ document.addEventListener('focusout', function (e) {
 
             try { admRenderApptCard(); } catch (e) { console.warn('appt card failed', e); }
             // ቀጠሯቸው ገና ያልደረሰ ወደ «እስከሚደርስ ቀጠሮ» ካርድ ይሄዳሉ፤ ቀኑ ሲደርስ ያልተመደቡት እዚህ ይገባሉ
-            const pendingOrders = allOrders.filter(o => o.status === 'Pending' && !admIsFutureAppt(o));
+            const pendingOrders = allOrders.filter(o => o.status === 'Pending' && !admIsFutureAppt(o) && !(o.returnReason || o.returnedAt || o.returnedFrom || o.returnedFromId || o.completionOption === 'return-job')); // ↩️ የተመለሱ በ«የተመለሱ ስራዎች» ካርድ ብቻ
             if (badge) badge.textContent = pendingOrders.length;
 
             if (pendingOrders.length === 0) {
@@ -5800,7 +5912,7 @@ document.addEventListener('focusout', function (e) {
                 if (_opt) _opt.textContent = '⏰ ያደሩ ስራዎች (' + allOrders.filter(isOvernightNow).length + ')';
             } catch (e) {}
             if (filter === '__overnight') filtered = filtered.filter(isOvernightNow).slice().sort((a, b) => overnightBaseMs(a) - overnightBaseMs(b)); // ከአሮጌው ይጀምራል
-            else if (filter === '__new') filtered = filtered.filter(o => !o.workTag && (!o.orderType || o.orderType === 'new') && o.status === 'Pending'); // 🆕 አዲስ (ገና ያልተመደበ)
+            else if (filter === '__new') filtered = filtered.filter(o => !o.workTag && (!o.orderType || o.orderType === 'new') && o.status === 'Pending' && !(o.returnReason || o.returnedAt || o.returnedFrom || o.returnedFromId || o.completionOption === 'return-job')); // 🆕 አዲስ (ገና ያልተመደበ)
             else if (filter === '__referral') filtered = filtered.filter(o => (o.workTag || o.orderType) === 'referral');
             else if (filter === '__correction') filtered = filtered.filter(o => (o.workTag || o.orderType) === 'correction');
             else if (filter !== 'all') filtered = filtered.filter(o => o.status === filter);
@@ -5865,7 +5977,7 @@ document.addEventListener('focusout', function (e) {
                     <td>${order.appliance || '—'}</td>
                     <td><span class="status-badge ${statusClass}">${order.status || 'Pending'}</span><br>${orderCompletionBadge(order)}</td>
                     <td>${order.technician || '—'}</td>
-                    <td>${order.price ? order.price + ' ብር' : '—'}</td>
+                    <td>${order.price ? order.price + ' ብር' : '—'}${hePctTxt(order) ? '<br><small style="color:var(--text-muted);">' + hePctTxt(order) + '</small>' : ''}</td>
                     <td>${formatEthDate(date)}${isOvernightNow(order) ? `<br><strong style="color:#DC2626; font-size:0.72rem;">⏰ ${orderDaysOld(order)} ቀን አድሯል</strong>` : ''}</td>
                     <td style="font-weight:600; color:var(--primary);">${order.preferredDay || '—'}</td>
                     <td style="white-space:nowrap;">${actions}</td>
@@ -6307,6 +6419,7 @@ ${locationLine}
                     ${order.customerLat ? `<div><strong>🗺️ ቦታ:</strong> <a href="https://www.google.com/maps?q=${order.customerLat},${order.customerLng}" target="_blank" style="color:var(--secondary);">${order.customerLat}, ${order.customerLng}</a>${order.customerLocationAccuracy ? ` <span class="status-badge ${order.customerLocationAccuracy > 200 ? 'status-pending' : order.customerLocationAccuracy > 50 ? 'status-assigned' : 'status-completed'}">${order.customerLocationAccuracy > 200 ? '⚠️' : '🎯'} ±${order.customerLocationAccuracy}ሜ</span>` : ''}</div>` : ''}
                     ${order.technician ? `<div><strong>👨‍🔧 ቴክኒሻን:</strong> ${order.technician}</div>` : ''}
                     ${order.price ? `<div><strong>💰 ዋጋ:</strong> ${order.price} ብር</div>` : ''}
+                    ${hePctTxt(order) ? `<div><strong>${hePctTxt(order)}</strong></div>` : ''}
                     <div><strong>📅 ሁኔታ:</strong> <span class="status-badge ${getStatusClass(order.status)}">${order.status || 'Pending'}</span></div>
                 </div>
 
@@ -6504,7 +6617,7 @@ ${locationLine}
                     description: `ክፍያ: ስራ #${orderId.substring(0,8)}`,
                     amount: parseFloat(price),
                     type: 'income',
-                    staff: 'አስተዳዳሪ',
+                    staff: heActorName(),
                     orderId: orderId,
                     date: new Date().toISOString().split('T')[0],
                     createdAt: new Date()
@@ -8841,8 +8954,8 @@ ${locationLine}
             try {
                 try {
                     await db.collection('orders').doc(orderId).update({
-                        operatorNotes: firebase.firestore.FieldValue.arrayUnion({ text, by: 'አስተዳዳሪ', byId: 'admin', at: new Date() }),
-                        operatorNote: text, operatorNoteAt: new Date(), operatorNoteBy: 'አስተዳዳሪ', hasOperatorNote: true
+                        operatorNotes: firebase.firestore.FieldValue.arrayUnion({ text, by: heActorName(), byId: 'admin', at: new Date() }),
+                        operatorNote: text, operatorNoteAt: new Date(), operatorNoteBy: heActorName(), hasOperatorNote: true
                     });
                     delivered = true;
                 } catch (e) { console.warn('note update failed', e); }
@@ -8940,7 +9053,7 @@ ${locationLine}
                     status: 'Pending',
                     source: (document.getElementById('phoneOrderChannel') || {}).value || 'phone_admin', // ✅ NEW: ከድህረ ገጽ ሳይሆን አድሚን በእጅ የመዘገበው ስራ መሆኑን ለመለየት
                     createdBy: 'admin',
-                    createdByName: 'አስተዳዳሪ',
+                    createdByName: heActorName(),
                     createdAt: new Date()
                 };
                 // 📁 ቀድሞ የተመዘገበ ደንበኛ — ታሪኩ ከአዲሱ ስራ ጋር ይያያዛል
@@ -10009,7 +10122,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     amount: amount,
                     type: type,
                     date: date,
-                    staff: 'አስተዳዳሪ',
+                    staff: heActorName(),
                     createdAt: new Date()
                 });
                 await db.collection('activity').add({
@@ -10100,7 +10213,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     type: type,
                     note: note,
                     status: 'unpaid',
-                    staff: 'አስተዳዳሪ',
+                    staff: heActorName(),
                     createdAt: new Date()
                 });
                 await db.collection('activity').add({
@@ -10608,7 +10721,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 await db.collection('settings').doc('technician_rules').set({
                     content: content,
                     updatedAt: new Date(),
-                    updatedBy: 'አስተዳዳሪ'
+                    updatedBy: heActorName()
                 });
                 await db.collection('activity').add({
                     user: heActorName(),
@@ -10788,7 +10901,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 transactions: allTransactions,
                 warranties: allWarranties,
                 exportedAt: new Date().toISOString(),
-                exportedBy: 'አስተዳዳሪ'
+                exportedBy: heActorName()
             };
             const json = JSON.stringify(data, null, 2);
             const blob = new Blob([json], { type: 'application/json' });
@@ -12067,6 +12180,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                             <div><span class="label">🔧 መሳሪያ:</span> <span class="value">${order.appliance || '—'}</span></div>
                             <div><span class="label">📍 አድራሻ:</span> <span class="value">${order.address || '—'}</span></div>
                             ${order.price ? `<div><span class="label">💰 ዋጋ:</span> <span class="value">${order.price} ብር</span></div>` : ''}
+                            ${hePctTxt(order) ? `<div><span class="label">📊 ድርሻ:</span> <span class="value">${hePctTxt(order).replace("📊 የባለሙያ ድርሻ ","")}</span></div>` : ''}
                             <div><span class="label">📅 ቀን:</span> <span class="value">${formatEthDate(order.createdAt) || '—'}</span></div>
                         </div>
                     </div>
@@ -12443,7 +12557,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         <div>
                             <span style="font-weight:500;">${order.fullName || '—'}</span>
                             <span style="color:var(--text-muted); font-size:0.8rem;"> - ${order.appliance || '—'}</span>
-                            <br/><span style="color:var(--text-muted); font-size:0.7rem;">${formatEthDate(date)}</span>
+                            <br/><span style="color:var(--text-muted); font-size:0.7rem;">${formatEthDate(date)}</span>${hePctTxt(order) ? '<br/><span style="color:var(--text-muted); font-size:0.7rem;">' + hePctTxt(order) + '</span>' : ''}
                         </div>
                         <div>
                             <span class="amount">${order.price || 0} ብር</span>
