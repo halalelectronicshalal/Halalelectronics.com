@@ -2974,6 +2974,44 @@ document.addEventListener('click', function (e) {
                 return '📊 የባለሙያ ድርሻ ' + p + '%' + (isFinite(a) ? ' (' + a + ' ብር)' : '');
             } catch (e) { return ''; }
         }
+        // 🏢 የጸደቀ ሪፖርት ስራዎች ወደ አድሚን ይመለሳሉ (technician ባዶ ይሆናል፣ የሰራው ሰው በ workedBy ይቀመጣል — ታሪክ አይጠፋም)።
+        //    የሚቀሩ፦ «ስልክ አይነሳም» (PhoneNoAnswer) እና ቀጠሮ (Rescheduled / ክፍት ስራ) — እነዚህ አይነኩም።
+        async function heTransferApprovedJobs(report) {
+            try {
+                if (!report || !report.id || !Array.isArray(report.jobStatuses)) return 0;
+                const ids = [...new Set(report.jobStatuses.map(j => j && j.orderId).filter(Boolean))];
+                let n = 0;
+                for (const id of ids) {
+                    const ref = db.collection('orders').doc(id);
+                    const snap = await ref.get();
+                    if (!snap.exists) continue;
+                    const o = snap.data();
+                    if (!['Completed', 'PriceNotAgreed', 'NotToday', 'Other'].includes(o.status)) continue;
+                    if (!o.technician || o.onHold) continue;
+                    if (report.technicianId && o.technicianId && o.technicianId !== report.technicianId) continue;
+                    await ref.update({
+                        technician: '', technicianId: '',
+                        workedBy: o.technician, workedById: o.technicianId || report.technicianId || '',
+                        returnedToAdminAt: new Date(), returnedToAdminVia: 'report-approved', returnedToAdminReport: report.id
+                    });
+                    n++;
+                }
+                try { await db.collection('dailyReports').doc(report.id).update({ jobsTransferred: true }); } catch (e) {}
+                return n;
+            } catch (e) { console.warn('transfer approved jobs failed', e); return 0; }
+        }
+        // ከዚህ በፊት የጸደቁ (ገና ያልተላለፉ) ሪፖርቶች — በአንድ ሩጫ እስከ 5 ሪፖርት
+        let heSweepBusy = false;
+        async function heSweepApprovedReports(reports) {
+            if (heSweepBusy) return;
+            heSweepBusy = true;
+            try {
+                const todo = (reports || []).filter(r => r && r.approved === true && r.jobsTransferred !== true && Array.isArray(r.jobStatuses) && r.jobStatuses.length).slice(0, 5);
+                for (const r of todo) await heTransferApprovedJobs(r);
+            } finally { heSweepBusy = false; }
+        }
+        function heApproveAllowedSync() { return true; }
+        function heTechOf(o) { return (o && (o.technician || o.workedBy)) || ''; }
         function heActorName() {
             try {
                 const s = (typeof heGetSession === 'function') ? heGetSession() : null;
@@ -3459,7 +3497,8 @@ document.addEventListener('click', function (e) {
                 const addr = t.address && t.address !== '—' ? ' - ' + t.address : '';
                 const rk = _rk.get(t.id);
                 const rkTxt = rk ? ` 🏅#${rk.rank}·${rk.score}%` : '';
-                return `<option value="${escHtml(t.name)}" style="color:${ui.color};${st === 'busy' ? 'font-weight:700;' : ''}">${ui.dot} ${escHtml(t.name)}${rkTxt}${tags}${escHtml(addr)}</option>`;
+                const _glow = (t.status === 'free' && st === 'free' && !w); // 🟢 «ነጻ ነኝ» ያለ እና ዋርኒግ የሌለበት — በአረንጓዴ ይበራል
+                return `<option value="${escHtml(t.name)}" style="color:${_glow ? '#14532D' : ui.color};${st === 'busy' || _glow ? 'font-weight:700;' : ''}${_glow ? 'background:#BBF7D0;' : ''}">${_glow ? '🟢✨ ' : ui.dot + ' '}${escHtml(t.name)}${rkTxt}${tags}${escHtml(addr)}</option>`;
             }).join('');
         }
         async function toggleTechWarning(id) {
@@ -4806,6 +4845,7 @@ document.addEventListener('click', function (e) {
                     data.id = doc.id;
                     allDailyReports.push(data);
                 });
+                try { if (heIsAdminSession() && heApproveAllowedSync()) heSweepApprovedReports(allDailyReports); } catch (e) {} // ✅ ከዚህ በፊት የጸደቁ ስራዎች ወደ አድሚን ይመለሳሉ
                 try { admUpdateCompanyIncomeCards(); } catch (e) {}
                 try { updateFinanceStats(); } catch (e) {}
                 try { renderTechnicians(); } catch (e) {}   // 🏅 ራንክ ሪፖርት ሲገባ ይታደሳል
@@ -4987,7 +5027,7 @@ document.addEventListener('click', function (e) {
         // ✅ ያደሩ ስራዎች ዝርዝር ውስጥ ሆኖ በቀጥታ መመደብ / ለሌላ ቴክኒሻን መመደብ
         function admAssignOptionsHtml(currentName) {
             return fieldTechs().filter(t => t.status !== 'inactive' && t.status !== 'rejected' && t.status !== 'pending')
-                .map(t => `<option value="${escHtml(t.name)}" ${t.name === currentName ? 'selected' : ''}>${escHtml(t.name)}${techWorkState(t) === 'busy' ? ' 🔴' : ''}</option>`).join('');
+                .map(t => `<option value="${escHtml(t.name)}" ${t.name === currentName ? 'selected' : ''}${(t.status === 'free' && techWorkState(t) === 'free' && !techWarning(t)) ? ' style="background:#BBF7D0;color:#14532D;font-weight:700;"' : ''}>${(t.status === 'free' && techWorkState(t) === 'free' && !techWarning(t)) ? '🟢✨ ' : ''}${escHtml(t.name)}${techWorkState(t) === 'busy' ? ' 🔴' : ''}</option>`).join('');
         }
         async function admAssignFromList(orderId, kind) {
             const sel = pickAssignSelect(orderId);
@@ -5014,7 +5054,7 @@ document.addEventListener('click', function (e) {
                 <div style="font-size:0.85rem; margin-top:4px; display:grid; gap:2px;">
                     <div>📱 ${phone ? `<a href="tel:${escHtml(phone)}" style="color:var(--secondary); font-weight:600;">${escHtml(phone)}</a>` : '—'}</div>
                     <div>📍 ${escHtml(o.address || '—')}</div>
-                    <div>🔧 ${escHtml(o.appliance || '—')} &nbsp;•&nbsp; 👷 ${escHtml(o.technician || 'ያልተመደበ')}</div>
+                    <div>🔧 ${escHtml(o.appliance || '—')} &nbsp;•&nbsp; 👷 ${escHtml(heTechOf(o) || 'ያልተመደበ')}</div>
                     ${o.foundUsText ? `<div>📣 ${escHtml(o.foundUsText)}</div>` : ''}
                     ${o.correctionTechnician ? `<div>🛠️ እርማት የሚጠየቅበት ቴክኒሻን: <strong>${escHtml(o.correctionTechnician)}</strong>${o.correctionDate ? ' · 📅 ' + escHtml(o.correctionDate) : ''}</div>` : ''}
                     ${o.referredBy ? `<div>🔗 ሪፈራል ከ: <strong>${escHtml(o.referredBy)}</strong></div>` : ''}
@@ -5758,7 +5798,7 @@ document.addEventListener('click', function (e) {
                     <td>${escHtml(order.address || '—')}</td>
                     <td>${escHtml(order.appliance || '—')}</td>
                     <td><span class="status-badge ${statusClass}">${escHtml(ADM_STATUS_AM[order.status] || order.status || 'Pending')}</span><br>${orderCompletionBadge(order)}</td>
-                    <td>${escHtml(order.technician || '—')}</td>
+                    <td>${escHtml(heTechOf(order) || '—')}</td>
                     <td>${formatEthDate(date)}</td>
                 </tr>`;
             });
@@ -5976,7 +6016,7 @@ document.addEventListener('focusout', function (e) {
                     <td>${order.phone ? `<a href="tel:${escHtml(order.phone)}" style="color:var(--secondary);">${escHtml(order.phone)}</a>` : '—'}</td>
                     <td>${order.appliance || '—'}</td>
                     <td><span class="status-badge ${statusClass}">${order.status || 'Pending'}</span><br>${orderCompletionBadge(order)}</td>
-                    <td>${order.technician || '—'}</td>
+                    <td>${heTechOf(order) || '—'}</td>
                     <td>${order.price ? order.price + ' ብር' : '—'}${hePctTxt(order) ? '<br><small style="color:var(--text-muted);">' + hePctTxt(order) + '</small>' : ''}</td>
                     <td>${formatEthDate(date)}${isOvernightNow(order) ? `<br><strong style="color:#DC2626; font-size:0.72rem;">⏰ ${orderDaysOld(order)} ቀን አድሯል</strong>` : ''}</td>
                     <td style="font-weight:600; color:var(--primary);">${order.preferredDay || '—'}</td>
@@ -6417,7 +6457,7 @@ ${locationLine}
                     <div><strong>📣 ከየት አገኙን:</strong> ${escHtml(order.foundUsText || '—')}</div>
                     <div style="grid-column: span 2;"><strong>📝 ችግር:</strong> ${order.problem || '—'}</div>
                     ${order.customerLat ? `<div><strong>🗺️ ቦታ:</strong> <a href="https://www.google.com/maps?q=${order.customerLat},${order.customerLng}" target="_blank" style="color:var(--secondary);">${order.customerLat}, ${order.customerLng}</a>${order.customerLocationAccuracy ? ` <span class="status-badge ${order.customerLocationAccuracy > 200 ? 'status-pending' : order.customerLocationAccuracy > 50 ? 'status-assigned' : 'status-completed'}">${order.customerLocationAccuracy > 200 ? '⚠️' : '🎯'} ±${order.customerLocationAccuracy}ሜ</span>` : ''}</div>` : ''}
-                    ${order.technician ? `<div><strong>👨‍🔧 ቴክኒሻን:</strong> ${order.technician}</div>` : ''}
+                    ${heTechOf(order) ? `<div><strong>👨‍🔧 ቴክኒሻን:</strong> ${heTechOf(order)}</div>` : ''}
                     ${order.price ? `<div><strong>💰 ዋጋ:</strong> ${order.price} ብር</div>` : ''}
                     ${hePctTxt(order) ? `<div><strong>${hePctTxt(order)}</strong></div>` : ''}
                     <div><strong>📅 ሁኔታ:</strong> <span class="status-badge ${getStatusClass(order.status)}">${order.status || 'Pending'}</span></div>
@@ -6701,7 +6741,7 @@ ${locationLine}
                 const statusText = tech.status === 'active' || tech.isOnline ? '✅ ንቁ' : '⚪ ከመስመር ውጭ';
                 const _ws = TECH_STATE_UI[techWorkState(tech)];
                 const onlineStatus = `<span style="color:${_ws.color}; font-weight:700;">${_ws.dot} ${_ws.text}</span>`;
-                const jobs = allOrders.filter(o => o.technician === tech.name).length;
+                const jobs = allOrders.filter(o => heTechOf(o) === tech.name).length;
                 const warn = techWarning(tech);
 
                 html += `<tr>
@@ -6772,7 +6812,7 @@ ${locationLine}
             list.forEach(o => {
                 const k = orderSource(o);
                 addCnt(bySource[k], o);
-                const tn = o.technician || '— ያልተመደበ —';
+                const tn = heTechOf(o) || '— ያልተመደበ —';
                 if (!byTech[tn]) byTech[tn] = { web: emptyCnt(), phone: emptyCnt(), shop: emptyCnt(), extra: emptyCnt() };
                 addCnt(byTech[tn][k], o);
                 if (k === 'phone' || k === 'shop') {
@@ -6904,7 +6944,7 @@ ${locationLine}
         function viewTech(id) {
             const tech = staffById(id);
             if (!tech) return;
-            const orders = allOrders.filter(o => o.technician === tech.name);
+            const orders = allOrders.filter(o => heTechOf(o) === tech.name);
             const completed = orders.filter(o => o.status === 'Completed').length;
             const earnings = allTransactions
                 .filter(t => t.staff === tech.name)
@@ -6952,7 +6992,7 @@ ${locationLine}
             rk = rk || reportedJobKeys();
             const lim = Date.now() - REPORT_LOOKBACK_DAYS * 86400000;
             return allOrders.filter(o => {
-                const mine = o.technicianId ? o.technicianId === tech.id : o.technician === tech.name;
+                const mine = (o.technicianId || o.workedById) ? (o.technicianId || o.workedById) === tech.id : heTechOf(o) === tech.name;
                 if (!mine) return false;
                 if (!o.status || o.status === 'Pending' || /^cancel/i.test(o.status)) return false; // አልተመደበም / ተሰርዟል
                 const isDone = o.status === 'Completed';
@@ -7720,6 +7760,7 @@ ${locationLine}
                         lastApprovedDateKey: report ? report.dateKey : null
                     });
                 }
+                try { if (report) await heTransferApprovedJobs(report); } catch (trErr) { console.warn(trErr); }
                 try { await releaseTechTransactions(report); }
                 catch (relErr) { console.error('release transactions failed', relErr); showToast('⚠️ ሪፖርቱ ጸድቋል፣ ነገር ግን ገቢ/ወጪ ወደ ዝርዝሩ ማስገባት አልተቻለም: ' + (relErr && relErr.message ? relErr.message : relErr), 'error'); }
                 await db.collection('activity').add({
@@ -8556,7 +8597,7 @@ ${locationLine}
                 workType: o.workType || 'new',
                 source: o.source || '',
                 address: o.address || '',
-                technician: o.technician || ''
+                technician: heTechOf(o)
             };
             const upd = {
                 phone: key,
@@ -10946,7 +10987,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         <div><span class="label">👤 ደንበኛ</span><br/><strong>${order.fullName || '—'}</strong></div>
                         <div><span class="label">📱 ስልክ</span><br/><strong>${order.phone || '—'}</strong></div>
                         <div><span class="label">🔧 መሳሪያ</span><br/><strong>${order.appliance || '—'}</strong></div>
-                        <div><span class="label">👨‍🔧 ቴክኒሻን</span><br/><strong>${order.technician || '—'}</strong></div>
+                        <div><span class="label">👨‍🔧 ቴክኒሻን</span><br/><strong>${heTechOf(order) || '—'}</strong></div>
                         <div style="grid-column: span 2;"><span class="label">📍 አድራሻ</span><br/><strong>${order.address || '—'}</strong></div>
                         <div style="grid-column: span 2;"><span class="label">📝 ችግር</span><br/><strong>${order.problem || '—'}</strong></div>
                     </div>
