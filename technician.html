@@ -12638,11 +12638,11 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // ሁሉም የዛሬ ስራ ሪፖርት ተደርጓል → በራስ-ሰር የሚሞሉ መስኮችን ባዶ ማድረግ
         function techClearReportAutoFields() {
             const $ = id => document.getElementById(id);
-            ['reportTotalSent', 'reportCompletedCount', 'reportNotCompletedCount'].forEach(id => { if ($(id)) $(id).value = ''; });
+            ['reportTotalSent', 'reportCompletedCount', 'reportNotCompletedCount'].forEach(id => { if ($(id)) $(id).value = '0'; }); // 00 — የተላከ ስራ ከሪፖርት ይጠፋል፣ ቁጥሮች ዜሮ
             renderWorkTypeInputs(0);
             renderNotCompletedReasonInputs(0);
             const inc = $('reportTotalIncome');
-            if (inc && !inc.dataset.userEdited) inc.value = '';
+            if (inc && !inc.dataset.userEdited) inc.value = '0';
             const note = $('autoIncomeNote'); if (note) note.textContent = '';
             techSyncAutoExpenses([]);
             try { techRenderExtraWorkCard([]); } catch (e) {}
@@ -12658,6 +12658,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             ['reportTotalSent', 'reportCompletedCount', 'reportNotCompletedCount', 'reportTotalIncome', 'reportTotalExpense',
              'reportProfit', 'reportTechSharePercent', 'reportTechShareAmount', 'reportCompanyAmount', 'reportDeposited',
              'reportExpenseDetails', 'reportRemarks'].forEach(id => { if ($(id)) $(id).value = ''; });
+            ['reportTotalSent', 'reportCompletedCount', 'reportNotCompletedCount', 'reportTotalIncome', 'reportTotalExpense', 'reportProfit', 'reportTechShareAmount'].forEach(id => { if ($(id)) $(id).value = '0'; }); // 00
             if ($('reportTotalIncome')) delete $('reportTotalIncome').dataset.userEdited;
             if ($('reportRemarks')) delete $('reportRemarks').dataset.userEdited;
             window.techReportPctJobs = [];
