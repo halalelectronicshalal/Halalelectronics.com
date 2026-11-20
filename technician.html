@@ -493,6 +493,55 @@ window.heEthDay = function (k) {
         }
         html[data-theme="dark"] img { filter: brightness(0.92) contrast(1.02); }
 
+        /* 🌙 ጨለማ ገጽታ — ቀድሞ በ CSS/inline የተጻፉ ቋሚ ነጭ/ፓስቴል ዳራዎች ከብርሃን ጽሁፍ ጋር ይደበዝዙ ነበር፤ እዚህ ይስተካከላሉ */
+        html[data-theme="dark"] body { background: var(--bg); color: var(--text); }
+        html[data-theme="dark"] .topbar,
+        html[data-theme="dark"] .eth-picker-part,
+        html[data-theme="dark"] .completion-options .option-btn,
+        html[data-theme="dark"] .report-form .uploaded-files .file-item,
+        html[data-theme="dark"] .apinfo .po { background: var(--card) !important; color: var(--text) !important; }
+        html[data-theme="dark"] .advice-section, html[data-theme="dark"] .advice-item, html[data-theme="dark"] .warranty { background: rgba(59,143,214,.14) !important; color: var(--text) !important; }
+        html[data-theme="dark"] .advice-section h4, html[data-theme="dark"] .advice-item .advice-header strong, html[data-theme="dark"] .header h1 { color: var(--primary-light) !important; }
+        html[data-theme="dark"] .status-active, html[data-theme="dark"] .status-completed, html[data-theme="dark"] .status-btn.free.active, html[data-theme="dark"] .apinfo .say { background: rgba(52,211,153,.18) !important; color: #6EE7B7 !important; }
+        html[data-theme="dark"] .status-free, html[data-theme="dark"] .status-expiring, html[data-theme="dark"] .status-pending, html[data-theme="dark"] .status-btn.working.active, html[data-theme="dark"] .apinfo.warn { background: rgba(251,191,36,.18) !important; color: #FCD34D !important; }
+        html[data-theme="dark"] .status-expired { background: rgba(240,96,90,.18) !important; color: #FCA5A5 !important; }
+        html[data-theme="dark"] .status-off, html[data-theme="dark"] .status-btn.off.active { background: rgba(148,163,184,.18) !important; color: #CBD5E1 !important; }
+        html[data-theme="dark"] .status-assigned, html[data-theme="dark"] .status-btn.active, html[data-theme="dark"] .completion-options .option-btn:hover, html[data-theme="dark"] .apinfo { background: rgba(59,143,214,.2) !important; color: #93C5FD !important; }
+        html[data-theme="dark"] .status-btn { background: var(--card); color: var(--text); }
+        html[data-theme="dark"] table, html[data-theme="dark"] th, html[data-theme="dark"] td { color: var(--text); }
+        html[data-theme="dark"] th { background: var(--border-light); }
+        /* inline style="background:#PASTEL" → ጥቁር ግልጽ ቀለም */
+        html[data-theme="dark"] [style*="background:#fff" i], html[data-theme="dark"] [style*="background: #fff" i],
+        html[data-theme="dark"] [style*="background:#FFFFFF" i], html[data-theme="dark"] [style*="background: #FFFFFF" i],
+        html[data-theme="dark"] [style*="background:white" i], html[data-theme="dark"] [style*="background: white" i],
+        html[data-theme="dark"] [style*="background:#F8FAFC" i], html[data-theme="dark"] [style*="background: #F8FAFC" i],
+        html[data-theme="dark"] [style*="background:#F1F5F9" i], html[data-theme="dark"] [style*="background: #F1F5F9" i],
+        html[data-theme="dark"] [style*="background:#F3F4F6" i], html[data-theme="dark"] [style*="background: #F3F4F6" i] { background: var(--card) !important; color: var(--text) !important; }
+        html[data-theme="dark"] [style*="background:#DBEAFE" i], html[data-theme="dark"] [style*="background: #DBEAFE" i],
+        html[data-theme="dark"] [style*="background:#EFF6FF" i], html[data-theme="dark"] [style*="background: #EFF6FF" i],
+        html[data-theme="dark"] [style*="background:#EEF2FF" i], html[data-theme="dark"] [style*="background: #EEF2FF" i] { background: rgba(59,143,214,.18) !important; color: #BFDBFE !important; }
+        html[data-theme="dark"] [style*="background:#DCFCE7" i], html[data-theme="dark"] [style*="background: #DCFCE7" i],
+        html[data-theme="dark"] [style*="background:#ECFDF5" i], html[data-theme="dark"] [style*="background: #ECFDF5" i] { background: rgba(52,211,153,.16) !important; color: #A7F3D0 !important; }
+        html[data-theme="dark"] [style*="background:#FEF9C3" i], html[data-theme="dark"] [style*="background: #FEF9C3" i],
+        html[data-theme="dark"] [style*="background:#FEF3C7" i], html[data-theme="dark"] [style*="background: #FEF3C7" i],
+        html[data-theme="dark"] [style*="background:#FFFBEB" i], html[data-theme="dark"] [style*="background: #FFFBEB" i],
+        html[data-theme="dark"] [style*="background:#fff7e6" i], html[data-theme="dark"] [style*="background: #fff7e6" i] { background: rgba(251,191,36,.16) !important; color: #FDE68A !important; }
+        html[data-theme="dark"] [style*="background:#FEE2E2" i], html[data-theme="dark"] [style*="background: #FEE2E2" i],
+        html[data-theme="dark"] [style*="background:#FEF2F2" i], html[data-theme="dark"] [style*="background: #FEF2F2" i] { background: rgba(240,96,90,.16) !important; color: #FECACA !important; }
+        /* inline ጥቁር/ጥቁር-ጥላ ጽሁፎች → ብርሃን */
+        html[data-theme="dark"] [style*="color:#92400E" i], html[data-theme="dark"] [style*="color: #92400E" i], html[data-theme="dark"] [style*="color:#b45309" i], html[data-theme="dark"] [style*="color: #b45309" i] { color: #FCD34D !important; }
+        html[data-theme="dark"] [style*="color:#166534" i], html[data-theme="dark"] [style*="color: #166534" i], html[data-theme="dark"] [style*="color:#065F46" i], html[data-theme="dark"] [style*="color: #065F46" i], html[data-theme="dark"] [style*="color:#047857" i], html[data-theme="dark"] [style*="color: #047857" i] { color: #6EE7B7 !important; }
+        html[data-theme="dark"] [style*="color:#1E40AF" i], html[data-theme="dark"] [style*="color: #1E40AF" i], html[data-theme="dark"] [style*="color:#1E3A8A" i], html[data-theme="dark"] [style*="color: #1E3A8A" i], html[data-theme="dark"] [style*="color:#0F4C81" i], html[data-theme="dark"] [style*="color: #0F4C81" i] { color: #93C5FD !important; }
+        html[data-theme="dark"] [style*="color:#B91C1C" i], html[data-theme="dark"] [style*="color: #B91C1C" i], html[data-theme="dark"] [style*="color:#991B1B" i], html[data-theme="dark"] [style*="color: #991B1B" i], html[data-theme="dark"] [style*="color:#7f1d1d" i], html[data-theme="dark"] [style*="color: #7f1d1d" i], html[data-theme="dark"] [style*="color:#DC2626" i], html[data-theme="dark"] [style*="color: #DC2626" i] { color: #FCA5A5 !important; }
+        html[data-theme="dark"] [style*="color:#333" i], html[data-theme="dark"] [style*="color: #333" i], html[data-theme="dark"] [style*="color:#111" i], html[data-theme="dark"] [style*="color:#374151" i], html[data-theme="dark"] [style*="color: #374151" i], html[data-theme="dark"] [style*="color:#475569" i], html[data-theme="dark"] [style*="color: #475569" i], html[data-theme="dark"] [style*="color:#1e293b" i], html[data-theme="dark"] [style*="color:#0F172A" i], html[data-theme="dark"] [style*="color:#64748B" i], html[data-theme="dark"] [style*="color: #64748B" i] { color: var(--text) !important; }
+        html[data-theme="dark"] [style*="color:#94A3B8" i], html[data-theme="dark"] [style*="color: #94A3B8" i] { color: var(--text-muted) !important; }
+        html[data-theme="dark"] [style*="border:1px solid #E2E8F0" i], html[data-theme="dark"] [style*="border: 1px solid #E2E8F0" i] { border-color: var(--border) !important; }
+        html[data-theme="dark"] .modal, html[data-theme="dark"] .modal-content, html[data-theme="dark"] .modal-box { background: var(--card); color: var(--text); }
+        html[data-theme="dark"] ::placeholder { color: var(--text-light); }
+        html[data-theme="dark"] input, html[data-theme="dark"] select, html[data-theme="dark"] textarea { border-color: var(--border); }
+        html[data-theme="dark"] option { background: var(--card); color: var(--text); }
+        html[data-theme="dark"] img { filter: none; } /* ፎቶዎች እንዳይደበዝዙ */
+
         /* ✅ FIX: Theme toggle button (☀️/🌙) - fixed, ማንኛውንም ነባር layout አይነካም
            ቀድሞ bottom:20px ብቻ ስለነበረ በቴክኒሻን ገፅ ላይ ካለው bottom-nav (ታችኛው ናቪጌሽን) ጋር
            ተደራርቦ ነበር - አሁን bottom-nav ካለ ከላዩ ላይ እንዲቀመጥ ተስተካክሏል */
@@ -2359,7 +2408,7 @@ document.addEventListener('click', function (e) {
                                 <strong id="doneAutoIncome" style="font-size:1.1rem; color:var(--success);">0 ብር</strong>
                             </div>
                             <div class="sub-row">
-                                <label>📊 የባለሙያ ድርሻ (%) <span style="font-weight:400; font-size:0.75rem; color:var(--text-muted);">(አማራጭ — ባዶ ከሆነ ሙሉው ለሠራተኛ)</span></label>
+                                <label>📊 የባለሙያ ድርሻ (%) <span style="font-weight:600; font-size:0.75rem; color:var(--emergency,#dc2626);">* ገቢ ካለ ግዴታ</span></label>
                                 <input type="number" id="donePct" placeholder="ለም: 50" inputmode="decimal" min="0" max="100" step="any" />
                             </div>
                             <div class="sub-row" id="doneAutoShareBox" style="background:var(--bg); border-radius:8px; padding:10px 12px; display:none; justify-content:space-between; align-items:center;">
@@ -2395,7 +2444,7 @@ document.addEventListener('click', function (e) {
                                     <input type="number" id="doneRefExpense" placeholder="0" inputmode="decimal" min="0" />
                                 </div>
                                 <div class="sub-row">
-                                <label>📊 የባለሙያ ድርሻ (%) <span style="font-weight:400; font-size:0.75rem; color:var(--text-muted);">(አማራጭ — ባዶ ከሆነ ሙሉው ለሠራተኛ)</span></label>
+                                <label>📊 የባለሙያ ድርሻ (%) <span style="font-weight:600; font-size:0.75rem; color:var(--emergency,#dc2626);">* ገቢ ካለ ግዴታ</span></label>
                                 <input type="number" id="doneRefPct" placeholder="ለም: 50" inputmode="decimal" min="0" max="100" step="any" />
                             </div>
                                 <div class="sub-row" style="background:var(--bg); border-radius:8px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center;">
@@ -2427,7 +2476,7 @@ document.addEventListener('click', function (e) {
                                     <input type="number" id="doneCorExpense" placeholder="0" inputmode="decimal" min="0" />
                                 </div>
                                 <div class="sub-row">
-                                <label>📊 የባለሙያ ድርሻ (%) <span style="font-weight:400; font-size:0.75rem; color:var(--text-muted);">(አማራጭ — ባዶ ከሆነ ሙሉው ለሠራተኛ)</span></label>
+                                <label>📊 የባለሙያ ድርሻ (%) <span style="font-weight:600; font-size:0.75rem; color:var(--emergency,#dc2626);">* ገቢ ካለ ግዴታ</span></label>
                                 <input type="number" id="doneCorPct" placeholder="ለም: 50" inputmode="decimal" min="0" max="100" step="any" />
                             </div>
                                 <div class="sub-row" style="background:var(--bg); border-radius:8px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center;">
@@ -2873,6 +2922,15 @@ document.addEventListener('click', function (e) {
         const WORKER_BASE_URL = "https://halalelectronics.ashenafi6275.workers.dev";
         const HE_ROLE = (typeof window !== 'undefined' && window.APP_ROLE) || 'operator';
         const HE_SESSION_KEY = 'he_session_' + HE_ROLE;
+        // 📊 በስራው ላይ የተመዘገበ የባለሙያ ድርሻ (%) — ስራው በሚታይበት ቦታ ሁሉ (ታሪክ) ይታያል
+        function hePctTxt(x) {
+            try {
+                if (!x || x.techSharePercent === undefined || x.techSharePercent === null || x.techSharePercent === '') return '';
+                const p = parseFloat(x.techSharePercent); if (!isFinite(p)) return '';
+                const a = parseFloat(x.techShareAmount);
+                return '📊 የባለሙያ ድርሻ ' + p + '%' + (isFinite(a) ? ' (' + a + ' ብር)' : '');
+            } catch (e) { return ''; }
+        }
         function heActorName() {
             try {
                 const s = (typeof heGetSession === 'function') ? heGetSession() : null;
@@ -3291,7 +3349,7 @@ document.addEventListener('click', function (e) {
                     const reason = prompt(`⚠️ ${t.name} ላይ ዋርኒግ ምልክት ለማድረግ ምክንያቱን ይጻፉ:`);
                     if (reason === null) return;
                     if (!reason.trim()) { showToast('ምክንያት መጻፍ ያስፈልጋል', 'error'); return; }
-                    await db.collection('staff').doc(id).update({ warning: { active: true, reason: reason.trim().slice(0, 140), at: new Date(), by: 'አስተዳዳሪ' } });
+                    await db.collection('staff').doc(id).update({ warning: { active: true, reason: reason.trim().slice(0, 140), at: new Date(), by: heActorName() } });
                     showToast('🚩 ዋርኒግ ተመዝግቧል', 'success');
                 }
                 db.collection('activity').add({ user: heActorName(), action: 'staff_warning', details: `${t.name}: ዋርኒግ ተቀይሯል`, timestamp: new Date() }).catch(() => {});
@@ -3360,7 +3418,7 @@ document.addEventListener('click', function (e) {
         if (APP_ROLE === 'admin' && heIsAdminSession()) {
             document.getElementById('loginContainer').style.display = 'none';
             document.getElementById('adminContainer').style.display = 'block';
-            document.getElementById('adminName').textContent = 'አስተዳዳሪ';
+            document.getElementById('adminName').textContent = heActorName();
             authReady.then(() => initDashboard());
         }
 
@@ -3383,7 +3441,7 @@ document.addEventListener('click', function (e) {
             
             document.getElementById('loginContainer').style.display = 'none';
             document.getElementById('adminContainer').style.display = 'block';
-            document.getElementById('adminName').textContent = 'አስተዳዳሪ';
+            document.getElementById('adminName').textContent = heActorName();
             initDashboard();
             if (staffId) registerPushToken(staffId);
             if (window.AppLock) window.AppLock.start('admin', staffId);
@@ -4954,7 +5012,7 @@ document.addEventListener('click', function (e) {
             if (!r) return;
             const n = (v) => (v == null || v === '') ? '—' : escHtml(v);
             const jobs = (r.jobStatuses || []).map((j, i) =>
-                `<div style="font-size:0.85rem;">${i + 1}. ${escHtml(j.customer || '—')} — ${j.status === 'completed' ? '✅ ተሰርቷል' : '❌ አልተሰራም' + (j.reason ? ' (' + escHtml(j.reason) + ')' : '')}${j.orderId ? ` <button type="button" class="btn btn-outline btn-sm" title="የስራ ዝርዝር ይመልከቱ" aria-label="የስራ ዝርዝር" onclick="techReportJobView('${j.orderId}')" style="padding:2px 8px; margin-left:4px;"><i class="fas fa-eye"></i></button>` : ''}${j.onHold ? ' <span style="color:#92400E; font-weight:700;">📦 ያልተጠናቀቀ — ከቴክኒሻኑ ጋር ተይዟል</span>' : ''}${(j.completedAfterHold && j.completedDateEth) ? ' <span style="color:#047857; font-weight:700;">✅ ከመጠባበቂያ የተጠናቀቀው: ' + escHtml(j.completedDateEth) + '</span>' : ''}${j.assignedDateEth ? '<div style="font-size:0.75rem; color:var(--text-muted);">📅 የተመደበበት ቀን: ' + escHtml(j.assignedDateEth) + '</div>' : ''}</div>`).join('');
+                `<div style="font-size:0.85rem;">${i + 1}. ${escHtml(j.customer || '—')} — ${j.status === 'completed' ? '✅ ተሰርቷል' : '❌ አልተሰራም' + (j.reason ? ' (' + escHtml(j.reason) + ')' : '')}${hePctTxt(j) ? ` <small style="color:var(--text-muted);">${hePctTxt(j)}</small>` : ''}${j.orderId ? ` <button type="button" class="btn btn-outline btn-sm" title="የስራ ዝርዝር ይመልከቱ" aria-label="የስራ ዝርዝር" onclick="techReportJobView('${j.orderId}')" style="padding:2px 8px; margin-left:4px;"><i class="fas fa-eye"></i></button>` : ''}${j.onHold ? ' <span style="color:#92400E; font-weight:700;">📦 ያልተጠናቀቀ — ከቴክኒሻኑ ጋር ተይዟል</span>' : ''}${(j.completedAfterHold && j.completedDateEth) ? ' <span style="color:#047857; font-weight:700;">✅ ከመጠባበቂያ የተጠናቀቀው: ' + escHtml(j.completedDateEth) + '</span>' : ''}${j.assignedDateEth ? '<div style="font-size:0.75rem; color:var(--text-muted);">📅 የተመደበበት ቀን: ' + escHtml(j.assignedDateEth) + '</div>' : ''}</div>`).join('');
             const gallery = (urls, label) => (urls && urls.length)
                 ? `<div style="font-size:0.8rem; margin-top:10px; color:var(--text-muted);">${label}</div><div class="photo-gallery">${urls.map(u => `<img src="${u}" alt="" onclick="window.open('${u}','_blank')" />`).join('')}</div>` : '';
             const html = `
@@ -4986,7 +5044,7 @@ document.addEventListener('click', function (e) {
             const bodyEl = document.getElementById('notifDropdownBody');
             if (!countEl || !bodyEl) return;
 
-            const newOrdersCount = (allOrders || []).filter(o => o.status === 'Pending').length;
+            const newOrdersCount = (allOrders || []).filter(o => o.status === 'Pending' && !(o.returnReason || o.returnedAt || o.returnedFrom || o.returnedFromId || o.completionOption === 'return-job')).length;
             const pendingRegCount = (allPendingRegistrations || []).length;
             const unapprovedReportsCount = (allDailyReports || []).filter(r => !r.approved).length;
             const unreadMsgCount = (typeof adminUnreadTotal === 'function') ? adminUnreadTotal() : 0;
@@ -5084,7 +5142,7 @@ document.addEventListener('click', function (e) {
             const badge = document.getElementById('dashNewOrdersBadge');
             if (!list) return;
 
-            const pendingOrders = allOrders.filter(o => o.status === 'Pending');
+            const pendingOrders = allOrders.filter(o => o.status === 'Pending' && !(o.returnReason || o.returnedAt || o.returnedFrom || o.returnedFromId || o.completionOption === 'return-job')); // ↩️ የተመለሱ በካርዳቸው ብቻ
             if (badge) badge.textContent = pendingOrders.length;
 
             if (pendingOrders.length === 0) {
@@ -5122,7 +5180,7 @@ document.addEventListener('click', function (e) {
             const body = document.getElementById('ordersBody');
 
             let filtered = allOrders;
-            if (filter === '__new') filtered = filtered.filter(o => !o.workTag && (!o.orderType || o.orderType === 'new') && o.status === 'Pending'); // 🆕 አዲስ (ገና ያልተመደበ)
+            if (filter === '__new') filtered = filtered.filter(o => !o.workTag && (!o.orderType || o.orderType === 'new') && o.status === 'Pending' && !(o.returnReason || o.returnedAt || o.returnedFrom || o.returnedFromId || o.completionOption === 'return-job')); // 🆕 አዲስ (ገና ያልተመደበ)
             else if (filter === '__referral') filtered = filtered.filter(o => (o.workTag || o.orderType) === 'referral');
             else if (filter === '__correction') filtered = filtered.filter(o => (o.workTag || o.orderType) === 'correction');
             else if (filter !== 'all') filtered = filtered.filter(o => o.status === filter);
@@ -5183,7 +5241,7 @@ document.addEventListener('click', function (e) {
                     <td>${order.appliance || '—'}</td>
                     <td><span class="status-badge ${statusClass}">${order.status || 'Pending'}</span></td>
                     <td>${order.technician || '—'}</td>
-                    <td>${order.price ? order.price + ' ብር' : '—'}</td>
+                    <td>${order.price ? order.price + ' ብር' : '—'}${hePctTxt(order) ? '<br><small style="color:var(--text-muted);">' + hePctTxt(order) + '</small>' : ''}</td>
                     <td>${formatEthDate(date)}</td>
                     <td style="font-weight:600; color:var(--primary);">${order.preferredDay || '—'}</td>
                     <td style="white-space:nowrap;">${actions}</td>
@@ -5544,6 +5602,7 @@ ${locationLine}
                     ${order.customerLat ? `<div><strong>🗺️ ቦታ:</strong> <a href="https://www.google.com/maps?q=${order.customerLat},${order.customerLng}" target="_blank" style="color:var(--secondary);">${order.customerLat}, ${order.customerLng}</a>${order.customerLocationAccuracy ? ` <span class="status-badge ${order.customerLocationAccuracy > 200 ? 'status-pending' : order.customerLocationAccuracy > 50 ? 'status-assigned' : 'status-completed'}">${order.customerLocationAccuracy > 200 ? '⚠️' : '🎯'} ±${order.customerLocationAccuracy}ሜ</span>` : ''}</div>` : ''}
                     ${order.technician ? `<div><strong>👨‍🔧 ቴክኒሻን:</strong> ${order.technician}</div>` : ''}
                     ${order.price ? `<div><strong>💰 ዋጋ:</strong> ${order.price} ብር</div>` : ''}
+                    ${hePctTxt(order) ? `<div><strong>${hePctTxt(order)}</strong></div>` : ''}
                     <div><strong>📅 ሁኔታ:</strong> <span class="status-badge ${getStatusClass(order.status)}">${order.status || 'Pending'}</span></div>
                 </div>
 
@@ -5741,7 +5800,7 @@ ${locationLine}
                     description: `ክፍያ: ስራ #${orderId.substring(0,8)}`,
                     amount: parseFloat(price),
                     type: 'income',
-                    staff: 'አስተዳዳሪ',
+                    staff: heActorName(),
                     orderId: orderId,
                     date: new Date().toISOString().split('T')[0],
                     createdAt: new Date()
@@ -7438,7 +7497,7 @@ ${locationLine}
                     status: 'Pending',
                     source: (document.getElementById('phoneOrderChannel') || {}).value || 'phone_admin', // ✅ NEW: ከድህረ ገጽ ሳይሆን አድሚን በእጅ የመዘገበው ስራ መሆኑን ለመለየት
                     createdBy: 'admin',
-                    createdByName: 'አስተዳዳሪ',
+                    createdByName: heActorName(),
                     createdAt: new Date()
                 };
 
@@ -8085,7 +8144,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     amount: amount,
                     type: type,
                     date: date,
-                    staff: 'አስተዳዳሪ',
+                    staff: heActorName(),
                     createdAt: new Date()
                 });
                 await db.collection('activity').add({
@@ -8175,7 +8234,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     type: type,
                     note: note,
                     status: 'unpaid',
-                    staff: 'አስተዳዳሪ',
+                    staff: heActorName(),
                     createdAt: new Date()
                 });
                 await db.collection('activity').add({
@@ -8670,7 +8729,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 await db.collection('settings').doc('technician_rules').set({
                     content: content,
                     updatedAt: new Date(),
-                    updatedBy: 'አስተዳዳሪ'
+                    updatedBy: heActorName()
                 });
                 await db.collection('activity').add({
                     user: heActorName(),
@@ -8850,7 +8909,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 transactions: allTransactions,
                 warranties: allWarranties,
                 exportedAt: new Date().toISOString(),
-                exportedBy: 'አስተዳዳሪ'
+                exportedBy: heActorName()
             };
             const json = JSON.stringify(data, null, 2);
             const blob = new Blob([json], { type: 'application/json' });
@@ -9601,12 +9660,15 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         const eff = Math.max(0, Math.min(100, techShareAmount / profit * 100));
                         _pcEl.value = String(Math.round(eff * 100) / 100);
                         _pcEl.dataset.autoPct = '1';
-                        if (_note) _note.textContent = '✅ ከ «አጠናቅ» ለእያንዳንዱ ስራ በገባው ድርሻ (%) በራስ-ሰር ተሰልቷል — ካስፈለገ ቁጥሩን መቀየር ይችላሉ';
+                        _pcEl.readOnly = true; _pcEl.style.background = 'var(--bg)'; // 🔒 ከ «አጠናቅ» ድርሻ በራስ-ሰር ስለተሞላ ለመጻፍ ዝግ
+                        if (_note) _note.textContent = '✅ ከ «አጠናቅ» ለእያንዳንዱ ስራ በገባው ድርሻ (%) በራስ-ሰር ተሰልቷል (ዝግ ነው)';
                     } else {
+                        _pcEl.readOnly = false; _pcEl.style.background = '';
                         if (_pcEl.dataset.autoPct) { _pcEl.value = ''; delete _pcEl.dataset.autoPct; }
                         if (_note) _note.textContent = '✅ በ «አጠናቅ» ድርሻ (%) የገባላቸው ስራዎች በራስ-ሰር ተሰልተዋል፤ ቀሪዎቹ በዚህ % ይሰላሉ';
                     }
                 } else {
+                    _pcEl.readOnly = false; _pcEl.style.background = '';
                     if (_pcEl.dataset.autoPct) { delete _pcEl.dataset.autoPct; }
                     if (_note) _note.textContent = '';
                 }
@@ -10792,6 +10854,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                             <div><span class="label">🔧 መሳሪያ:</span> <span class="value">${order.appliance || '—'}</span></div>
                             <div><span class="label">📍 አድራሻ:</span> <span class="value">${order.address || '—'}</span></div>
                             ${order.price ? `<div><span class="label">💰 ዋጋ:</span> <span class="value">${order.price} ብር</span></div>` : ''}
+                            ${hePctTxt(order) ? `<div><span class="label">📊 ድርሻ:</span> <span class="value">${hePctTxt(order).replace("📊 የባለሙያ ድርሻ ","")}</span></div>` : ''}
                             <div><span class="label">📅 ቀን:</span> <span class="value">${formatEthDate(order.createdAt) || '—'}</span></div>
                         </div>
                     </div>
@@ -10998,6 +11061,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 sharePercent = parseFloat(pctRaw);
                 if (!isFinite(sharePercent) || sharePercent < 0 || sharePercent > 100) return { active: true, error: `${d.label}፦ የባለሙያ ድርሻ (%) ከ0 እስከ 100 መሆን አለበት` };
             }
+            if (income > 0 && sharePercent === null) return { active: true, error: `${d.label}፦ ገቢ ስላለ የባለሙያ ድርሻ (%) ማስገባት ግዴታ ነው (ምንም ድርሻ ከሌለ 0 ይጻፉ)` };
             const phone = (g('Phone') ? g('Phone').value : '').trim();
             const address = (g('Address') ? g('Address').value : '').trim();
             if (phone && !/^[0-9+\-\s()]{7,20}$/.test(phone)) return { active: true, error: `${d.label}፦ የደንበኛ ስልክ ቁጥር ትክክል አይደለም` };
@@ -11107,6 +11171,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             // 📊 የባለሙያ ድርሻ (%) — አማራጭ
             const _pctRaw = String((document.getElementById('donePct') || {}).value || '').trim();
             let mainSharePercent = null;
+            if (!skipMain && priceNum > 0 && _pctRaw === '') { showToast('⚠️ ገቢ ስላለ የባለሙያ ድርሻ (%) ማስገባት ግዴታ ነው (ምንም ድርሻ ከሌለ 0 ይጻፉ)', 'error'); const _pe = document.getElementById('donePct'); if (_pe) { try { _pe.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {} _pe.focus(); } return; }
             if (_pctRaw !== '' && !skipMain) {
                 mainSharePercent = parseFloat(_pctRaw);
                 if (!isFinite(mainSharePercent) || mainSharePercent < 0 || mainSharePercent > 100) { showToast('የባለሙያ ድርሻ (%) ከ0 እስከ 100 መሆን አለበት', 'error'); return; }
@@ -11683,7 +11748,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         <div>
                             <span style="font-weight:500;">${order.fullName || '—'}</span>
                             <span style="color:var(--text-muted); font-size:0.8rem;"> - ${order.appliance || '—'}</span>
-                            <br/><span style="color:var(--text-muted); font-size:0.7rem;">${formatEthDate(date)}</span>
+                            <br/><span style="color:var(--text-muted); font-size:0.7rem;">${formatEthDate(date)}</span>${hePctTxt(order) ? '<br/><span style="color:var(--text-muted); font-size:0.7rem;">' + hePctTxt(order) + '</span>' : ''}
                         </div>
                         <div>
                             <span class="amount">${order.price || 0} ብር</span>
@@ -12047,6 +12112,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         function techUpdateStats() {
             const today = new Date().toISOString().split('T')[0];
             const todayJobs = myOrders.filter(o => {
+                if (techApprovedGone(o)) return false; // በአድሚን የጸደቀ ስራ ከዳሽቦርድ ይጠፋል
                 const d = o.createdAt?.toDate?.() || new Date(0);
                 return d.toISOString().split('T')[0] === today;
             });
@@ -12071,6 +12137,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         function updateDailyReport() {
             const today = new Date().toISOString().split('T')[0];
             const todayJobs = myOrders.filter(o => {
+                if (techApprovedGone(o)) return false; // በአድሚን የጸደቀ ስራ ከዳሽቦርድ ይጠፋል
                 const d = o.createdAt?.toDate?.() || new Date(0);
                 return d.toISOString().split('T')[0] === today;
             });
@@ -12599,6 +12666,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     appliance: order ? (order.appliance || '') : '',
                     status: select.value,
                     reason: reason,
+                    ...(order && order.techSharePercent !== undefined && order.techSharePercent !== null && order.techSharePercent !== '' ? { techSharePercent: order.techSharePercent, techShareAmount: order.techShareAmount != null ? order.techShareAmount : null } : {}),
                     tagLabel: order && order.workTagLabel ? order.workTagLabel : '',
                     count: order && order.workTag ? techJobCount(order) : 1,
                     jobDate: order ? techOrderDateKey(order) : '',            // ስራው የተመዘገበበት ቀን
@@ -12893,7 +12961,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     return tb - ta;
                 });
                 renderTechSentReports();
-                try { renderAllJobs(); renderHistory(); } catch (e) {} // በአድሚን የጸደቁ ስራዎች ከዝርዝር ይጠፋሉ
+                try { renderAllJobs(); renderHistory(); techUpdateStats(); updateDailyReport(); } catch (e) {} // በአድሚን የጸደቁ ስራዎች ከዝርዝር ይጠፋሉ
                 try { if (document.getElementById('tab-report').classList.contains('active')) loadReportJobs(); } catch (e) {} // የተላኩት ስራዎች ከዝርዝሩ ይወጣሉ
             }, (err) => {
                 console.warn('sent reports listener', err);
@@ -12915,7 +12983,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     const canConvert = !done;
                     let h = `<div style="padding:8px 0; border-top:1px solid var(--border-light); font-size:0.82rem;">
                         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-                            <span>${i + 1}. ${techEsc(j.customer || '—')} - ${techEsc(j.appliance || '—')}${j.orderId ? ` <button type="button" class="btn btn-outline btn-sm" title="የስራ ዝርዝር ይመልከቱ" aria-label="የስራ ዝርዝር" onclick="techReportJobView('${j.orderId}')" style="padding:2px 8px; margin-left:4px;"><i class="fas fa-eye"></i></button>` : ''}${j.overnight ? ` <span style="background:#FEE2E2; color:#B91C1C; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">⏰ ያደረ — ከ${techEsc(j.jobDate || '')}</span>` : ''}${(!done && j.reason) ? ' <span style="color:var(--text-muted);">(' + techEsc(j.reason) + ')</span>' : ''}${j.onHold ? ' <span style="background:#FEF3C7; color:#92400E; border:1px solid #F59E0B; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">📦 ያልተጠናቀቀ — ከእኔ ጋር</span>' : ''}${(j.completedAfterHold && j.completedDateEth) ? ' <span style="color:#047857; font-size:0.72rem; font-weight:700;">✅ ከመጠባበቂያ የተጠናቀቀው: ' + techEsc(j.completedDateEth) + '</span>' : ''}${j.assignedDateEth ? '<br><small style="color:var(--text-muted);">📅 የተመደበበት ቀን: ' + techEsc(j.assignedDateEth) + '</small>' : ''}</span>
+                            <span>${i + 1}. ${techEsc(j.customer || '—')} - ${techEsc(j.appliance || '—')}${hePctTxt(j) ? ` <small style="color:var(--text-muted);">${hePctTxt(j)}</small>` : ''}${j.orderId ? ` <button type="button" class="btn btn-outline btn-sm" title="የስራ ዝርዝር ይመልከቱ" aria-label="የስራ ዝርዝር" onclick="techReportJobView('${j.orderId}')" style="padding:2px 8px; margin-left:4px;"><i class="fas fa-eye"></i></button>` : ''}${j.overnight ? ` <span style="background:#FEE2E2; color:#B91C1C; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">⏰ ያደረ — ከ${techEsc(j.jobDate || '')}</span>` : ''}${(!done && j.reason) ? ' <span style="color:var(--text-muted);">(' + techEsc(j.reason) + ')</span>' : ''}${j.onHold ? ' <span style="background:#FEF3C7; color:#92400E; border:1px solid #F59E0B; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">📦 ያልተጠናቀቀ — ከእኔ ጋር</span>' : ''}${(j.completedAfterHold && j.completedDateEth) ? ' <span style="color:#047857; font-size:0.72rem; font-weight:700;">✅ ከመጠባበቂያ የተጠናቀቀው: ' + techEsc(j.completedDateEth) + '</span>' : ''}${j.assignedDateEth ? '<br><small style="color:var(--text-muted);">📅 የተመደበበት ቀን: ' + techEsc(j.assignedDateEth) + '</small>' : ''}</span>
                             ${done ? `<span class="status-badge status-completed">✅ ተሰራ${doneLater ? ' — በሚቀጥለው ሪፖርት ይገባል' : ''}</span>`
                                    : `<select onchange="techSentStatusChange(this, '${r.id}', ${i})" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); font-size:0.8rem;"><option value="">❌ አልተጠናቀቀም</option><option value="done">✅ ተሰራ (ሀ)</option></select>`}
                         </div>`;
