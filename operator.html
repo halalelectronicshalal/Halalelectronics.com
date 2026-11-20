@@ -222,6 +222,11 @@ h3.phone{color:var(--phone)}h3.shop{color:var(--shop)}
     </div>
   </header>
 
+  <div class="card" id="opSearchCard" style="margin-bottom:12px">
+    <h3><i class="fas fa-search"></i> 🔍 በስልክ ቁጥር ፈልግ</h3>
+    <div class="field" style="margin-bottom:0"><input id="opSearch" type="tel" inputmode="tel" placeholder="የደንበኛ ስልክ ቁጥር (09XXXXXXXX) — ስራው የት እንደደረሰ ለማየት" oninput="phoneWatch('opSearch')" /><div class="pinfo" id="opSearchInfo"></div></div>
+  </div>
+
   <div class="forms">
     <div class="card form phone">
       <h3 class="phone"><i class="fas fa-phone"></i> 📞 በስልክ</h3>
@@ -304,7 +309,7 @@ h3.phone{color:var(--phone)}h3.shop{color:var(--shop)}
   </div>
 
   <div class="card" id="jobsCard">
-    <h3><i class="fas fa-list-check"></i> 📋 የስራዎቼ ሁኔታ</h3>
+    <h3><i class="fas fa-list-check"></i> 📋 የዛሬ ስራዎቼ ሁኔታ</h3>
     <div class="jf" id="jobFilters">
       <button data-f="open" class="on">⏳ በሂደት</button>
       <button data-f="bad">⚠️ ያልተጠናቀቁ</button>
@@ -916,11 +921,12 @@ function jobTime(o) { const d = toDate(o.createdAt); return d ? d.getTime() : 0;
 function renderJobs() {
   const box = $('jobsList'); if (!box) return;
   const _t = openNoteId && $('noteTxt_' + openNoteId); const _keep = _t ? _t.value : ''; // እየተጻፈ ያለ መልእክት እንዳይጠፋ
-  let list = myOrders.slice().sort((a, b) => jobTime(b) - jobTime(a));
+  const _today = dateKey(new Date());
+  let list = myOrders.filter(o => { const d = toDate(o.createdAt); return d && dateKey(d) === _today; }).sort((a, b) => jobTime(b) - jobTime(a));   // የዛሬ ስራ ብቻ
   const f = jobFilter;
   list = list.filter(o => f === 'all' ? true : f === 'open' ? OPEN_STATUSES.includes(o.status || 'Pending') : f === 'done' ? o.status === 'Completed' : (o.status && !OPEN_STATUSES.includes(o.status) && o.status !== 'Completed'));
   document.querySelectorAll('#jobFilters button').forEach(b => b.classList.toggle('on', b.dataset.f === f));
-  if (!list.length) { box.innerHTML = '<p class="muted" style="text-align:center;margin:10px 0">ምንም ስራ የለም</p>'; return; }
+  if (!list.length) { box.innerHTML = '<p class="muted" style="text-align:center;margin:10px 0">የዛሬ ስራ የለም — የቆየ ስራ ለማየት ከላይ በስልክ ቁጥር ይፈልጉ</p>'; return; }
   box.innerHTML = list.slice(0, 60).map(o => {
     const st = o.status || 'Pending';
     const [lab, cls] = ST_AM[st] || [st, 'wait'];
