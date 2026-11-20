@@ -3490,7 +3490,7 @@ document.addEventListener('click', function (e) {
         function isSectorStaff(d) { return !!(d && (d.isPhoneOperator === true || (Array.isArray(d.pages) && d.pages.length > 0))); }
         function staffById(id) { return allTechnicians.find(x => x.id === id) || allSectorStaff.find(x => x.id === id) || null; }
         function sectorLabels(d) {
-            const L = { finance: '💰 ፋይናንስ', newOrders: '🆕 አዲስ ትዕዛዞች', newEntry: '➕ አዲስ ግቤት' };
+            const L = { finance: '💰 ፋይናንስ', newOrders: '🆕 አዲስ ትዕዛዞች', newEntry: '➕ አዲስ ግቤት', shop: '🏪 ሱቅ ሻጭ' };
             const out = [];
             if (d.isPhoneOperator === true) out.push('📞 ኦፕሬተር');
             (Array.isArray(d.pages) ? d.pages : []).forEach(p => { if (L[p]) out.push(L[p]); });
@@ -4658,7 +4658,8 @@ document.addEventListener('click', function (e) {
         const PAGE_PERMS = [
             ['finance', '💰 ፋይናንስ (finance.html)', 'ገቢ/ወጪ፣ ብድር፣ የቴክኒሻን ገቢ ማጠቃለያ'],
             ['newOrders', '🆕 ስራ መዳቢ — አዲስ ትዕዛዞች (new-orders.html)', 'ያልተመደቡ ትዕዛዞችን ማየትና ለቴክኒሻን መመደብ · ቴክኒሻን «ነፃ ነኝ» ሲል ጽሁፍ (ቴሌግራም/SMS) ይደርሰዋል'],
-            ['newEntry', '➕ አዲስ ግቤት (new-entry.html)', 'ገቢ/ወጪ ግቤት ማስገባት']
+            ['newEntry', '➕ አዲስ ግቤት (new-entry.html)', 'ገቢ/ወጪ ግቤት ማስገባት'],
+            ['shop', '🏪 ሱቅ ሻጭ (shop.html)', 'የሱቅ እቃ መሸጥ — ብዛት እና ገቢ በራስ ይመዘገባል']
         ];
         // 🔐 በዚሁ አሳሽ ሌላ ሠራተኛ (ፋይናንስ/ኦፕሬተር ወዘተ) ከገባ Firebase ተጠቃሚው ይቀየራል → «Missing or insufficient permissions»።
         //    ከመጻፍ በፊት የአድሚኑን Firebase መግቢያ መልሶ ያረጋግጣል።
@@ -9430,6 +9431,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     <td>${shopBadge}</td>
                     <td>
                         <button class="btn btn-xs btn-primary" onclick="editInventory('${item.id}')"><i class="fas fa-edit"></i></button>
+                        <button class="btn btn-xs btn-success" onclick="restockInventory('${item.id}')" title="ብዛት ጨምር"><i class="fas fa-plus"></i></button>
                         <button class="btn btn-xs ${item.showInShop ? 'btn-secondary' : 'btn-success'}" onclick="toggleShopVisibility('${item.id}', ${item.showInShop ? 'false' : 'true'})" title="${item.showInShop ? 'ከሱቅ ደብቅ' : 'በሱቅ አሳይ'}"><i class="fas ${item.showInShop ? 'fa-eye' : 'fa-eye-slash'}"></i></button>
                         <button class="btn btn-xs btn-danger" onclick="deleteInventory('${item.id}')"><i class="fas fa-trash"></i></button>
                     </td>
@@ -9583,6 +9585,32 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             } catch (error) {
                 showToast('❌ ' + error.message, 'error');
             }
+        }
+
+        // ➕ ነባር እቃ ላይ ብዛት መጨመር (አዲስ እቃ ሲገባ) — ተደብቆ የነበረ (ያለቀ) እቃ ብዛት ሲጨመርለት እንደገና በሱቅ ይታያል
+        function restockInventory(id) {
+            const item = allInventory.find(i => i.id === id);
+            if (!item) { showToast('❌ እቃው አልተገኘም', 'error'); return; }
+            const nm = String(item.name || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+            openModal('➕ ብዛት ጨምር', `<p><b>${nm}</b><br><span class="text-muted">አሁን ያለ ብዛት፦ ${item.quantity || 0}${item.showInShop ? '' : ' · 👁️ ከሱቅ ተደብቋል'}</span></p>
+                <label>የሚጨመር ብዛት</label><input type="number" id="restockQty" min="1" step="1" inputmode="numeric" value="1" style="width:100%">`,
+                `<button class="btn btn-outline" onclick="closeModal()">ተው</button> <button class="btn btn-success" onclick="saveRestock('${id}')"><i class="fas fa-plus"></i> ጨምር</button>`);
+            setTimeout(() => { const e = document.getElementById('restockQty'); if (e) { e.focus(); e.select(); } }, 60);
+        }
+        async function saveRestock(id) {
+            const n = Math.floor(Number((document.getElementById('restockQty') || {}).value));
+            if (!n || n < 1 || n > 100000) { showToast('ትክክለኛ ብዛት ያስገቡ', 'error'); return; }
+            const item = allInventory.find(i => i.id === id) || {};
+            try {
+                await db.collection('inventory').doc(id).update({
+                    quantity: firebase.firestore.FieldValue.increment(n),
+                    showInShop: true, autoHidden: false,
+                    updatedAt: new Date()
+                });
+                try { await db.collection('activity').add({ user: heActorName(), action: 'restock_inventory', details: `➕ ${item.name || ''} ላይ ${n} ተጨምሯል`, timestamp: new Date() }); } catch (e) {}
+                showToast(`✅ ${n} ተጨምሯል${item.showInShop ? '' : ' — በሱቅ ይታያል'}`, 'success');
+                closeModal();
+            } catch (error) { showToast('❌ ' + error.message, 'error'); }
         }
 
         async function deleteInventory(id) {
