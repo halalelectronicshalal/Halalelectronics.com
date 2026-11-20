@@ -995,7 +995,8 @@ function renderFreeAnnounce() {
     document.getElementById('freeAnnounceList').innerHTML = rows.map(t => {
         const loc = (typeof t.freeLat === 'number' && typeof t.freeLng === 'number')
             ? ` · <a href="https://www.google.com/maps?q=${t.freeLat},${t.freeLng}" target="_blank" rel="noopener noreferrer">📍 ቦታ ይመልከቱ</a>` : ' · <span class="text-muted">ቦታ አልተላከም</span>';
-        return `<div class="order-row"><div class="order-info"><strong>👨‍🔧 ${escHtml(t.name || '—')}</strong> ${t.address && t.address !== '—' ? `<span class="tag">${escHtml(t.address)}</span>` : ''}<div class="text-muted" style="font-size:.82rem;">🕐 ${formatEthDateTime(new Date(toMs(t.freeAnnouncedAt)))}${loc}</div></div></div>`;
+        const fa = t.freeAddress ? ` <span class="tag" style="background:#DCFCE7;color:#166534">📍 ${escHtml(t.freeAddress)}</span>` : '';
+        return `<div class="order-row"><div class="order-info"><strong>👨‍🔧 ${escHtml(t.name || '—')}</strong>${fa} ${t.address && t.address !== '—' ? `<span class="tag">${escHtml(t.address)}</span>` : ''}<div class="text-muted" style="font-size:.82rem;">🕐 ${formatEthDateTime(new Date(toMs(t.freeAnnouncedAt)))}${loc}</div></div></div>`;
     }).join('');
 }
 function notifyFreeAnnounce(t) {
