@@ -287,7 +287,8 @@ function techOptionsHtml() {
         const addr = t.address && t.address !== '—' ? ' - ' + t.address : '';
         const rk = _rk.get(t.id);
         const rkTxt = rk ? ` 🏅#${rk.rank}·${rk.score}%` : '';
-        return `<option value="${escHtml(t.name)}" style="color:${ui.color};${st === 'busy' ? 'font-weight:700;' : ''}">${ui.dot} ${escHtml(t.name)}${rkTxt}${tags}${escHtml(addr)}</option>`;
+        const _glow = (t.status === 'free' && st === 'free' && !w); // 🟢 «ነጻ ነኝ» ያለ እና ዋርኒግ የሌለበት — በአረንጓዴ ይበራል
+                return `<option value="${escHtml(t.name)}" style="color:${_glow ? '#14532D' : ui.color};${st === 'busy' || _glow ? 'font-weight:700;' : ''}${_glow ? 'background:#BBF7D0;' : ''}">${_glow ? '🟢✨ ' : ui.dot + ' '}${escHtml(t.name)}${rkTxt}${tags}${escHtml(addr)}</option>`;
     }).join('');
 }
 function fieldTechs() { return allTechnicians.filter(t => !t.isPhoneOperator && !t.isOffice); } // 📞 ኦፕሬተሮች ለስራ አይመደቡም
