@@ -251,7 +251,7 @@ async function sendSmsNotification(message, phone) {
    HE.boot(staff => { ...ገጹን አስጀምር... })
    ============================================================ */
 const HE = (() => {
-    const PAGE_LABEL = { finance: ['finance.html', '💰 ፋይናንስ'], newOrders: ['new-orders.html', '🆕 አዲስ ትዕዛዞች'], newEntry: ['new-entry.html', '➕ አዲስ ግቤት'] };
+    const PAGE_LABEL = { finance: ['finance.html', '💰 ፋይናንስ'], newOrders: ['new-orders.html', '🆕 አዲስ ትዕዛዞች'], newEntry: ['new-entry.html', '➕ አዲስ ግቤት'], shop: ['shop.html', '🏪 ሱቅ'] };
 
     function injectChrome() {
         if (document.getElementById('heGate')) return;
