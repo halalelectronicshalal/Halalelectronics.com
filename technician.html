@@ -10018,6 +10018,12 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     const status = this.dataset.status;
                     let freePosition = null;
 
+                    // 🔒 «ነጻ ነኝ» ካሉ በኋላ ወደ «በስራ ላይ» መመለስ የሚቻለው የሚመለሱበት (የተመደበ ክፍት) ስራ ሲኖር ብቻ ነው
+                    if (status === 'working' && currentStatus === 'free' && techOpenJobs().length === 0) {
+                        techFreeBlocked('🔒 «ነጻ ነኝ» ካሉ በኋላ ወደ «በስራ ላይ» መመለስ የሚችሉት ስራ ሲመደብልዎት ብቻ ነው', 'error');
+                        return;
+                    }
+
                     // ✅ NEW: Availability Gate (fraud prevention) - ኮድ ደረጃ enforcement
                     // ቴክኒሻን የተመደበለት ስራ (Assigned) ገና ሳያጠናቅቅ "ነፃ ነኝ" ማለት በጭራሽ አይችልም።
                     // ይህ በ UI ብቻ ሳይሆን በራሱ በ button click logic ውስጥ ስለሚፈተሽ ማንም ሊያልፈው አይችልም።
@@ -10394,6 +10400,35 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             } catch (e) { console.warn('overnight enforce failed', e); }
         }
         setInterval(techEnforceOvernightWorking, 60000);
+
+        // 🔁 ራስ-ሰር ሁኔታ፦ ስራ ሲመደብ «ነጻ» → «በስራ ላይ»፤ ስራ ሲያልቅ/ሲመለስ (ክፍት ስራ ከሌለ) «በስራ ላይ» → «ነጻ»።
+        //    ቦታ (Location) እና push ማሳወቂያ ግን ቴክኒሻኑ «ነጻ» ቁልፍን ራሱ ሲነካ ብቻ ነው የሚላኩት — እዚህ ምንም አይላክም።
+        let techOrdersLoaded = false;
+        function techSyncAutoStatus() {
+            try {
+                if (!technicianId || !techOrdersLoaded || !Array.isArray(myOrders)) return;
+                const hasJob = myOrders.some(o => o.status === 'Assigned' && !isFutureAppointment(o));
+                if (hasJob && currentStatus === 'free') {
+                    currentStatus = 'working';
+                    techApplyStatusUI('working');
+                    saveStatus('working');
+                    try { showToast('✅ ስራ ተመድቦልዎታል — ሁኔታዎ «በስራ ላይ» ሆኗል', 'info'); } catch (e) {}
+                    return;
+                }
+                if (!hasJob && currentStatus === 'working') {
+                    if (!techSentReportsLoaded) return;
+                    if (myOrders.some(o => o.status === 'PhoneNoAnswer' && o.holdRequest && o.holdRequest.status === 'pending')) return;
+                    if (myOrders.some(o => o.returnRequest && o.returnRequest.status === 'pending')) return;
+                    const b = techOvernightBlockers() || { unreported: [] };
+                    if (b.missingDaily || (b.unreported && b.unreported.length)) return; // ሪፖርት እስኪላክ በስራ ላይ ይቆያል
+                    currentStatus = 'free';
+                    techApplyStatusUI('free');
+                    saveStatus('free'); // Firestore ብቻ — ቦታም ሆነ push የለም
+                    try { showToast('🟢 ክፍት ስራ ስለሌለ ሁኔታዎ «ነጻ» ሆኗል', 'info'); } catch (e) {}
+                }
+            } catch (e) { console.warn('auto status sync failed', e); }
+        }
+        setInterval(techSyncAutoStatus, 60000);
         async function saveStatus(status) {
             if (!technicianId) return;
             try {
@@ -10571,8 +10606,10 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     });
                     console.log('📋 Orders loaded for ' + technicianName + ':', myOrders.length);
                     try { if (myOrders.some(o => o.status === 'Assigned' && !isFutureAppointment(o))) techFreeLockClear(); } catch (e) {}
+                    techOrdersLoaded = true;
                     try { techApplyOpenStatusOnce(); } catch (e) { console.warn('open status failed', e); }
                     try { techStartSentReports(); techEnforceOvernightWorking(); } catch (e) {}
+                    try { techSyncAutoStatus(); } catch (e) {}
                     try { techReturnFutureAssigned(); } catch (e) {}
                     try { techActivateDueAppointments(); } catch (e) {}
                     try { techNotifyOvernightClosed(); } catch (e) {}
@@ -13015,6 +13052,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 try {
                     if (!openStatusApplied) techApplyOpenStatusOnce();
                     techEnforceOvernightWorking();
+                    techSyncAutoStatus();
                 } catch (e) { console.warn('open status after reports', e); }
                 techSentReports.sort((a, b) => {
                     const ta = a.submittedAt && a.submittedAt.toDate ? a.submittedAt.toDate().getTime() : 0;
