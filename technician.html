@@ -10007,6 +10007,28 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         function techFreeLockGet() { try { const v = localStorage.getItem(techFreeLockKey()); if (!v) return false; const t = parseInt(v, 10); if (t && getBizDateKey(new Date(t)) < getBizDateKey()) { localStorage.removeItem(techFreeLockKey()); return false; } return true; } catch (e) { return false; } }
         function techFreeLockSet() { try { localStorage.setItem(techFreeLockKey(), String(Date.now())); } catch (e) {} }
         function techFreeLockClear() { try { localStorage.removeItem(techFreeLockKey()); } catch (e) {} }
+        // 📍 «ነጻ ነኝ» ሲነካ «የት አካባቢ ነዎት?» የሚል ሳጥን — በጽሁፍ የገባው አድራሻ ከ GPS ቦታ ጋር ተያይዞ ይላካል
+        function techAskFreeAddress() {
+            return new Promise((resolve) => {
+                let last = ''; try { last = localStorage.getItem('he_last_free_addr') || ''; } catch (e) {}
+                const ov = document.createElement('div');
+                ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px';
+                ov.innerHTML = '<div style="background:var(--card-bg,#fff);color:var(--text,#111);border-radius:14px;max-width:420px;width:100%;padding:18px;box-shadow:0 10px 40px rgba(0,0,0,.35)">'
+                    + '<h3 style="margin:0 0 6px">📍 የት አካባቢ ነዎት?</h3>'
+                    + '<p style="margin:0 0 10px;font-size:.85rem;opacity:.75">አድራሻዎን በጽሁፍ ይሙሉ (ለምሳሌ፦ ቦሌ፣ ሜክሲኮ፣ ሲኤምሲ)። ከ GPS ቦታዎ ጋር ተያይዞ ለአድሚን ይላካል።</p>'
+                    + '<input id="heFreeAddrInp" type="text" maxlength="120" placeholder="አካባቢ / አድራሻ" style="width:100%;padding:11px;border:1.5px solid #94a3b8;border-radius:10px;font-size:1rem;box-sizing:border-box;background:transparent;color:inherit">'
+                    + '<div id="heFreeAddrErr" style="color:#dc2626;font-size:.8rem;margin-top:6px;display:none">እባክዎ አካባቢዎን ይጻፉ</div>'
+                    + '<div style="display:flex;gap:8px;margin-top:14px"><button type="button" id="heFreeAddrNo" style="flex:1;padding:11px;border-radius:10px;border:1px solid #94a3b8;background:transparent;color:inherit;cursor:pointer">ተው</button>'
+                    + '<button type="button" id="heFreeAddrOk" style="flex:2;padding:11px;border-radius:10px;border:0;background:#16a34a;color:#fff;font-weight:700;cursor:pointer">📤 ላክ</button></div></div>';
+                document.body.appendChild(ov);
+                const inp = ov.querySelector('#heFreeAddrInp'); inp.value = last; setTimeout(() => { try { inp.focus(); inp.select(); } catch (e) {} }, 50);
+                const done = (v) => { try { ov.remove(); } catch (e) {} resolve(v); };
+                const ok = () => { const v = inp.value.trim(); if (v.length < 2) { ov.querySelector('#heFreeAddrErr').style.display = 'block'; return; } try { localStorage.setItem('he_last_free_addr', v); } catch (e) {} done(v); };
+                ov.querySelector('#heFreeAddrOk').onclick = ok;
+                ov.querySelector('#heFreeAddrNo').onclick = () => done(null);
+                inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') ok(); });
+            });
+        }
         function setupStatusButtons() {
             document.querySelectorAll('.status-btn').forEach(btn => {
                 btn.addEventListener('click', async function() {
@@ -10017,6 +10039,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
                     const status = this.dataset.status;
                     let freePosition = null;
+                    let freeAddr = '';
 
                     // 🔒 «ነጻ ነኝ» ካሉ በኋላ ወደ «በስራ ላይ» መመለስ የሚቻለው የሚመለሱበት (የተመደበ ክፍት) ስራ ሲኖር ብቻ ነው
                     if (status === 'working' && currentStatus === 'free' && techOpenJobs().length === 0) {
@@ -10067,6 +10090,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     // 📍 ግዴታ፦ "ነጻ" ለማለት ቦታ (Location) መላክ አለበት። ቦታ ካልተገኘ ሁኔታው አይቀየርም።
                     if (status === 'free') {
                         if (freeLocationBusy) return; // ድርብ ንክኪ መከላከያ
+                        freeAddr = await techAskFreeAddress();
+                        if (freeAddr === null) return; // ተው — ሁኔታ አይቀየርም
                         freeLocationBusy = true;
                         const allBtns = document.querySelectorAll('.status-btn');
                         allBtns.forEach(b => b.disabled = true);
@@ -10113,7 +10138,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     // ✅ NEW: "ነፃ" ሲሉ GPS ቦታ ራሱ በራስ-ሰር ለ admin ይላክ (fraud prevention አካል)
                     if (status === 'free') {
                         techFreeLockSet();
-                        autoSendLocationOnFree(freePosition);
+                        autoSendLocationOnFree(freePosition, freeAddr);
                     }
 
                     // ✅ NEW: Online/On Duty toggle - status "off-duty" ካልሆነ live tracking ይጀምር፣ ከሆነ ይቆም
@@ -10273,7 +10298,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         }
 
         // 📨 «ነፃ ነኝ» ሲባል ለስራ መዳቢ (new-orders ገጽ ተጠቃሚ) በጽሁፍ (ቴሌግራም/SMS) እንዲደርስ - Worker `notifyDispatchers`
-        async function notifyDispatchersFree(text, smsText, pos) {
+        async function notifyDispatchersFree(text, smsText, pos, freeAddrFallback) {
             // 🆕 በ new-orders ገጽ ላይ በቀጥታ እንዲታይ - «ነፃ ነኝ» ያለበት ጊዜና ቦታ በራሱ staff ሰነድ ላይ ይመዘገባል
             try {
                 if (technicianId) {
@@ -10281,7 +10306,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         freeAnnouncedAt: new Date(),
                         freeLat: pos ? pos.lat : null,
                         freeLng: pos ? pos.lng : null,
-                        freeAccuracy: pos ? pos.acc : null
+                        freeAccuracy: pos ? pos.acc : null,
+                        freeAddress: (pos && pos.addr) ? pos.addr : (freeAddrFallback || '')
                     });
                 }
             } catch (e) { console.warn('free announce save failed:', e); }
@@ -10289,7 +10315,9 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             catch (e) { console.warn('notifyDispatchers failed:', e); }
         }
 
-        async function autoSendLocationOnFree(readyPosition) {
+        async function autoSendLocationOnFree(readyPosition, addrText) {
+            addrText = String(addrText || '').trim();
+            const addrTg = addrText ? (typeof tgEsc === 'function' ? tgEsc(addrText) : addrText) : '';
             const statusEl = document.getElementById('locationStatus');
             let position = readyPosition || null;
             if (!position) {
@@ -10303,7 +10331,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 if (statusEl) { statusEl.textContent = '⚠️ ቦታ ማግኘት አልተቻለም (የአካባቢ ፍቃድ/GPS ያብሩ)'; statusEl.style.color = 'var(--emergency)'; }
                 showToast('⚠️ ቦታ ማግኘት አልተቻለም። የአካባቢ (Location) ፍቃድ እና GPS ያብሩ', 'error');
                 await sendTelegramNotification(`🟢 *ነፃ ሆኗል* (ቦታ አልተላከም - GPS አልተገኘም)\n👨‍🔧 *ቴክኒሻን:* ${safeName}\n📅 ${formatEthDateTime(new Date())}`);
-                notifyDispatchersFree(`🟢 *ነፃ ሆኗል* (ቦታ አልተላከም)\n👨‍🔧 *ቴክኒሻን:* ${safeName}\n📅 ${formatEthDateTime(new Date())}`, `🟢 ነፃ ሆኗል: ${technicianName} (ቦታ አልተላከም)`, null);
+                notifyDispatchersFree(`🟢 *ነፃ ሆኗል* (ቦታ አልተላከም)\n👨‍🔧 *ቴክኒሻን:* ${safeName}\n📅 ${formatEthDateTime(new Date())}`, `🟢 ነፃ ሆኗል: ${technicianName} (ቦታ አልተላከም)`, null, addrText);
                 return;
             }
 
@@ -10321,7 +10349,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     accuracy: accuracy,
                     status: 'free',
                     timestamp: new Date(),
-                    autoSent: true
+                    autoSent: true,
+                    address: addrText || ''
                 });
             } catch (e) {
                 saved = false;
@@ -10333,13 +10362,14 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 `📍 *ነፃ ሆኗል - ቦታ ተላከ* 🗺️\n` +
                 `👨‍🔧 *ቴክኒሻን:* ${safeName}\n` +
                 `📌 *ቦታ:* ${lat}, ${lng}${accuracy ? ` (±${accuracy}ሜ)` : ''}\n` +
+                (addrTg ? `🏠 *አካባቢ:* ${addrTg}\n` : '') +
                 `🔗 https://www.google.com/maps?q=${lat},${lng}\n` +
                 `📅 ${formatEthDateTime(new Date())}`
             );
             notifyDispatchersFree(
-                `🟢 *ነፃ ሆኗል* 📍\n👨‍🔧 *ቴክኒሻን:* ${safeName}\n📌 *ቦታ:* ${lat}, ${lng}${accuracy ? ` (±${accuracy}ሜ)` : ''}\n🔗 https://www.google.com/maps?q=${lat},${lng}\n📅 ${formatEthDateTime(new Date())}`,
+                `🟢 *ነፃ ሆኗል* 📍\n👨‍🔧 *ቴክኒሻን:* ${safeName}\n📌 *ቦታ:* ${lat}, ${lng}${accuracy ? ` (±${accuracy}ሜ)` : ''}\n${addrTg ? `🏠 *አካባቢ:* ${addrTg}\n` : ''}🔗 https://www.google.com/maps?q=${lat},${lng}\n📅 ${formatEthDateTime(new Date())}`,
                 `🟢 ነፃ ሆኗል: ${technicianName}`, // SMS: ጽሁፍ ብቻ (ሊንክ/ቦታ የለም)
-                { lat: parseFloat(lat), lng: parseFloat(lng), acc: accuracy }
+                { lat: parseFloat(lat), lng: parseFloat(lng), acc: accuracy, addr: addrText }
             );
 
             if (statusEl) {
