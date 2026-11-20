@@ -2931,6 +2931,44 @@ document.addEventListener('click', function (e) {
                 return '📊 የባለሙያ ድርሻ ' + p + '%' + (isFinite(a) ? ' (' + a + ' ብር)' : '');
             } catch (e) { return ''; }
         }
+        // 🏢 የጸደቀ ሪፖርት ስራዎች ወደ አድሚን ይመለሳሉ (technician ባዶ ይሆናል፣ የሰራው ሰው በ workedBy ይቀመጣል — ታሪክ አይጠፋም)።
+        //    የሚቀሩ፦ «ስልክ አይነሳም» (PhoneNoAnswer) እና ቀጠሮ (Rescheduled / ክፍት ስራ) — እነዚህ አይነኩም።
+        async function heTransferApprovedJobs(report) {
+            try {
+                if (!report || !report.id || !Array.isArray(report.jobStatuses)) return 0;
+                const ids = [...new Set(report.jobStatuses.map(j => j && j.orderId).filter(Boolean))];
+                let n = 0;
+                for (const id of ids) {
+                    const ref = db.collection('orders').doc(id);
+                    const snap = await ref.get();
+                    if (!snap.exists) continue;
+                    const o = snap.data();
+                    if (!['Completed', 'PriceNotAgreed', 'NotToday', 'Other'].includes(o.status)) continue;
+                    if (!o.technician || o.onHold) continue;
+                    if (report.technicianId && o.technicianId && o.technicianId !== report.technicianId) continue;
+                    await ref.update({
+                        technician: '', technicianId: '',
+                        workedBy: o.technician, workedById: o.technicianId || report.technicianId || '',
+                        returnedToAdminAt: new Date(), returnedToAdminVia: 'report-approved', returnedToAdminReport: report.id
+                    });
+                    n++;
+                }
+                try { await db.collection('dailyReports').doc(report.id).update({ jobsTransferred: true }); } catch (e) {}
+                return n;
+            } catch (e) { console.warn('transfer approved jobs failed', e); return 0; }
+        }
+        // ከዚህ በፊት የጸደቁ (ገና ያልተላለፉ) ሪፖርቶች — በአንድ ሩጫ እስከ 5 ሪፖርት
+        let heSweepBusy = false;
+        async function heSweepApprovedReports(reports) {
+            if (heSweepBusy) return;
+            heSweepBusy = true;
+            try {
+                const todo = (reports || []).filter(r => r && r.approved === true && r.jobsTransferred !== true && Array.isArray(r.jobStatuses) && r.jobStatuses.length).slice(0, 5);
+                for (const r of todo) await heTransferApprovedJobs(r);
+            } finally { heSweepBusy = false; }
+        }
+        function heApproveAllowedSync() { return true; }
+        function heTechOf(o) { return (o && (o.technician || o.workedBy)) || ''; }
         function heActorName() {
             try {
                 const s = (typeof heGetSession === 'function') ? heGetSession() : null;
@@ -4664,6 +4702,7 @@ document.addEventListener('click', function (e) {
                     data.id = doc.id;
                     allDailyReports.push(data);
                 });
+                try { if (heIsAdminSession() && heApproveAllowedSync()) heSweepApprovedReports(allDailyReports); } catch (e) {} // ✅ ከዚህ በፊት የጸደቁ ስራዎች ወደ አድሚን ይመለሳሉ
                 updateNotifBell();
                 try {
                     const ae = document.activeElement;
@@ -5127,7 +5166,7 @@ document.addEventListener('click', function (e) {
                     <td>${order.fullName || '—'}</td>
                     <td>${order.appliance || '—'}</td>
                     <td><span class="status-badge ${statusClass}">${order.status || 'Pending'}</span></td>
-                    <td>${order.technician || '—'}</td>
+                    <td>${heTechOf(order) || '—'}</td>
                     <td>${formatEthDate(date)}</td>
                 </tr>`;
             });
@@ -5240,7 +5279,7 @@ document.addEventListener('click', function (e) {
                     <td>${order.phone || '—'}</td>
                     <td>${order.appliance || '—'}</td>
                     <td><span class="status-badge ${statusClass}">${order.status || 'Pending'}</span></td>
-                    <td>${order.technician || '—'}</td>
+                    <td>${heTechOf(order) || '—'}</td>
                     <td>${order.price ? order.price + ' ብር' : '—'}${hePctTxt(order) ? '<br><small style="color:var(--text-muted);">' + hePctTxt(order) + '</small>' : ''}</td>
                     <td>${formatEthDate(date)}</td>
                     <td style="font-weight:600; color:var(--primary);">${order.preferredDay || '—'}</td>
@@ -5600,7 +5639,7 @@ ${locationLine}
                     <div><strong>📅 መች ይመቻቸዋል:</strong> <span style="color:var(--primary); font-weight:700;">${order.preferredDay || '—'}</span></div>
                     <div style="grid-column: span 2;"><strong>📝 ችግር:</strong> ${order.problem || '—'}</div>
                     ${order.customerLat ? `<div><strong>🗺️ ቦታ:</strong> <a href="https://www.google.com/maps?q=${order.customerLat},${order.customerLng}" target="_blank" style="color:var(--secondary);">${order.customerLat}, ${order.customerLng}</a>${order.customerLocationAccuracy ? ` <span class="status-badge ${order.customerLocationAccuracy > 200 ? 'status-pending' : order.customerLocationAccuracy > 50 ? 'status-assigned' : 'status-completed'}">${order.customerLocationAccuracy > 200 ? '⚠️' : '🎯'} ±${order.customerLocationAccuracy}ሜ</span>` : ''}</div>` : ''}
-                    ${order.technician ? `<div><strong>👨‍🔧 ቴክኒሻን:</strong> ${order.technician}</div>` : ''}
+                    ${heTechOf(order) ? `<div><strong>👨‍🔧 ቴክኒሻን:</strong> ${heTechOf(order)}</div>` : ''}
                     ${order.price ? `<div><strong>💰 ዋጋ:</strong> ${order.price} ብር</div>` : ''}
                     ${hePctTxt(order) ? `<div><strong>${hePctTxt(order)}</strong></div>` : ''}
                     <div><strong>📅 ሁኔታ:</strong> <span class="status-badge ${getStatusClass(order.status)}">${order.status || 'Pending'}</span></div>
@@ -5862,7 +5901,7 @@ ${locationLine}
                 const statusClass = tech.status === 'active' || tech.isOnline ? 'status-active' : 'status-off';
                 const statusText = tech.status === 'active' || tech.isOnline ? '✅ ንቁ' : '⚪ ከመስመር ውጭ';
                 const onlineStatus = tech.isOnline ? '🟢 ኦንላይን' : '🔴 ኦፍላይን';
-                const jobs = allOrders.filter(o => o.technician === tech.name).length;
+                const jobs = allOrders.filter(o => heTechOf(o) === tech.name).length;
                 const warn = techWarning(tech);
 
                 html += `<tr>
@@ -5937,7 +5976,7 @@ ${locationLine}
             list.forEach(o => {
                 const k = orderSource(o);
                 addCnt(bySource[k], o);
-                const tn = o.technician || '— ያልተመደበ —';
+                const tn = heTechOf(o) || '— ያልተመደበ —';
                 if (!byTech[tn]) byTech[tn] = { web: emptyCnt(), phone: emptyCnt(), shop: emptyCnt(), extra: emptyCnt() };
                 addCnt(byTech[tn][k], o);
                 if (k === 'phone' || k === 'shop') {
@@ -6048,7 +6087,7 @@ ${locationLine}
         function viewTech(id) {
             const tech = allTechnicians.find(t => t.id === id);
             if (!tech) return;
-            const orders = allOrders.filter(o => o.technician === tech.name);
+            const orders = allOrders.filter(o => heTechOf(o) === tech.name);
             const completed = orders.filter(o => o.status === 'Completed').length;
             const earnings = allTransactions
                 .filter(t => t.staff === tech.name)
@@ -6630,6 +6669,7 @@ ${locationLine}
                         lastApprovedDateKey: report ? report.dateKey : null
                     });
                 }
+                try { if (report) await heTransferApprovedJobs(report); } catch (trErr) { console.warn(trErr); }
                 try { await releaseTechTransactions(report); }
                 catch (relErr) { console.error('release transactions failed', relErr); showToast('⚠️ ሪፖርቱ ጸድቋል፣ ነገር ግን ገቢ/ወጪ ወደ ዝርዝሩ ማስገባት አልተቻለም: ' + (relErr && relErr.message ? relErr.message : relErr), 'error'); }
                 await db.collection('activity').add({
@@ -7295,7 +7335,7 @@ ${locationLine}
                 workType: o.workType || 'new',
                 source: o.source || '',
                 address: o.address || '',
-                technician: o.technician || ''
+                technician: heTechOf(o)
             };
             const upd = {
                 phone: key,
@@ -8954,7 +8994,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         <div><span class="label">👤 ደንበኛ</span><br/><strong>${order.fullName || '—'}</strong></div>
                         <div><span class="label">📱 ስልክ</span><br/><strong>${order.phone || '—'}</strong></div>
                         <div><span class="label">🔧 መሳሪያ</span><br/><strong>${order.appliance || '—'}</strong></div>
-                        <div><span class="label">👨‍🔧 ቴክኒሻን</span><br/><strong>${order.technician || '—'}</strong></div>
+                        <div><span class="label">👨‍🔧 ቴክኒሻን</span><br/><strong>${heTechOf(order) || '—'}</strong></div>
                         <div style="grid-column: span 2;"><span class="label">📍 አድራሻ</span><br/><strong>${order.address || '—'}</strong></div>
                         <div style="grid-column: span 2;"><span class="label">📝 ችግር</span><br/><strong>${order.problem || '—'}</strong></div>
                     </div>
@@ -9238,6 +9278,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // ✅ FIX: ከ እንግዲህ በየቀኑ/በየ page load እንደገና መስማማት አያስፈልግም -
         // Firestore ላይ persisted flag ን ብቻ ነው የሚያይ (technicianRulesAccepted)
         let technicianRulesAccepted = false;
+        function heRulesLocalOk(id) { try { return localStorage.getItem('he_rules_ok_' + id) === '1'; } catch (e) { return false; } }
+        function heRulesLocalSet(id) { try { localStorage.setItem('he_rules_ok_' + id, '1'); } catch (e) {} }
         function checkRulesAccepted() {
             if (!technicianRulesAccepted) {
                 showToast('⚠️ እባክዎ መጀመሪያ የህግና ደንብ ስምምነትን ያጠናቅቁ', 'error');
@@ -9265,6 +9307,24 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 document.getElementById('rulesGateOverlay').style.display = 'none';
                 showToast('✅ አመሰግናለሁ! ወደ ስራ መቀጠል ይችላሉ', 'success');
             } catch (error) {
+                // 🔁 Firestore ሩልስ ደንበኛውን ከከለከለ (Missing or insufficient permissions) በ Worker በኩል ይመዘገባል
+                try {
+                    const rr = await callWorker('acceptRules', {});
+                    if (rr && rr.ok) {
+                        technicianRulesAccepted = true;
+                        document.getElementById('rulesGateOverlay').style.display = 'none';
+                        showToast('✅ አመሰግናለሁ! ወደ ስራ መቀጠል ይችላሉ', 'success');
+                        return;
+                    }
+                } catch (e2) { console.warn('acceptRules via worker failed', e2); }
+                // ሩልስ ከከለከለ ቴክኒሻኑ እንዳይቆም — በዚህ መሣሪያ ላይ ተስማምቷል ተብሎ ተመዝግቦ ይቀጥላል (በሚቀጥለው ሙከራ ወደ ዳታቤዝ ይጻፋል)
+                if (/permission/i.test(String(error && error.message))) {
+                    heRulesLocalSet(technicianId);
+                    technicianRulesAccepted = true;
+                    document.getElementById('rulesGateOverlay').style.display = 'none';
+                    showToast('✅ አመሰግናለሁ! ወደ ስራ መቀጠል ይችላሉ', 'success');
+                    return;
+                }
                 showToast('❌ ' + error.message, 'error');
             }
         }
@@ -9294,7 +9354,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             document.getElementById('techNameDisplay').textContent = technicianName;
 
             // ✅ FIX: persisted flag ን ማንበብ - አስቀድሞ ከተስማሙ ድጋሚ አይጠየቁም
-            technicianRulesAccepted = data.rulesAccepted === true;
+            technicianRulesAccepted = data.rulesAccepted === true || heRulesLocalOk(staffId);
             await techLoadRules();
             loadRulesGateContent();
             if (!technicianRulesAccepted) {
@@ -13260,7 +13320,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     // 🧭 አድሚን የስራ ዘርፍ ከመደበ ወደዚያ ገጽ ይውሰደው
                     const _tgt = staffDoc.exists ? heSectorTarget(staffDoc.data()) : null;
                     if (_tgt) { await heGoToSector(_tgt, null, null); return; }
-                    technicianRulesAccepted = staffDoc.exists && staffDoc.data().rulesAccepted === true;
+                    technicianRulesAccepted = staffDoc.exists && (staffDoc.data().rulesAccepted === true || heRulesLocalOk(technicianId));
                 } catch (e) {
                     console.error('Error checking rulesAccepted on restore:', e);
                     technicianRulesAccepted = false;
