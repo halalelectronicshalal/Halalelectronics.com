@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0F4C81" />
+<title>ሀላል - ሱቅ</title>
+<link rel="manifest" href="shop-manifest.json" />
+<link rel="icon" href="icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Ethiopic:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="stylesheet" href="he-common.css" />
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script>window.APP_ROLE = "shop"; // 🔐 ለብቻ session</script>
+<script src="he-common.js"></script>
+<script src="he-extras.js" defer></script>
+<style>
+.shop-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.shop-tools input,.shop-tools select{flex:1;min-width:140px;padding:10px;border:1.5px solid var(--border,#cbd5e1);border-radius:10px;font-size:1rem;background:transparent;color:inherit}
+.shop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.shop-card{border:1px solid var(--border,#e2e8f0);border-radius:14px;padding:10px;background:var(--card-bg,#fff);display:flex;flex-direction:column;gap:6px}
+.shop-card img{width:100%;height:130px;object-fit:cover;border-radius:10px;background:#e2e8f0}
+.shop-card h4{margin:0;font-size:1rem}
+.shop-card .pr{font-weight:800;color:var(--primary,#0F4C81);font-size:1.1rem}
+.shop-card .stk{font-size:.8rem;color:var(--success,#16a34a)}
+.shop-card .stk.low{color:#d97706}
+.shop-sell{display:flex;gap:6px;margin-top:auto}
+.shop-sell input{width:70px;padding:9px;border:1.5px solid var(--border,#cbd5e1);border-radius:10px;font-size:1rem;text-align:center;background:transparent;color:inherit}
+.shop-sell button{flex:1;padding:10px;border:0;border-radius:10px;background:#16a34a;color:#fff;font-weight:700;cursor:pointer}
+.shop-sell button:disabled{opacity:.5}
+.sale-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border-light,#e2e8f0)}
+.sale-row.cx{opacity:.5;text-decoration:line-through}
+</style>
+</head>
+<body>
+<header class="he-top">
+    <h1><i class="fas fa-store"></i> ሱቅ</h1>
+    <div class="he-actions">
+        <span class="who" id="heWho"></span>
+        <button type="button" onclick="HE.logout()"><i class="fas fa-sign-out-alt"></i> ውጣ</button>
+    </div>
+</header>
+<main class="he-wrap" style="max-width:1000px;">
+    <div class="stats-grid" style="grid-template-columns:1fr 1fr;">
+        <div class="stat-card"><div class="number" id="sTodayTotal" style="color:var(--success);">0 ብር</div><div class="label">የዛሬ ሽያጭ (የእርስዎ)</div></div>
+        <div class="stat-card"><div class="number" id="sTodayCount">0</div><div class="label">የተሸጡ ብዛት</div></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h3><i class="fas fa-boxes-stacked"></i> 🛍️ የሱቅ እቃዎች</h3><span class="text-muted" id="itemCount"></span></div>
+        <div class="shop-tools">
+            <input id="shopSearch" type="search" placeholder="🔍 እቃ ፈልግ (ስም / ቁጥር)" oninput="renderItems()" />
+            <select id="shopCat" onchange="renderItems()"><option value="">ሁሉም ዓይነት</option></select>
+        </div>
+        <div id="shopGrid" class="shop-grid"><p class="text-muted">እየጫነ ነው...</p></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h3><i class="fas fa-receipt"></i> 🧾 የዛሬ ሽያጮቼ</h3></div>
+        <div id="salesList"><p class="text-muted text-center">ምንም ሽያጭ የለም</p></div>
+    </div>
+</main>
+
+<script>
+let items = [];
+const qtyDraft = {};
+let sellBusy = false;
+const fmt = (n) => (Number(n) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+const urlOf = (raw) => { const m = String(raw || '').match(/https?:\/\/[^\s"'<>]+/); return m ? m[0] : ''; };
+const FALLBACK_IMG = 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=300';
+
+function renderItems() {
+    const q = (document.getElementById('shopSearch').value || '').trim().toLowerCase();
+    const cat = document.getElementById('shopCat').value;
+    // ዝርዝሩ ከመሳሉ በፊት የተጻፈ ብዛት እንዳይጠፋ
+    document.querySelectorAll('#shopGrid [data-qty]').forEach(i => { qtyDraft[i.getAttribute('data-qty')] = i.value; });
+    const list = items.filter(i => (Number(i.quantity) || 0) > 0 && i.showInShop === true)
+        .filter(i => !cat || i.category === cat)
+        .filter(i => !q || String(i.name || '').toLowerCase().includes(q) || String(i.partNumber || '').toLowerCase().includes(q))
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+    document.getElementById('itemCount').textContent = list.length + ' እቃ';
+    const grid = document.getElementById('shopGrid');
+    if (!list.length) { grid.innerHTML = '<p class="text-muted" style="grid-column:1/-1;text-align:center">ምንም እቃ አልተገኘም</p>'; return; }
+    grid.innerHTML = list.map(i => {
+        const left = Number(i.quantity) || 0;
+        const price = Number(i.sellingPrice) || 0;
+        const img = urlOf(i.photoUrl) || FALLBACK_IMG;
+        const id = escHtml(i.id);
+        return `<div class="shop-card">
+            <img src="${escHtml(img)}" alt="${escHtml(i.name || '')}" loading="lazy" onerror="this.onerror=null;this.src='${FALLBACK_IMG}'" />
+            <h4>${escHtml(i.name || '—')}</h4>
+            <div class="text-muted" style="font-size:.8rem">${escHtml(i.category || '')}${i.partNumber ? ' · #' + escHtml(i.partNumber) : ''}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+                <span class="pr">${price ? fmt(price) + ' ብር' : 'ዋጋ የለም'}</span>
+                <span class="stk ${left <= 3 ? 'low' : ''}">ቀሪ፦ ${left}</span>
+            </div>
+            <div class="shop-sell">
+                <input type="number" min="1" max="${left}" step="1" inputmode="numeric" value="${escHtml(qtyDraft[i.id] || 1)}" data-qty="${id}" />
+                <button type="button" data-sell="${id}" ${price ? '' : 'disabled title="ዋጋ አልተመዘገበም"'}><i class="fas fa-cash-register"></i> ሸጥኩ</button>
+            </div>
+        </div>`;
+    }).join('');
+}
+function fillCats() {
+    const sel = document.getElementById('shopCat'); const cur = sel.value;
+    const cats = [...new Set(items.filter(i => i.showInShop === true && (Number(i.quantity) || 0) > 0).map(i => i.category).filter(Boolean))].sort();
+    sel.innerHTML = '<option value="">ሁሉም ዓይነት</option>' + cats.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+    if (cats.includes(cur)) sel.value = cur;
+}
+
+async function sell(id) {
+    if (sellBusy) return;
+    const it = items.find(x => x.id === id); if (!it) return;
+    const inp = document.querySelector(`#shopGrid [data-qty="${CSS.escape(id)}"]`);
+    const qty = Math.floor(Number(inp && inp.value));
+    const left = Number(it.quantity) || 0;
+    if (!qty || qty < 1) { showToast('ብዛት ያስገቡ', 'error'); return; }
+    if (qty > left) { showToast('❌ ቀሪው ' + left + ' ብቻ ነው', 'error'); return; }
+    const total = (Number(it.sellingPrice) || 0) * qty;
+    if (!confirm(`${it.name} × ${qty}\nጠቅላላ፦ ${fmt(total)} ብር\n\nይሸጥ?`)) return;
+    sellBusy = true;
+    document.querySelectorAll('#shopGrid [data-sell]').forEach(b => b.disabled = true);
+    try {
+        const r = await callWorker('shopSale', { itemId: id, qty });
+        if (r && r.ok) {
+            delete qtyDraft[id];
+            showToast(`✅ ተሸጠ — ${fmt(r.total)} ብር${r.hidden ? ' (እቃው አልቋል፣ ተደብቋል)' : ''}`, 'success');
+            loadSales();
+        } else {
+            const E = { 'insufficient': '❌ በቂ ብዛት የለም (ቀሪ ' + (r && r.available) + ')', 'no-price': '❌ ለዚህ እቃ ዋጋ አልተመዘገበም', 'not-found': '❌ እቃው አልተገኘም', 'busy': '⏳ ተጨናንቋል፣ ደግመው ይሞክሩ', 'too-many-attempts': '⛔ ብዙ ሙከራ — ቆይተው ይሞክሩ' };
+            showToast((r && E[r.error]) || '❌ መሸጥ አልተቻለም', 'error');
+        }
+    } catch (e) { showToast('❌ ግንኙነት አልተሳካም — ደግመው ይሞክሩ (ሽያጩ መመዝገቡን በዝርዝሩ ያረጋግጡ)', 'error'); loadSales(); }
+    sellBusy = false;
+    renderItems();
+}
+
+async function loadSales() {
+    try {
+        const r = await callWorker('shopSalesToday', {});
+        if (!r || !r.ok) return;
+        const sales = r.sales || [];
+        const live = sales.filter(s => s.status === 'sold');
+        document.getElementById('sTodayTotal').textContent = fmt(live.reduce((a, s) => a + (Number(s.total) || 0), 0)) + ' ብር';
+        document.getElementById('sTodayCount').textContent = live.reduce((a, s) => a + (Number(s.qty) || 0), 0);
+        const box = document.getElementById('salesList');
+        if (!sales.length) { box.innerHTML = '<p class="text-muted text-center">ምንም ሽያጭ የለም</p>'; return; }
+        box.innerHTML = sales.map(s => {
+            const t = s.at ? new Date(s.at) : null;
+            const time = t && !isNaN(t) ? t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+            const cx = s.status !== 'sold';
+            return `<div class="sale-row ${cx ? 'cx' : ''}">
+                <div style="flex:1;min-width:0"><b>${escHtml(s.itemName)}</b> × ${escHtml(s.qty)} <span class="text-muted" style="font-size:.8rem">${escHtml(time)}</span></div>
+                <div style="font-weight:700;white-space:nowrap">${fmt(s.total)} ብር</div>
+                ${cx ? '<span class="text-muted" style="font-size:.8rem">ተመልሷል</span>' : `<button class="btn btn-xs btn-outline" data-cancel="${escHtml(s.id)}" title="ስህተት ከሆነ መልስ">↩️ መልስ</button>`}
+            </div>`;
+        }).join('');
+    } catch (e) { console.warn('sales load failed', e); }
+}
+async function cancelSale(id) {
+    if (!confirm('ይህ ሽያጭ ይመለስ? ብዛቱ ወደ እቃው ይመለሳል፣ ገቢውም ይሰረዛል።')) return;
+    try {
+        const r = await callWorker('shopSaleCancel', { saleId: id });
+        showToast(r && r.ok ? '↩️ ሽያጩ ተመልሷል' : '❌ መመለስ አልተቻለም' + (r && r.error === 'not-today' ? ' (የዛሬ ሽያጭ ብቻ ይመለሳል)' : ''), r && r.ok ? 'success' : 'error');
+    } catch (e) { showToast('❌ ግንኙነት አልተሳካም', 'error'); }
+    loadSales();
+}
+
+document.addEventListener('click', (e) => {
+    const s = e.target.closest && e.target.closest('[data-sell]'); if (s) { sell(s.getAttribute('data-sell')); return; }
+    const c = e.target.closest && e.target.closest('[data-cancel]'); if (c) cancelSale(c.getAttribute('data-cancel'));
+});
+
+HE.boot(() => {
+    db.collection('inventory').where('showInShop', '==', true).onSnapshot((snap) => {
+        items = []; snap.forEach(d => { const x = d.data(); x.id = d.id; items.push(x); });
+        fillCats(); renderItems();
+    }, (e) => { console.warn('inventory listener', e); document.getElementById('shopGrid').innerHTML = '<p class="text-muted">እቃዎችን መጫን አልተቻለም</p>'; });
+    loadSales();
+    setInterval(loadSales, 60000);
+}, { title: 'ሱቅ — የሻጭ መግቢያ', page: 'shop' });
+</script>
+</body>
+</html>
