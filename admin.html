@@ -1643,6 +1643,17 @@ document.addEventListener('click', function (e) {
                 </div>
             </div>
 
+            <!-- 🔎 ስልክ ቁጥር ፍለጋ — በዚህ ስልክ የተመዘገበ ደንበኛም ሆነ ሰራተኛ ሙሉ ዝርዝር -->
+            <div id="admSearchWrap" style="padding:8px 14px 0;">
+                <div style="display:flex; gap:6px; align-items:center;">
+                    <input type="tel" id="admSearchPhone" inputmode="tel" placeholder="🔎 ስልክ ቁጥር ይፈልጉ (ደንበኛ ወይም ሰራተኛ) — 09XXXXXXXX" autocomplete="off"
+                        oninput="admSearchWatch()" onkeydown="if(event.key==='Enter'){admSearchRun();}"
+                        style="flex:1; padding:9px 12px; border:1.5px solid var(--border); border-radius:10px; background:var(--card); color:var(--text); font-size:0.9rem;">
+                    <button type="button" class="btn btn-outline btn-sm" onclick="admSearchClear()" title="አጽዳ" style="padding:8px 10px;">✖</button>
+                </div>
+                <div id="admSearchResult" style="display:none; margin-top:8px;"></div>
+            </div>
+
             <!-- ============================================================
             TAB: DASHBOARD
             ============================================================ -->
@@ -3011,6 +3022,105 @@ document.addEventListener('click', function (e) {
             } finally { heSweepBusy = false; }
         }
         function heApproveAllowedSync() { return true; }
+
+        // 🔎 ስልክ ቁጥር ፍለጋ (አድሚን) — በዚህ ስልክ የተመዘገበ ደንበኛ እና/ወይም ሰራተኛ ሙሉ ዝርዝር
+        let _admSearchT = null, _admSearchSeq = 0;
+        function admSearchVars(raw) {
+            const d = String(raw || '').replace(/\D/g, '');
+            if (d.length < 9) return [];
+            const tail = d.slice(-9);
+            return [...new Set([String(raw).trim(), tail, '0' + tail, '251' + tail, '+251' + tail])];
+        }
+        function admSearchWatch() {
+            clearTimeout(_admSearchT);
+            const box = document.getElementById('admSearchResult');
+            if (!admSearchVars(document.getElementById('admSearchPhone').value).length) { if (box) { box.style.display = 'none'; box.innerHTML = ''; } return; }
+            _admSearchT = setTimeout(admSearchRun, 600);
+        }
+        function admSearchClear() {
+            const i = document.getElementById('admSearchPhone'); if (i) i.value = '';
+            const box = document.getElementById('admSearchResult'); if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+        }
+        async function admSearchRun() {
+            const input = document.getElementById('admSearchPhone'), box = document.getElementById('admSearchResult');
+            if (!input || !box) return;
+            const vars = admSearchVars(input.value);
+            if (!vars.length) { box.style.display = 'block'; box.innerHTML = '<div class="card" style="padding:10px;">ሙሉ ስልክ ቁጥር (9 ዲጂት እና በላይ) ያስገቡ</div>'; return; }
+            const seq = ++_admSearchSeq;
+            box.style.display = 'block'; box.innerHTML = '<div class="card" style="padding:10px;">⏳ እየተፈለገ ነው...</div>';
+            const orders = {}, staff = {}; let cust = null, err = null;
+            const tail = vars[1];
+            try {
+                const jobs = [];
+                for (const f of ['phone', 'altPhone']) jobs.push(db.collection('orders').where(f, 'in', vars).get().then(sn => sn.forEach(d => { orders[d.id] = Object.assign({ id: d.id }, d.data()); })).catch(e => { err = e; }));
+                jobs.push(db.collection('staff').where('phone', 'in', vars).get().then(sn => sn.forEach(d => { staff[d.id] = Object.assign({ id: d.id }, d.data()); })).catch(e => { err = e; }));
+                jobs.push(db.collection('customers').doc('0' + tail).get().then(d => { if (d.exists) cust = d.data(); }).catch(() => {}));
+                await Promise.all(jobs);
+            } catch (e) { err = e; }
+            if (seq !== _admSearchSeq) return;
+            const ts = o => { const d = o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : null; return d ? d.getTime() : 0; };
+            const list = Object.values(orders).filter(o => o.orderType !== 'referral' && !o.workTag).sort((a, b) => ts(b) - ts(a));
+            const staffList = Object.values(staff);
+            // ለሰራተኛ፦ የስራ ቆጠራ
+            for (const st of staffList) {
+                try {
+                    const sn = await db.collection('orders').where('technician', '==', st.name).get();
+                    let open = 0, done = 0; sn.forEach(d => { const x = d.data(); if (x.status === 'Completed') done++; else if (['Assigned', 'Pending'].includes(x.status)) open++; });
+                    const sw = await db.collection('orders').where('workedBy', '==', st.name).get();
+                    sw.forEach(d => { if (d.data().status === 'Completed') done++; });
+                    st._open = open; st._done = done;
+                } catch (e) { /* ችላ */ }
+            }
+            if (seq !== _admSearchSeq) return;
+            const SL = { Pending: '⏳ በመጠባበቅ', Assigned: '📋 ተመድቧል', Completed: '✅ ተጠናቋል', PriceNotAgreed: '💰 ዋጋ አልተስማሙም', Rescheduled: '📅 ለሌላ ቀን', NotToday: '📝 ዛሬ አይመቻቸውም', PhoneNoAnswer: '📵 ስልክ አይነሳም', Other: '📌 ሌላ', Cancelled: '🚫 ተሰርዟል', Canceled: '🚫 ተሰርዟል' };
+            const ROLE = { admin: '👑 አድሚን', technician: '🔧 ቴክኒሻን', operator: '🎧 ኦፕሬተር' };
+            const STS = { active: '✅ ንቁ', working: '🔴 በስራ ላይ', free: '🟢 ነጻ', 'off-duty': '⚪ ዛሬ አልወጣም', pending: '⏳ ማረጋገጫ በመጠባበቅ', rejected: '❌ ተከልክሏል', inactive: '⛔ ታግዷል' };
+            const row = (k, v) => (v === undefined || v === null || v === '' ? '' : `<div><span style="color:var(--text-muted);">${k}:</span> <b>${escHtml(String(v))}</b></div>`);
+            const dt = v => (v ? formatEthDateTime(v) : '');
+            let html = '';
+            if (!staffList.length && !list.length && !cust) {
+                html = `<div class="card" style="padding:12px;">${err ? 'ℹ️ መፈለግ አልተቻለም' + (err.code === 'permission-denied' ? ' (ፈቃድ የለም — Firestore rules)' : '') : 'ℹ️ በዚህ ስልክ ቁጥር የተመዘገበ ደንበኛም ሆነ ሰራተኛ አልተገኘም'}</div>`;
+            } else {
+                staffList.forEach(st => {
+                    html += `<div class="card" style="padding:12px; margin-bottom:8px; border-left:4px solid var(--primary);">
+                        <div style="font-weight:700; margin-bottom:4px;">${ROLE[st.role] || '👤 ሰራተኛ'} — ${escHtml(st.name || '—')}</div>
+                        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:2px 12px; font-size:0.85rem;">
+                            ${row('📞 ስልክ', st.phone)}${row('ሁኔታ', STS[st.status] || st.status)}${row('📅 የተመዘገበበት', dt(st.createdAt || st.registeredAt))}
+                            ${row('✔️ የጸደቀበት', dt(st.approvedAt))}${row('🕒 መጨረሻ የታየ', dt(st.lastHeartbeat))}${row('🔑 መጨረሻ የገባበት', dt(st.lastLogin))}
+                            ${row('📍 አድራሻ', st.address)}${row('ገጾች', Array.isArray(st.pages) ? st.pages.join('، ') : '')}${row('ማጽደቅ መብት', st.role === 'admin' ? (st.canApprove === false ? 'የለውም' : 'አለው') : '')}
+                            ${st._open !== undefined ? row('🛠️ ክፍት ስራ', st._open) + row('✅ የጨረሳቸው ስራዎች', st._done) : ''}
+                        </div></div>`;
+                });
+                if (cust || list.length) {
+                    const f = list.find(o => o.fullName || o.address) || {};
+                    const name = (cust && cust.name) || f.fullName || '—';
+                    const addr = (cust && cust.address && cust.address !== '—') ? cust.address : (f.address || '');
+                    const nDone = list.filter(o => o.status === 'Completed').length, nOpen = list.filter(o => ['Pending', 'Assigned'].includes(o.status || 'Pending')).length;
+                    html += `<div class="card" style="padding:12px; margin-bottom:8px; border-left:4px solid #16A34A;">
+                        <div style="font-weight:700; margin-bottom:4px;">🧑‍💼 ደንበኛ — ${escHtml(name)}</div>
+                        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:2px 12px; font-size:0.85rem;">
+                            ${row('📞 ስልክ', input.value.trim())}${row('📍 አድራሻ', addr)}${row('📅 የመጀመሪያ ትዕዛዝ', list.length ? dt(list[list.length - 1].createdAt) : '')}
+                            ${row('ጠቅላላ ትዕዛዞች', list.length)}${row('✅ የተጠናቀቁ', nDone)}${row('⏳ ክፍት', nOpen)}
+                        </div>
+                        <div style="margin-top:8px; display:flex; flex-direction:column; gap:6px;">
+                        ${list.slice(0, 40).map(o => {
+                            const stt = o.status || 'Pending';
+                            const w = heTechOf(o);
+                            const reason = o.returnReason || o.notTodayReason || o.otherReason || o.cancelReason || '';
+                            return `<div style="padding:8px 10px; border-radius:8px; background:var(--bg); border:1px solid var(--border); font-size:0.83rem; line-height:1.55;">
+                                <b>🔌 ${escHtml(o.appliance || '—')}</b> · ${escHtml(SL[stt] || stt)} · 📅 ${escHtml(dt(o.createdAt) || '—')}<br>
+                                👨‍🔧 ${escHtml(w || 'ገና አልተመደበም')}${o.address ? ' · 📍 ' + escHtml(o.address) : ''}
+                                ${o.price ? '<br>💰 ' + escHtml(String(o.price)) + ' ብር' : ''}${o.expense ? ' · ወጪ ' + escHtml(String(o.expense)) : ''}${hePctTxt(o) ? '<br>' + escHtml(hePctTxt(o)) : ''}
+                                ${o.completedAt ? '<br>✅ የተጠናቀቀበት: ' + escHtml(dt(o.completedAt)) : ''}${o.rescheduledDate ? '<br>📅 ቀጠሮ: ' + escHtml(heEthDay(o.rescheduledDate)) + (o.rescheduledTime ? ' ' + escHtml(o.rescheduledTime) : '') : ''}
+                                ${reason ? '<br>ምክንያት: ' + escHtml(reason) : ''}${o.operatorNote ? '<br>✍️ ' + escHtml(o.operatorNote) : ''}
+                            </div>`;
+                        }).join('')}
+                        ${list.length > 40 ? '<div class="muted" style="font-size:0.8rem;">… እና ' + (list.length - 40) + ' ሌሎች</div>' : ''}
+                        </div></div>`;
+                }
+            }
+            box.innerHTML = html;
+        }
         function heTechOf(o) { return (o && (o.technician || o.workedBy)) || ''; }
         function heActorName() {
             try {
