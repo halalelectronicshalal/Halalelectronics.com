@@ -770,13 +770,15 @@ function updateFinanceStats() {
     const income = txIncome + collected;      // ጠቅላላ የገባ (ብድር የተሰበሰበን ጨምሮ)
     const expense = txExpense + paidOut;      // ጠቅላላ ወጪ (የከፈልነውን ብድር ጨምሮ)
     const net = income - expense - techShare; // ወደ ድርጅቱ የገባ ትርፍ ብቻ
+    // 🏪 የሱቅ ሽያጭ ገቢ (በ transactions ውስጥ source:'shop') — ከቴክኒሻን ገቢ ጋር አይደባለቅም፤ ከገቢ ውስጥ ተለይቶ ይታያል
+    const shopIncome = sum(txs.filter(t => t.type === 'income' && t.source === 'shop'), t => t.amount);
 
     const f = (n) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ብር';
     document.getElementById('finTotalIncome').textContent = f(income);
     document.getElementById('finTotalExpense').textContent = f(expense);
     document.getElementById('finNetProfit').textContent = f(net);
     const setNote = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
-    setNote('finIncomeNote', collected > 0 ? `ከዚህ ውስጥ ደንበኛ የከፈለን ብድር ${f(collected)}` : '');
+    setNote('finIncomeNote', [shopIncome > 0 ? `🏪 የሱቅ ሽያጭ ${f(shopIncome)}` : '', collected > 0 ? `ደንበኛ የከፈለን ብድር ${f(collected)}` : ''].filter(Boolean).join(' · '));
     setNote('finExpenseNote', paidOut > 0 ? `ከዚህ ውስጥ የከፈልነው ብድር ${f(paidOut)}` : '');
     setNote('finNetNote', techShare > 0 ? `ለሰራተኛ የተሰጠ ${f(techShare)} ተቀንሷል` : '');
 
@@ -872,6 +874,8 @@ async function saveEditedTransaction(txId) {
 }
 
 async function deleteTransaction(txId) {
+    const _t = allTransactions.find(t => t.id === txId);
+    if (_t && _t.source === 'shop' && !confirm('🏪 ይህ የሱቅ ሽያጭ ገቢ ነው። እዚህ መሰረዝ የእቃውን ብዛት አይመልስም (ስህተት ሽያጭ ከሆነ በሱቅ ገጽ «መልስ» ይጠቀሙ)። ቢሆንም ይሰረዝ?')) return;
     if (!confirm('እርግጠኛ ነዎት ይህን ግቤት መሰረዝ ይፈልጋሉ?')) return;
     try {
         await db.collection('transactions').doc(txId).delete();
@@ -1326,6 +1330,32 @@ async function releaseTechTransactions(report) {
     return n;
 }
 
+        // 🏢 የጸደቀ ሪፖርት ስራዎች ወደ አድሚን ይመለሳሉ (technician ባዶ ይሆናል፣ የሰራው ሰው በ workedBy ይቀመጣል — ታሪክ አይጠፋም)።
+        //    የሚቀሩ፦ «ስልክ አይነሳም» (PhoneNoAnswer) እና ቀጠሮ (Rescheduled / ክፍት ስራ) — እነዚህ አይነኩም።
+        async function heTransferApprovedJobs(report) {
+            try {
+                if (!report || !report.id || !Array.isArray(report.jobStatuses)) return 0;
+                const ids = [...new Set(report.jobStatuses.map(j => j && j.orderId).filter(Boolean))];
+                let n = 0;
+                for (const id of ids) {
+                    const ref = db.collection('orders').doc(id);
+                    const snap = await ref.get();
+                    if (!snap.exists) continue;
+                    const o = snap.data();
+                    if (!['Completed', 'PriceNotAgreed', 'NotToday', 'Other'].includes(o.status)) continue;
+                    if (!o.technician || o.onHold) continue;
+                    if (report.technicianId && o.technicianId && o.technicianId !== report.technicianId) continue;
+                    await ref.update({
+                        technician: '', technicianId: '',
+                        workedBy: o.technician, workedById: o.technicianId || report.technicianId || '',
+                        returnedToAdminAt: new Date(), returnedToAdminVia: 'report-approved', returnedToAdminReport: report.id
+                    });
+                    n++;
+                }
+                try { await db.collection('dailyReports').doc(report.id).update({ jobsTransferred: true }); } catch (e) {}
+                return n;
+            } catch (e) { console.warn('transfer approved jobs failed', e); return 0; }
+        }
 function heActorName() {
     try {
         const s = (typeof heGetSession === 'function') ? heGetSession() : null;
@@ -1349,6 +1379,7 @@ async function approveReport(reportId, techId) {
         const report = allDailyReports.find(r => r.id === reportId);
         if (!techId && report) techId = report.technicianId;
         await db.collection('dailyReports').doc(reportId).update({ approved: true, approvedVia: 'admin-click', approvedDevice: (function(){ try { return localStorage.getItem('he_device_id') || ''; } catch (e) { return ''; } })(), approvedUA: String(navigator.userAgent || '').slice(0, 120), approvedAt: new Date(), approvedBy: (heGetSession() && heGetSession().staff && heGetSession().staff.id) || '', reopenedForApproval: false });
+        try { if (report) await heTransferApprovedJobs(report); } catch (trErr) { console.warn(trErr); }
         try { await releaseTechTransactions(report); } catch (relErr) { console.error('release transactions failed', relErr); showToast('⚠️ ሪፖርቱ ጸድቋል፣ ነገር ግን ገቢ/ወጪ ወደ ዝርዝሩ ማስገባት አልተቻለም: ' + (relErr && relErr.message ? relErr.message : relErr), 'error'); }
         if (techId) { try { await db.collection('staff').doc(techId).update({ lastApprovedDateKey: report ? report.dateKey : null }); } catch (e) { console.warn('lastApprovedDateKey update skipped', e); } }
         try { await db.collection('activity').add({ user: heUserName(), action: 'approve_report', details: `የ ${report ? report.technicianName : ''} ሪፖርት ጸደቀ (${report ? report.dateKey : ''})`, timestamp: new Date() }); } catch (e) {}
