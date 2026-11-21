@@ -3113,7 +3113,7 @@ document.addEventListener('click', function (e) {
                                 <b>🔌 ${escHtml(o.appliance || '—')}</b> · ${escHtml(SL[stt] || stt)} · 📅 ${escHtml(dt(o.createdAt) || '—')}<br>
                                 👨‍🔧 ${escHtml(w || 'ገና አልተመደበም')}${o.address ? ' · 📍 ' + escHtml(o.address) : ''}
                                 ${o.price ? '<br>💰 ' + escHtml(String(o.price)) + ' ብር' : ''}${o.expense ? ' · ወጪ ' + escHtml(String(o.expense)) : ''}${hePctTxt(o) ? '<br>' + escHtml(hePctTxt(o)) : ''}
-                                ${o.completedAt ? '<br>✅ የተጠናቀቀበት: ' + escHtml(dt(o.completedAt)) : ''}${o.rescheduledDate ? '<br>📅 ቀጠሮ: ' + escHtml(heEthDay(o.rescheduledDate)) + (o.rescheduledTime ? ' ' + escHtml(o.rescheduledTime) : '') : ''}
+                                ${o.completedAt ? '<br>✅ የተጠናቀቀበት: ' + escHtml(dt(o.completedAt)) : ''}${o.rescheduledDate ? '<br>📅 ቀጠሮ: ' + escHtml(heEthDay(o.rescheduledDate)) + (o.rescheduledTime ? ' ' + escHtml(heEthClockHM(o.rescheduledTime)) : '') : ''}
                                 ${reason ? '<br>ምክንያት: ' + escHtml(reason) : ''}${o.operatorNote ? '<br>✍️ ' + escHtml(o.operatorNote) : ''}
                             </div>`;
                         }).join('')}
@@ -3123,6 +3123,7 @@ document.addEventListener('click', function (e) {
             }
             box.innerHTML = html;
         }
+        function heEthClockHM(s) { var m = /^(\d{1,2}):(\d{2})/.exec(String(s || '')); if (!m) return String(s || ''); var h = +m[1]; var e = ((h + 6) % 12) || 12; var per = h < 6 ? 'ሌሊት' : h < 12 ? 'ጠዋት' : h < 18 ? 'ከሰዓት' : 'ማታ'; return e + ':' + m[2] + ' ' + per; } // 🕒 24 ሰዓት (HH:MM) → የኢትዮጵያ ሰዓት አቆጣጠር (6:00 = 12 ጠዋት)
         function heTechOf(o) { return (o && (o.technician || o.workedBy)) || ''; }
         function heActorName() {
             try {
@@ -6087,7 +6088,7 @@ document.addEventListener('focusout', function (e) {
             list.innerHTML = items.map(({ o, d }) => {
                 const days = schedDaysUntil(d);
                 const tn = o.technician || o.scheduledTechnician || '';
-                const when = days === 0 ? ('ዛሬ ' + (o.rescheduledTime || o.appointmentTime || '') + ' ላይ') : (days === 1 ? 'ነገ' : (days + ' ቀን ይቀራል'));
+                const when = days === 0 ? ('ዛሬ ' + heEthClockHM(o.rescheduledTime || o.appointmentTime || '') + ' ላይ') : (days === 1 ? 'ነገ' : (days + ' ቀን ይቀራል'));
                 const note = tn
                     ? `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#EFF6FF; color:#1E40AF; font-size:0.78rem;">👷 <b>${escHtml(tn)}</b> — ቀኑ ሲደርስ ወደ ሰራተኛው ይገባል</div>`
                     : `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#F3F4F6; color:#374151; font-size:0.78rem;">⏳ ገና አልተመደበም — ቀኑ ሲደርስ ወደ «አዲስ ትዕዛዞች» ይገባል</div>`;
@@ -6096,7 +6097,7 @@ document.addEventListener('focusout', function (e) {
                     <button class="btn btn-sm btn-success" onclick="assignOrder('${o.id}')"><i class="fas fa-check"></i> መድብ</button>` : '';
                 return `<div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid var(--border-light);">
                     <div style="flex:1; min-width:180px;">
-                        <div style="font-size:0.8rem; font-weight:700; color:#2563EB; margin-bottom:2px;">📅 ቀጠሮ: ${escHtml(formatEthDate(d, true))} (${when})${o.rescheduledTime ? ' · ' + escHtml(o.rescheduledTime) : ''}</div>
+                        <div style="font-size:0.8rem; font-weight:700; color:#2563EB; margin-bottom:2px;">📅 ቀጠሮ: ${escHtml(formatEthDate(d, true))} (${when})${o.rescheduledTime ? ' · ' + escHtml(heEthClockHM(o.rescheduledTime)) : ''}</div>
                         <div style="font-weight:600;">${escHtml(o.fullName || '—')} <span class="text-muted" style="font-weight:400; font-size:0.8rem;">• ${escHtml(o.appliance || '—')}</span></div>
                         <div class="text-muted" style="font-size:0.78rem;">📱 ${escHtml(o.phone || '—')} · 📍 ${escHtml(o.address || '—')}</div>
                         ${note}
@@ -6399,7 +6400,7 @@ document.addEventListener('focusout', function (e) {
         function schedHoldTag(o) {
             if (o && o.needsAdminAssign && o.status === 'Pending' && !(o.scheduledTechnician && o.scheduledReleaseDate)) return corrAdminTag(o);
             if (!o || !o.scheduledTechnician || !o.scheduledReleaseDate) return '';
-            return `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#EFF6FF; color:#1E40AF; font-size:0.78rem;">📌 ለ <b>${escHtml(o.scheduledTechnician)}</b> ተይዟል — ቀኑ (${escHtml(heEthDay(o.scheduledReleaseDate))}${o.scheduledReleaseTime ? ' ⏰ ' + escHtml(o.scheduledReleaseTime) : ''}) ሲደርስ ለሰራተኛው በራሱ ይላካል</div>`;
+            return `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#EFF6FF; color:#1E40AF; font-size:0.78rem;">📌 ለ <b>${escHtml(o.scheduledTechnician)}</b> ተይዟል — ቀኑ (${escHtml(heEthDay(o.scheduledReleaseDate))}${o.scheduledReleaseTime ? ' ⏰ ' + escHtml(heEthClockHM(o.scheduledReleaseTime)) : ''}) ሲደርስ ለሰራተኛው በራሱ ይላካል</div>`;
         }
         async function assignOrder(orderId) {
             // ✅ NEW: ከ Dashboard ላይ ካለው quick-assign select ወይም ከ Orders ትር ላይ ካለው select ይነበብ
@@ -9152,7 +9153,7 @@ ${locationLine}
         function admStage(o) {
             const st = o.status || 'Pending', t = o.technician || '';
             if (st === 'Pending') {
-                if (o.isAppointment && o.rescheduledDate) return `📅 ቀጠሮ ተይዟል (${heEthDay(o.rescheduledDate)}${o.rescheduledTime ? ' ' + o.rescheduledTime : ''})${t ? ' — ቴክኒሻን: ' + t : ''}`;
+                if (o.isAppointment && o.rescheduledDate) return `📅 ቀጠሮ ተይዟል (${heEthDay(o.rescheduledDate)}${o.rescheduledTime ? ' ' + heEthClockHM(o.rescheduledTime) : ''})${t ? ' — ቴክኒሻን: ' + t : ''}`;
                 if (!t && o.returnedAt) return '↩️ ከቴክኒሻን ተመልሷል — በአድሚን እጅ ነው (እንደገና አልተመደበም)';
                 return t ? `📋 ለ${t} ተመድቧል (ገና አልጀመረም)` : '⏳ በመጠባበቅ ላይ — ገና ቴክኒሻን አልተመደበም';
             }
@@ -9161,7 +9162,7 @@ ${locationLine}
         }
         function admSay(o) {
             const st = o.status || 'Pending', t = o.technician || '';
-            if (st === 'Pending' && o.isAppointment && o.rescheduledDate) return `ቀጠሮዎ ${heEthDay(o.rescheduledDate)}${o.rescheduledTime ? ' ' + o.rescheduledTime : ''} ላይ ነው${t ? '፤ ቴክኒሻኑ ' + t + ' ነው' : ''}። አሳውቀናል።`;
+            if (st === 'Pending' && o.isAppointment && o.rescheduledDate) return `ቀጠሮዎ ${heEthDay(o.rescheduledDate)}${o.rescheduledTime ? ' ' + heEthClockHM(o.rescheduledTime) : ''} ላይ ነው${t ? '፤ ቴክኒሻኑ ' + t + ' ነው' : ''}። አሳውቀናል።`;
             if (st === 'Pending' && !t) return o.returnedAt ? 'ስራዎ ከቴክኒሻኑ ተመልሷል፤ አሁን ሌላ ቴክኒሻን እንመድባለን።' : 'ስራዎ ተመዝግቧል፤ ቴክኒሻን ለመመደብ በሂደት ላይ ነው። ለመዳቢው አሳውቀናል።';
             if (st === 'Pending' || st === 'Assigned') return `ስራዎ ለቴክኒሻን ${t} ተመድቧል። አሁን አሳውቀነዋል፤ ተመልሶ ይደውልልዎታል።`;
             return `ስራዎ ገና አልተጠናቀቀም (${(ADM_STATUS_AM[st] || st).replace(/^\S+\s/, '')})፤ በቴክኒሻን ${t} ጋር ይገኛል። አሳውቀናል።`;
