@@ -1598,6 +1598,8 @@ document.addEventListener('click', function (e) {
             <div id="tab-dashboard" class="tab-content active">
 
                 <!-- ✅ NEW: ያልጸደቁ የቴክኒሻን ሪፖርቶች (ከላይ በግልጽ ይታያል፤ ምንም ከሌለ ይደበቃል) -->
+                <!-- 📋 ሪፖርት ያላደረጉ ቴክኒሻኖች — የትኞቹን ቀናት እንዳላደረጉ ዝርዝር + መልእክት መላኪያ -->
+                <div id="missingReportsCard"></div>
                 <div id="pendingReportsCard"></div>
                 <div id="holdRequestsCard"></div>
                 <div id="returnRequestsCard"></div>
@@ -2524,7 +2526,11 @@ document.addEventListener('click', function (e) {
                                 <label>⏰ ሰዓት *</label>
                                 <input type="time" id="anotherDayTime" />
                             </div>
-                            <button id="submitAnotherDay" class="btn btn-secondary btn-block"><i class="fas fa-calendar-plus"></i> አስገባ</button>
+                            <div id="anotherDayStepDest" style="display:none;">
+                                <label style="font-weight:600; display:block; margin:6px 0; font-size:0.85rem;">ቀጠሮው ሲደርስ ስራው ወዴት ይሂድ? (አንዱን ይንኩ)</label>
+                                <button id="anotherDayToOffice" type="button" class="btn btn-secondary btn-block" style="margin-bottom:6px;"><i class="fas fa-building"></i> 🏢 ቀጠሮ ሲደርስ ወደ ቢሮ ይመለስ</button>
+                                <button id="submitAnotherDay" type="button" class="btn btn-success btn-block"><i class="fas fa-user-check"></i> 👷 ቀጠሮ ሲደርስ ወደ እኔ ይመለስ</button>
+                            </div>
                         </div>
 
                         <!-- መ: Price Agreed (ዋጋ ተስማምተናል — ለሌላ ቀን/ሰዓት) -->
@@ -4707,6 +4713,94 @@ document.addEventListener('click', function (e) {
         const BIZ_DAY_START_MIN = 8 * 60 + 30;
         function bizNow(d) { return new Date((d ? d.getTime() : Date.now()) - BIZ_DAY_START_MIN * 60000); }
         function getBizDateKey(d) { return getDateKey(bizNow(d)); }
+        // ============================================================
+        // 📋 ሪፖርት ያላደረጉ ቴክኒሻኖች ካርድ — ከዛሬ በፊት ያሉ ቀናት (ህጉ ከ 2026-11-16 ጀምሮ)
+        // ============================================================
+        const MISS_RULE_START = '2026-11-16';
+        let missOpen = false;
+        function missingReportDays(tech) {
+            const yk = getBizDateKey(new Date(Date.now() - 86400000));
+            const have = new Set((allDailyReports || []).filter(r => r.technicianId === tech.id).map(r => String(r.dateKey || '').slice(0, 10)));
+            let first = '';
+            const note = (k) => { k = String(k || '').slice(0, 10); if (k && (!first || k < first)) first = k; };
+            have.forEach(note);
+            (allOrders || []).forEach(o => {
+                const mine = (o.technicianId || o.workedById) ? (o.technicianId || o.workedById) === tech.id : heTechOf(o) === tech.name;
+                if (!mine || !o.createdAt) return;
+                const ms = toMs(o.createdAt); if (ms) note(getBizDateKey(new Date(ms)));
+            });
+            const out = [];
+            if (!first) return out;
+            let k = first < MISS_RULE_START ? MISS_RULE_START : first, g = 0;
+            while (k <= yk && g++ < 400) {
+                if (!have.has(k)) out.push(k);
+                const d = new Date(k + 'T12:00:00'); d.setDate(d.getDate() + 1); k = getDateKey(d);
+            }
+            return out;
+        }
+        function renderMissingReportsCard() {
+            const box = document.getElementById('missingReportsCard'); if (!box) return;
+            try {
+                if (!allTechnicians.length || !allDailyReports) { box.innerHTML = ''; return; }
+                const rows = fieldTechs().filter(t => t.status !== 'suspended' && t.status !== 'rejected' && t.status !== 'pending')
+                    .map(t => ({ t, days: missingReportDays(t) })).filter(x => x.days.length)
+                    .sort((a, b) => b.days.length - a.days.length);
+                if (!rows.length) { box.innerHTML = ''; return; }
+                const typed = (document.getElementById('missMsg') || {}).value || '';
+                const eth = (k) => { try { return formatEthDate(new Date(k + 'T12:00:00'), true); } catch (e) { return k; } };
+                box.innerHTML = `<div class="card" style="border:2px solid #DC2626;">
+                    <div class="card-header" style="cursor:pointer;" onclick="missToggle()">
+                        <h3 style="color:#DC2626;"><i class="fas fa-file-circle-exclamation"></i> 📋 ሪፖርት ያላደረጉ ቴክኒሻኖች (${rows.length})</h3>
+                        <i class="fas fa-chevron-${missOpen ? 'up' : 'down'}"></i>
+                    </div>
+                    <div style="display:${missOpen ? 'block' : 'none'};">
+                        <div style="padding:8px 0;">
+                            <textarea id="missMsg" rows="2" placeholder="✍️ መልእክት ይጻፉ (ለተመረጡት ቴክኒሻኖች ማሳወቂያ ይላካል)..." style="width:100%; padding:10px; border:1.5px solid var(--border); border-radius:10px; background:var(--card); color:var(--text); font-size:.95rem; box-sizing:border-box;">${escHtml(typed)}</textarea>
+                            <div style="display:flex; gap:8px; margin-top:6px; flex-wrap:wrap; align-items:center;">
+                                <button class="btn btn-primary btn-sm" onclick="missSend()"><i class="fas fa-paper-plane"></i> ለተመረጡት ላክ</button>
+                                <button class="btn btn-outline btn-sm" onclick="missSelAll(true)">ሁሉንም ምረጥ</button>
+                                <button class="btn btn-outline btn-sm" onclick="missSelAll(false)">አጽዳ</button>
+                                <span class="text-muted" style="font-size:.78rem;">መልእክት ካልጻፉ ራስ-ሰር «ሪፖርት ያላደረጓቸው ቀናት» ዝርዝር ይላካል</span>
+                            </div>
+                        </div>
+                        ${rows.map(x => `<div style="border:1px solid var(--border); border-radius:10px; padding:10px; margin-top:8px;">
+                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                <input type="checkbox" class="missChk" value="${escHtml(x.t.id)}" checked />
+                                <strong>👤 ${escHtml(x.t.name || '—')}</strong>
+                                <span class="status-badge status-pending">⚠️ ${x.days.length} ቀን</span>
+                            </label>
+                            <div style="font-size:.82rem; margin-top:6px; line-height:1.6;">${x.days.map(k => `<span style="display:inline-block; margin:2px 4px 2px 0; padding:2px 8px; border-radius:8px; background:rgba(220,38,38,.1); color:#B91C1C;">📅 ${escHtml(eth(k))}</span>`).join('')}</div>
+                        </div>`).join('')}
+                    </div>
+                </div>`;
+                window._missRows = rows;
+            } catch (e) { console.warn('missing reports card failed', e); }
+        }
+        function missToggle() { missOpen = !missOpen; renderMissingReportsCard(); }
+        function missSelAll(v) { document.querySelectorAll('.missChk').forEach(c => c.checked = v); }
+        async function missSend() {
+            const ids = [...document.querySelectorAll('.missChk:checked')].map(c => c.value);
+            if (!ids.length) { showToast('ቴክኒሻን ይምረጡ', 'error'); return; }
+            const custom = ((document.getElementById('missMsg') || {}).value || '').trim();
+            const rows = window._missRows || [];
+            const eth = (k) => { try { return formatEthDate(new Date(k + 'T12:00:00'), false); } catch (e) { return k; } };
+            let sent = 0, noTok = 0;
+            for (const id of ids) {
+                const row = rows.find(r => r.t.id === id); if (!row) continue;
+                const body = (custom ? custom + '\n' : '') + 'ሪፖርት ያላደረጉባቸው ቀናት፦ ' + row.days.map(eth).join('፣ ');
+                try {
+                    await db.collection('pushQueue').add({ toStaffId: id, title: '⚠️ ሪፖርት ያልተደረገባቸው ቀናት አሉ', body: body.slice(0, 480), locationUrl: location.origin + location.pathname.replace(/[^/]*$/, 'technician.html'), createdAt: Date.now(), sent: false });
+                    sent++;
+                    if (!row.t.fcmToken) noTok++;
+                } catch (e) { console.warn('miss push failed', e); }
+            }
+            try { await db.collection('activity').add({ user: heActorName(), action: 'missing_report_notice', details: '📋 ሪፖርት ላላደረጉ ' + sent + ' ቴክኒሻን መልእክት ተላከ', timestamp: new Date() }); } catch (e) {}
+            showToast('✅ ለ ' + sent + ' ቴክኒሻን ተልኳል' + (noTok ? ' (' + noTok + ' ሰው ማሳወቂያ አልፈቀደም)' : ''), 'success');
+            const m = document.getElementById('missMsg'); if (m) m.value = '';
+        }
+        setInterval(() => { try { if (!document.activeElement || document.activeElement.id !== 'missMsg') renderMissingReportsCard(); } catch (e) {} }, 120000);
+        setTimeout(() => { try { renderMissingReportsCard(); } catch (e) {} }, 5000);
+
         function loadDailyReports() {
             db.collection('dailyReports').onSnapshot((snapshot) => {
                 allDailyReports = [];
@@ -4715,6 +4809,7 @@ document.addEventListener('click', function (e) {
                     data.id = doc.id;
                     allDailyReports.push(data);
                 });
+                try { if (!document.activeElement || document.activeElement.id !== 'missMsg') renderMissingReportsCard(); } catch (e) {}
                 try { if (heIsAdminSession() && heApproveAllowedSync()) heSweepApprovedReports(allDailyReports); } catch (e) {} // ✅ ከዚህ በፊት የጸደቁ ስራዎች ወደ አድሚን ይመለሳሉ
                 updateNotifBell();
                 try {
@@ -9805,9 +9900,10 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     let sh = 0, pr = 0;
                     _jobs.forEach(j => { if (j.pct !== null) { sh += j.amount; pr += j.profit; } });
                     techShareAmount = sh + (profit - pr) * (sharePercent / 100);
-                    const _all = _jobs.every(j => j.pct !== null);
-                    if (_all && profit !== 0) {
-                        const eff = Math.max(0, Math.min(100, techShareAmount / profit * 100));
+                    // ትርፍ የሌለው (0) ስራ ድርሻ አያስፈልገውም — ሌሎች ሁሉ % ካላቸው ቦታው ዝግ ይሆናል
+                    const _all = _jobs.every(j => j.pct !== null || j.profit === 0);
+                    if (_all) {
+                        const eff = profit !== 0 ? Math.max(0, Math.min(100, techShareAmount / profit * 100)) : 0;
                         _pcEl.value = String(Math.round(eff * 100) / 100);
                         _pcEl.dataset.autoPct = '1';
                         _pcEl.readOnly = true; _pcEl.style.background = 'var(--bg)'; // 🔒 ከ «አጠናቅ» ድርሻ በራስ-ሰር ስለተሞላ ለመጻፍ ዝግ
@@ -10015,23 +10111,27 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (!techSentReportsLoaded) return null; // fail-closed በጠሪዎች ይያዛል
             const reported = techReportedKeysAll();
             const approved = techApprovedReportedKeys();
-            const out = { unreported: [], unapproved: [], missingDaily: false };
+            const out = { unreported: [], unapproved: [], missingDaily: false, missingDays: [] };
             // 📋 ስራ ኖረም አልኖረም ዕለታዊ ሪፖርት (በዜሮም ቢሆን) ግዴታ ነው — ከጠዋት 2:30 በኋላ የትላንት (ወይም የዛሬ) ሪፖርት ከሌለ
             // (ሙሉ አዲስ ቴክኒሻን — ምንም ሪፖርትም ስራም የሌለው — አይቆጠርም)
             try {
-                const yk = getDateKey(new Date(bizNow().getTime() - 24 * 3600 * 1000));
+                // 📋 ከዛሬ በፊት ያሉ ሁሉም ቀናት ሪፖርት መደረግ አለባቸው — የዛሬን ብቻ ሪፖርት ማድረግ ያለፈውን ቀን አይሸፍንም
                 const tk = getBizDateKey();
-                // ✅ ሪፖርት ተቆጥሯል፦ የትላንት (ወይም አዲስ) ቀን ሪፖርት ከሆነ፣ ወይም በዚህ የስራ ቀን ውስጥ ከተላከ
-                // (ጠዋት ላይ ለትላንት ሪፖርት ሲልክ ቀኑ በስህተት «ዛሬ» ቢመረጥም እንዳይታገድ)
-                const hasRecent = (techSentReports || []).some(r => {
-                    if (!r) return false;
-                    if (String(r.dateKey || '') >= yk) return true;
-                    const t = r.submittedAt && r.submittedAt.toDate ? r.submittedAt.toDate() : null;
-                    return !!t && getBizDateKey(t) >= tk;
-                });
-                const isBrandNew = !(techSentReports || []).length && !(myOrders || []).length;
-                // የትላንት ቀን ህጉ ከመጀመሩ በፊት ከሆነ (ማለትም ከዛሬ በፊት) ሪፖርት አይጠየቅም
-                out.missingDaily = yk >= TECH_OVN_RULE_START && !hasRecent && !isBrandNew; // ስራ ባይኖርም ግዴታ ነው — ለአዲስ ሰራተኛ (ምንም ሪፖርት/ስራ የሌለው) ብቻ ይቀራል
+                const yk = getDateKey(new Date(bizNow().getTime() - 24 * 3600 * 1000));
+                const have = new Set((techSentReports || []).map(r => String((r && r.dateKey) || '').slice(0, 10)));
+                let first = '';
+                const note = (k) => { k = String(k || '').slice(0, 10); if (k && (!first || k < first)) first = k; };
+                (techSentReports || []).forEach(r => note(r && r.dateKey));
+                (myOrders || []).forEach(o => { const c = o && o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : null; if (c) note(getBizDateKey(c)); });
+                if (first) {
+                    let k = first < TECH_OVN_RULE_START ? TECH_OVN_RULE_START : first;
+                    let guard = 0;
+                    while (k <= yk && guard++ < 400) {
+                        if (!have.has(k)) out.missingDays.push(k);
+                        const d = new Date(k + 'T12:00:00'); d.setDate(d.getDate() + 1); k = getDateKey(d);
+                    }
+                }
+                out.missingDaily = out.missingDays.length > 0; // ስራ ባይኖርም ግዴታ ነው — ለአዲስ ሰራተኛ (ምንም ሪፖርት/ስራ የሌለው) ብቻ ይቀራል
             } catch (e) {}
             (myOrders || []).forEach(o => {
                 if (!techIsOvernightClosed(o)) return;
@@ -10040,6 +10140,15 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 (reported.has(key) ? out.unapproved : out.unreported).push(o);
             });
             return out;
+        }
+        // 📅 ሪፖርት ያልተደረገባቸውን ቀናት በኢትዮጵያ አቆጣጠር ዘርዝሮ ያሳያል
+        function techMissingDaysText(b) {
+            const days = (b && b.missingDays) || [];
+            const lines = days.map(k => { let t = k; try { t = formatEthDate(new Date(k + 'T12:00:00'), true); } catch (e) {} return '• ' + t + ' (' + k + ')'; });
+            const jobDays = {};
+            ((b && b.unreported) || []).forEach(o => { const d = (o.completedAt && o.completedAt.toDate ? o.completedAt.toDate() : (o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : null)); if (d) jobDays[getBizDateKey(d)] = (jobDays[getBizDateKey(d)] || 0) + 1; });
+            const jl = Object.keys(jobDays).sort().filter(k => !days.includes(k)).map(k => { let t = k; try { t = formatEthDate(new Date(k + 'T12:00:00'), true); } catch (e) {} return '• ' + t + ' — ' + jobDays[k] + ' ያደረ ስራ ሪፖርት አልተደረገም'; });
+            return lines.concat(jl).join('\n');
         }
         function techOvernightUnreportedJobs() {
             const b = techOvernightBlockers();
@@ -10148,13 +10257,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                             return;
                         }
                         const _ovb = techOvernightBlockers() || { unreported: [], unapproved: [] };
-                        if (_ovb.missingDaily && !_ovb.unreported.length) {
-                            techFreeBlocked('🔒 ዕለታዊ ሪፖርት አልላኩም! ስራ ባይኖርዎትም በዜሮ ሪፖርት መላክ ግዴታ ነው፤ መጀመሪያ ሪፖርት ያድርጉ፣ ከዚያ «ነጻ ነኝ» ማለት ይችላሉ', 'error');
+                        if (_ovb.missingDaily) {
+                            techFreeBlocked('🔒 ሪፖርት ያላደረጉባቸው ቀናት አሉ! (' + _ovb.missingDays.length + ' ቀን)\n' + techMissingDaysText(_ovb) + '\n\nስራ ባይኖርዎትም በዜሮ ሪፖርት መላክ ግዴታ ነው። ለእያንዳንዱ ቀን ሪፖርት (የቀኑን በመምረጥ) ያድርጉ፣ ከዚያ «ነጻ ነኝ» ማለት ይችላሉ።', 'error');
                             try { document.querySelector('[data-tab="report"]').click(); } catch (e) {}
                             return;
                         }
                         if (_ovb.unreported.length) {
-                            techFreeBlocked('🔒 ያደረ ያልተላከ ሪፖርት አለዎት (' + _ovb.unreported.length + ' ስራ)! መጀመሪያ ሪፖርት ያድርጉ፣ ከዚያ «ነጻ ነኝ» ማለት ይችላሉ', 'error');
+                            techFreeBlocked('🔒 ያደረ ያልተላከ ሪፖርት አለዎት (' + _ovb.unreported.length + ' ስራ)!\n' + techMissingDaysText(_ovb) + '\n\nመጀመሪያ ሪፖርት ያድርጉ፣ ከዚያ «ነጻ ነኝ» ማለት ይችላሉ።', 'error');
                             try { document.querySelector('[data-tab="report"]').click(); } catch (e) {}
                             return;
                         }
@@ -11157,7 +11266,11 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             });
             updateDoneAutoIncome();
             document.getElementById('submitPriceNotAgreed').addEventListener('click', submitPriceNotAgreed);
-            document.getElementById('submitAnotherDay').addEventListener('click', submitAnotherDay);
+            document.getElementById('submitAnotherDay').addEventListener('click', () => submitAnotherDay('me'));
+            document.getElementById('anotherDayToOffice').addEventListener('click', () => submitAnotherDay('office'));
+            // ቀን እና ሰዓት ከተሞላ በኋላ ብቻ ሁለቱ ምርጫዎች ይታያሉ
+            ['anotherDayTime', 'anotherDayDate'].forEach(id => { const el = document.getElementById(id); if (el) { el.addEventListener('input', anotherDayUpdateSteps); el.addEventListener('change', anotherDayUpdateSteps); } });
+            const _adc = document.getElementById('anotherDayDateEthContainer'); if (_adc) _adc.addEventListener('change', () => setTimeout(anotherDayUpdateSteps, 0));
             // መ: ዋጋ ተስማምተናል — ደረጃ በደረጃ (ዋጋ → ቀን/ሰዓት → ምክንያት → ወዴት ይሂድ)
             ['pagPrice', 'pagTime', 'pagReason'].forEach(id => { const el = document.getElementById(id); if (el) { el.addEventListener('input', pagUpdateSteps); el.addEventListener('change', pagUpdateSteps); } });
             const _pagP = document.getElementById('pagPrice');
@@ -11704,17 +11817,28 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             finally { priceAgreedBusy = false; btns.forEach(b => { if (b) b.disabled = false; }); }
         }
 
+        function anotherDayUpdateSteps() {
+            const g = (id) => document.getElementById(id);
+            const box = g('anotherDayStepDest'); if (!box) return;
+            box.style.display = (g('anotherDayDate').value && (g('anotherDayTime').value || '').trim()) ? '' : 'none';
+        }
         let anotherDayBusy = false;
-        async function submitAnotherDay() {
+        async function submitAnotherDay(dest) {
             if (anotherDayBusy) return;
+            if (dest !== 'me' && dest !== 'office') return;
             const newDate = document.getElementById('anotherDayDate').value;
             const newTime = (document.getElementById('anotherDayTime').value || '').trim();
             if (!newDate || !newTime) { showToast('እባክዎ ቀን እና ሰዓት ይምረጡ', 'error'); return; }
+            if (newDate < getBizDateKey()) { showToast('ያለፈ ቀን መምረጥ አይቻልም', 'error'); return; }
             const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
             if (!orderId) return;
+            {
+                const _dd = pagKeyToLocalDate(newDate);
+                if (!confirm(`📅 ${_dd ? formatEthDate(_dd, true) : newDate} · ⏰ ${newTime}\n\n` + (dest === 'me' ? '👷 ቀጠሮው ሲደርስ ስራው ወደ እርስዎ ይመለሳል።' : '🏢 ቀጠሮው ሲደርስ ስራው ወደ ቢሮ (አድሚን) ይመለሳል።') + '\n\nይቀጥል?')) return;
+            }
             anotherDayBusy = true;
-            const btn = document.getElementById('submitAnotherDay');
-            if (btn) btn.disabled = true;
+            const btns = [document.getElementById('submitAnotherDay'), document.getElementById('anotherDayToOffice')];
+            btns.forEach(b => { if (b) b.disabled = true; });
             try {
                 const orderRef = db.collection('orders').doc(orderId);
                 const orderSnap = await orderRef.get();
@@ -11734,13 +11858,21 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     source: orderData.source || 'web',
                     createdById: orderData.createdById || '',
                     createdByName: orderData.createdByName || '',
-                    technician: '', // ሰዓቱ እስኪደርስ ወደ አድሚን (የቀጠሮ ካርድ) ተመልሶ ይቆያል — ሰዓቱ ሲደርስ ብቻ ለዚህ ቴክኒሻን ይመደባል
-                    scheduledTechnician: technicianName,
-                    scheduledTechnicianId: technicianId || null,
-                    scheduledReleaseDate: newDate,
-                    scheduledReleaseTime: newTime,
-                    scheduledBy: 'another-day',
-                    scheduledAt: new Date(),
+                    technician: '', // ሰዓቱ እስኪደርስ ወደ አድሚን (የቀጠሮ ካርድ) ተመልሶ ይቆያል
+                    // 👷 «ወደ እኔ ይመለስ» → ሰዓቱ ሲደርስ በራሱ ለዚህ ቴክኒሻን ይመደባል (scheduledTechnician)
+                    // 🏢 «ወደ ቢሮ ይመለስ» → ማንም አይያዝለትም፤ ሰዓቱ ሲደርስ ከአድሚን ዳሽቦርድ ይመደባል
+                    ...(dest === 'me' ? {
+                        scheduledTechnician: technicianName,
+                        scheduledTechnicianId: technicianId || null,
+                        scheduledReleaseDate: newDate,
+                        scheduledReleaseTime: newTime,
+                        scheduledBy: 'another-day',
+                        scheduledAt: new Date()
+                    } : {}),
+                    appointmentDest: dest,
+                    appointmentDate: newDate,
+                    appointmentTime: newTime,
+                    previousTechnician: technicianName,
                     isAppointment: true,
                     rescheduledFrom: orderId,
                     rescheduledDate: newDate,
@@ -11750,6 +11882,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 batch.update(orderRef, {
                     status: 'Rescheduled',
                     completionOption: 'another-day',
+                    appointmentDest: dest,
                     rescheduledDate: newDate,
                     rescheduledTime: newTime,
                     completedAt: new Date(),
@@ -11772,15 +11905,16 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 📆 *አዲስ ቀን:* ${heEthDay(newDate)}
                 ⏰ *ሰዓት:* ${newTime}
                 👨‍🔧 *ቴክኒሻን:* ${technicianName}
+                ➡️ *ቀጠሮ ሲደርስ:* ${dest === 'me' ? '👷 ወደ ቴክኒሻኑ ይመለሳል' : '🏢 ወደ ቢሮ (አድሚን) ይመለሳል'}
                 🔄 *እንደ አዲስ ትዕዛዝ ተፈጥሯል*
                 📅 ${formatEthDateTime(new Date())}
                 `);
                 } catch (tgErr) { console.warn('telegram notify failed', tgErr); }
-                showToast('✅ ለሌላ ቀን ተዘጋጅቷል — ወደ አድሚን ተመልሷል፤ ቀኑ እና ሰዓቱ ሲደርስ ብቻ ለእርስዎ ይመደባል፤ እስከዚያ «ነፃ» ማለት ይችላሉ', 'success');
+                showToast(dest === 'me' ? '✅ ለሌላ ቀን ተዘጋጅቷል — ቀኑ እና ሰዓቱ ሲደርስ ስራው ወደ እርስዎ ይመለሳል' : '✅ ለሌላ ቀን ተዘጋጅቷል — ቀኑ እና ሰዓቱ ሲደርስ ስራው ወደ ቢሮ (አድሚን) ይመለሳል', 'success');
                 resetCompletionForm();
                 try { renderMyJobs(); } catch (e) {}
             } catch (error) { showToast('❌ ' + error.message, 'error'); }
-            finally { anotherDayBusy = false; if (btn) btn.disabled = false; }
+            finally { anotherDayBusy = false; btns.forEach(b => { if (b) b.disabled = false; }); }
         }
 
         async function submitOther() {
@@ -11912,6 +12046,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             document.getElementById('anotherDayDate').value = new Date().toISOString().split('T')[0];
             document.getElementById('otherReason').value = '';
             const _t = document.getElementById('anotherDayTime'); if (_t) _t.value = '';
+            const _ads = document.getElementById('anotherDayStepDest'); if (_ads) _ads.style.display = 'none';
             const _pna = document.getElementById('priceNotAgreedCalled'); if (_pna) { _pna.value = ''; updatePriceNotAgreedGate(); }
             const _rj = document.getElementById('returnJobReason'); if (_rj) _rj.value = '';
             const _na = document.getElementById('noAnswerOfficeCalled'); if (_na) _na.value = '';
