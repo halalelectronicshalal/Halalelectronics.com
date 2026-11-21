@@ -1660,6 +1660,8 @@ document.addEventListener('click', function (e) {
             <div id="tab-dashboard" class="tab-content active">
 
                 <!-- ✅ NEW: ያልጸደቁ የቴክኒሻን ሪፖርቶች (ከላይ በግልጽ ይታያል፤ ምንም ከሌለ ይደበቃል) -->
+                <!-- 📋 ሪፖርት ያላደረጉ ቴክኒሻኖች — የትኞቹን ቀናት እንዳላደረጉ ዝርዝር + መልእክት መላኪያ -->
+                <div id="missingReportsCard"></div>
                 <div id="pendingReportsCard"></div>
                 <div id="holdRequestsCard"></div>
                 <div id="returnRequestsCard"></div>
@@ -4946,6 +4948,94 @@ document.addEventListener('click', function (e) {
             if (noteT) noteT.textContent = S.t.n ? ('⏳ ' + S.t.n + ' ሪፖርት ማጽደቅ ይጠብቃል (' + fmt(S.t.wait) + ')') : 'ከጸደቁ ሪፖርቶች ብቻ';
             if (noteY) noteY.textContent = S.y.n ? ('⏳ ' + S.y.n + ' ሪፖርት ማጽደቅ ይጠብቃል (' + fmt(S.y.wait) + ')') : 'ከጸደቁ ሪፖርቶች ብቻ';
         }
+        // ============================================================
+        // 📋 ሪፖርት ያላደረጉ ቴክኒሻኖች ካርድ — ከዛሬ በፊት ያሉ ቀናት (ህጉ ከ 2026-11-16 ጀምሮ)
+        // ============================================================
+        const MISS_RULE_START = '2026-11-16';
+        let missOpen = false;
+        function missingReportDays(tech) {
+            const yk = getBizDateKey(new Date(Date.now() - 86400000));
+            const have = new Set((allDailyReports || []).filter(r => r.technicianId === tech.id).map(r => String(r.dateKey || '').slice(0, 10)));
+            let first = '';
+            const note = (k) => { k = String(k || '').slice(0, 10); if (k && (!first || k < first)) first = k; };
+            have.forEach(note);
+            (allOrders || []).forEach(o => {
+                const mine = (o.technicianId || o.workedById) ? (o.technicianId || o.workedById) === tech.id : heTechOf(o) === tech.name;
+                if (!mine || !o.createdAt) return;
+                const ms = toMs(o.createdAt); if (ms) note(getBizDateKey(new Date(ms)));
+            });
+            const out = [];
+            if (!first) return out;
+            let k = first < MISS_RULE_START ? MISS_RULE_START : first, g = 0;
+            while (k <= yk && g++ < 400) {
+                if (!have.has(k)) out.push(k);
+                const d = new Date(k + 'T12:00:00'); d.setDate(d.getDate() + 1); k = getDateKey(d);
+            }
+            return out;
+        }
+        function renderMissingReportsCard() {
+            const box = document.getElementById('missingReportsCard'); if (!box) return;
+            try {
+                if (!allTechnicians.length || !allDailyReports) { box.innerHTML = ''; return; }
+                const rows = fieldTechs().filter(t => t.status !== 'suspended' && t.status !== 'rejected' && t.status !== 'pending')
+                    .map(t => ({ t, days: missingReportDays(t) })).filter(x => x.days.length)
+                    .sort((a, b) => b.days.length - a.days.length);
+                if (!rows.length) { box.innerHTML = ''; return; }
+                const typed = (document.getElementById('missMsg') || {}).value || '';
+                const eth = (k) => { try { return formatEthDate(new Date(k + 'T12:00:00'), true); } catch (e) { return k; } };
+                box.innerHTML = `<div class="card" style="border:2px solid #DC2626;">
+                    <div class="card-header" style="cursor:pointer;" onclick="missToggle()">
+                        <h3 style="color:#DC2626;"><i class="fas fa-file-circle-exclamation"></i> 📋 ሪፖርት ያላደረጉ ቴክኒሻኖች (${rows.length})</h3>
+                        <i class="fas fa-chevron-${missOpen ? 'up' : 'down'}"></i>
+                    </div>
+                    <div style="display:${missOpen ? 'block' : 'none'};">
+                        <div style="padding:8px 0;">
+                            <textarea id="missMsg" rows="2" placeholder="✍️ መልእክት ይጻፉ (ለተመረጡት ቴክኒሻኖች ማሳወቂያ ይላካል)..." style="width:100%; padding:10px; border:1.5px solid var(--border); border-radius:10px; background:var(--card); color:var(--text); font-size:.95rem; box-sizing:border-box;">${escHtml(typed)}</textarea>
+                            <div style="display:flex; gap:8px; margin-top:6px; flex-wrap:wrap; align-items:center;">
+                                <button class="btn btn-primary btn-sm" onclick="missSend()"><i class="fas fa-paper-plane"></i> ለተመረጡት ላክ</button>
+                                <button class="btn btn-outline btn-sm" onclick="missSelAll(true)">ሁሉንም ምረጥ</button>
+                                <button class="btn btn-outline btn-sm" onclick="missSelAll(false)">አጽዳ</button>
+                                <span class="text-muted" style="font-size:.78rem;">መልእክት ካልጻፉ ራስ-ሰር «ሪፖርት ያላደረጓቸው ቀናት» ዝርዝር ይላካል</span>
+                            </div>
+                        </div>
+                        ${rows.map(x => `<div style="border:1px solid var(--border); border-radius:10px; padding:10px; margin-top:8px;">
+                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                <input type="checkbox" class="missChk" value="${escHtml(x.t.id)}" checked />
+                                <strong>👤 ${escHtml(x.t.name || '—')}</strong>
+                                <span class="status-badge status-pending">⚠️ ${x.days.length} ቀን</span>
+                            </label>
+                            <div style="font-size:.82rem; margin-top:6px; line-height:1.6;">${x.days.map(k => `<span style="display:inline-block; margin:2px 4px 2px 0; padding:2px 8px; border-radius:8px; background:rgba(220,38,38,.1); color:#B91C1C;">📅 ${escHtml(eth(k))}</span>`).join('')}</div>
+                        </div>`).join('')}
+                    </div>
+                </div>`;
+                window._missRows = rows;
+            } catch (e) { console.warn('missing reports card failed', e); }
+        }
+        function missToggle() { missOpen = !missOpen; renderMissingReportsCard(); }
+        function missSelAll(v) { document.querySelectorAll('.missChk').forEach(c => c.checked = v); }
+        async function missSend() {
+            const ids = [...document.querySelectorAll('.missChk:checked')].map(c => c.value);
+            if (!ids.length) { showToast('ቴክኒሻን ይምረጡ', 'error'); return; }
+            const custom = ((document.getElementById('missMsg') || {}).value || '').trim();
+            const rows = window._missRows || [];
+            const eth = (k) => { try { return formatEthDate(new Date(k + 'T12:00:00'), false); } catch (e) { return k; } };
+            let sent = 0, noTok = 0;
+            for (const id of ids) {
+                const row = rows.find(r => r.t.id === id); if (!row) continue;
+                const body = (custom ? custom + '\n' : '') + 'ሪፖርት ያላደረጉባቸው ቀናት፦ ' + row.days.map(eth).join('፣ ');
+                try {
+                    await db.collection('pushQueue').add({ toStaffId: id, title: '⚠️ ሪፖርት ያልተደረገባቸው ቀናት አሉ', body: body.slice(0, 480), locationUrl: location.origin + location.pathname.replace(/[^/]*$/, 'technician.html'), createdAt: Date.now(), sent: false });
+                    sent++;
+                    if (!row.t.fcmToken) noTok++;
+                } catch (e) { console.warn('miss push failed', e); }
+            }
+            try { await db.collection('activity').add({ user: heActorName(), action: 'missing_report_notice', details: '📋 ሪፖርት ላላደረጉ ' + sent + ' ቴክኒሻን መልእክት ተላከ', timestamp: new Date() }); } catch (e) {}
+            showToast('✅ ለ ' + sent + ' ቴክኒሻን ተልኳል' + (noTok ? ' (' + noTok + ' ሰው ማሳወቂያ አልፈቀደም)' : ''), 'success');
+            const m = document.getElementById('missMsg'); if (m) m.value = '';
+        }
+        setInterval(() => { try { if (!document.activeElement || document.activeElement.id !== 'missMsg') renderMissingReportsCard(); } catch (e) {} }, 120000);
+        setTimeout(() => { try { renderMissingReportsCard(); } catch (e) {} }, 5000);
+
         function loadDailyReports() {
             listenRankReset();
             listenCustomerSms();
@@ -4956,6 +5046,7 @@ document.addEventListener('click', function (e) {
                     data.id = doc.id;
                     allDailyReports.push(data);
                 });
+                try { if (!document.activeElement || document.activeElement.id !== 'missMsg') renderMissingReportsCard(); } catch (e) {}
                 try { if (heIsAdminSession() && heApproveAllowedSync()) heSweepApprovedReports(allDailyReports); } catch (e) {} // ✅ ከዚህ በፊት የጸደቁ ስራዎች ወደ አድሚን ይመለሳሉ
                 try { admUpdateCompanyIncomeCards(); } catch (e) {}
                 try { updateFinanceStats(); } catch (e) {}
@@ -5960,10 +6051,23 @@ document.addEventListener('focusout', function (e) {
             } catch (e) { console.warn('future assigned return failed', e); }
             finally { admPrefReturning = false; }
         }
+        // ⏰ ቀጠሮ (ቀን + ሰዓት) በ ms — ሰዓት ከሌለ 0
+        function admApptMs(o) {
+            const d = schedKeyToDate(o.rescheduledDate) || schedKeyToDate(o.appointmentDate);
+            const t = /^(\d{1,2}):(\d{2})/.exec(String(o.rescheduledTime || o.appointmentTime || ''));
+            return (d && t) ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), +t[1], +t[2], 0, 0).getTime() : 0;
+        }
         function admIsFutureAppt(o) {
             if (!o) return false;
             if (o.returnReason || o.returnedAt || o.returnedFrom || o.returnedFromId || o.completionOption === 'return-job') return false; // የተመለሱ በራሳቸው ካርድ/ዝርዝር
-            if (o.status === 'Pending') { const d = schedApptDate(o); return !!d && schedDaysUntil(d) > 0; }
+            if (o.status === 'Pending') {
+                const d = schedApptDate(o); if (!d) return false;
+                const du = schedDaysUntil(d);
+                if (du > 0) return true;
+                // ⏰ ለሌላ ቀን የተቀጠረ ስራ ዛሬ ከሆነ ሰዓቱ እስኪደርስ በቀጠሮ ካርድ ይቆያል (ሰዓቱ ሲደርስ ይለቀቃል)
+                if (du === 0 && o.rescheduledFrom) { const ms = admApptMs(o); return ms > Date.now(); }
+                return false;
+            }
             if (o.status === 'Assigned') { const d = schedKeyToDate(o.appointmentDate) || schedKeyToDate(o.rescheduledDate); return !!d && schedDaysUntil(d) > 0; }
             return false;
         }
@@ -5983,7 +6087,7 @@ document.addEventListener('focusout', function (e) {
             list.innerHTML = items.map(({ o, d }) => {
                 const days = schedDaysUntil(d);
                 const tn = o.technician || o.scheduledTechnician || '';
-                const when = days === 1 ? 'ነገ' : (days + ' ቀን ይቀራል');
+                const when = days === 0 ? ('ዛሬ ' + (o.rescheduledTime || o.appointmentTime || '') + ' ላይ') : (days === 1 ? 'ነገ' : (days + ' ቀን ይቀራል'));
                 const note = tn
                     ? `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#EFF6FF; color:#1E40AF; font-size:0.78rem;">👷 <b>${escHtml(tn)}</b> — ቀኑ ሲደርስ ወደ ሰራተኛው ይገባል</div>`
                     : `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#F3F4F6; color:#374151; font-size:0.78rem;">⏳ ገና አልተመደበም — ቀኑ ሲደርስ ወደ «አዲስ ትዕዛዞች» ይገባል</div>`;
@@ -6005,6 +6109,18 @@ document.addEventListener('focusout', function (e) {
         }
         // ቀኑ ሲቀየር (snapshot ሳይመጣ) ካርዱ እና ዝርዝሩ እንዲታደስ
         setInterval(function () { try { renderDashNewOrders(); } catch (e) {} }, 10 * 60 * 1000);
+        // ⏰ የዛሬ ቀጠሮ ሰዓት ሲደርስ ወዲያው ከቀጠሮ ካርድ ወደ አዲስ ትዕዛዞች እንዲወጣ (በደቂቃ አንዴ ይፈትሻል)
+        let _admApptTick = Date.now();
+        setInterval(function () {
+            try {
+                const from = _admApptTick, now = Date.now(); _admApptTick = now;
+                if ((allOrders || []).some(o => o.status === 'Pending' && o.rescheduledFrom && o.rescheduledTime) && (allOrders || []).some(o => { if (o.status !== 'Pending' || !o.rescheduledFrom) return false; const m = admApptMs(o); return m > from && m <= now; })) {
+                    renderDashNewOrders();
+                    if (typeof renderOrders === 'function' && document.getElementById('ordersBody')) renderOrders();
+                    if (typeof updateStats === 'function') updateStats();
+                }
+            } catch (e) {}
+        }, 60 * 1000);
 
         function renderDashNewOrders() {
             const list = document.getElementById('dashNewOrdersList');
