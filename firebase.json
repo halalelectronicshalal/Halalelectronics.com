@@ -6,6 +6,17 @@
       "**/.*",
       "**/node_modules/**",
       "functions/**"
+    ],
+    "headers": [
+      {
+        "source": "**/*.@(html|js|json)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      }
     ]
   },
   "functions": {
