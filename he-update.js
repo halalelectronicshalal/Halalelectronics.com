@@ -33,20 +33,15 @@
         shown = true;
         var d = document.createElement('div');
         d.id = 'heUpdBar';
-        d.setAttribute('style', 'position:fixed;left:8px;right:8px;bottom:72px;z-index:2147483000;background:#0b5ed7;color:#fff;border-radius:14px;padding:12px 14px;box-shadow:0 6px 24px rgba(0,0,0,.35);font:600 14px/1.5 system-ui,sans-serif;text-align:center');
-        d.innerHTML = '🔄 አዲስ ስሪት አለ!<div style="font-weight:400;font-size:12px;margin:2px 0 8px">ሪፖርት እየሞሉ ከሆነ መጀመሪያ ይላኩት፣ ከዚያ ያድሱ።</div>' +
-            '<button id="heUpdNow" style="background:#fff;color:#0b5ed7;border:0;border-radius:10px;padding:8px 16px;font-weight:700;margin:0 4px">አሁን አድስ</button>' +
-            '<button id="heUpdLater" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.7);border-radius:10px;padding:8px 14px;margin:0 4px">በኋላ</button>';
+        d.setAttribute('style', 'position:fixed;left:50%;transform:translateX(-50%);bottom:76px;z-index:2147483000');
+        d.innerHTML = '<button id="heUpdNow" style="background:#0b5ed7;color:#fff;border:0;border-radius:999px;padding:12px 28px;font:700 15px system-ui,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.35)">🔄 Update</button>';
         document.body.appendChild(d);
-        document.getElementById('heUpdLater').onclick = function () {
-            d.remove(); shown = false; laterUntil = Date.now() + LATER_MS;
-        };
         document.getElementById('heUpdNow').onclick = doUpdate;
     }
 
     function doUpdate() {
         var b = document.getElementById('heUpdNow');
-        if (b) { b.disabled = true; b.textContent = '⏳ በማደስ ላይ…'; }
+        if (b) { b.disabled = true; b.textContent = '⏳ …'; }
         var p = [];
         try { if (window.caches) p.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); })); } catch (e) {}
         try {
