@@ -2284,6 +2284,7 @@ document.addEventListener('click', function (e) {
                         <button class="status-btn free active" data-status="free">🟢 ነጻ</button>
                         <button class="status-btn off" data-status="off-duty">⚪ ዛሬ አልወጣሁም</button>
                     </div>
+                    <div id="techFreeNotice" style="display:none; margin-bottom:10px; padding:10px 12px; border-radius:10px; background:rgba(239,68,68,0.10); border:1px solid var(--danger,#ef4444); font-size:0.85rem; font-weight:600; white-space:pre-line; line-height:1.6;"></div>
                     <div class="status-display" id="statusDisplay">ሁኔታ: 🟢 ነጻ</div>
                     <div style="font-size:0.75rem; color:var(--text-muted); margin-top:6px;">📍 «ነጻ» ሲነኩ ቦታዎ በራስ-ሰር ለአድሚን ይላካል</div>
                     <div id="locPermBanner" style="display:none; margin-top:8px; padding:10px 12px; border-radius:10px; background:rgba(245,158,11,0.12); border:1px solid var(--warning); font-size:0.85rem;">
@@ -2524,7 +2525,13 @@ document.addEventListener('click', function (e) {
                             </div>
                             <div class="sub-row">
                                 <label>⏰ ሰዓት *</label>
-                                <input type="time" id="anotherDayTime" />
+                                <div class="heEthTime" data-for="anotherDayTime" style="display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:4px;">
+                                    <select class="het-per"><option value="">ክፍለ ቀን</option><option value="0">ሌሊት</option><option value="6">ጠዋት</option><option value="12">ከሰዓት</option><option value="18">ማታ</option></select>
+                                    <select class="het-h"><option value="">ሰዓት</option></select>
+                                    <select class="het-m"><option value="">ደቂቃ</option></select>
+                                </div>
+                                <small style="color:var(--text-muted); font-size:0.72rem;">🕒 የኢትዮጵያ ሰዓት አቆጣጠር (ለምሳሌ 12:00 ጠዋት = 6:00 ሰዓት፣ 6:00 ከሰዓት = ቀትር)</small>
+                                <input type="time" id="anotherDayTime" style="display:none;" />
                             </div>
                             <div id="anotherDayStepDest" style="display:none;">
                                 <label style="font-weight:600; display:block; margin:6px 0; font-size:0.85rem;">ቀጠሮው ሲደርስ ስራው ወዴት ይሂድ? (አንዱን ይንኩ)</label>
@@ -2547,7 +2554,13 @@ document.addEventListener('click', function (e) {
                                 </div>
                                 <div class="sub-row">
                                     <label>⏰ ሰዓት *</label>
-                                    <input type="time" id="pagTime" />
+                                    <div class="heEthTime" data-for="pagTime" style="display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:4px;">
+                                    <select class="het-per"><option value="">ክፍለ ቀን</option><option value="0">ሌሊት</option><option value="6">ጠዋት</option><option value="12">ከሰዓት</option><option value="18">ማታ</option></select>
+                                    <select class="het-h"><option value="">ሰዓት</option></select>
+                                    <select class="het-m"><option value="">ደቂቃ</option></select>
+                                </div>
+                                <small style="color:var(--text-muted); font-size:0.72rem;">🕒 የኢትዮጵያ ሰዓት አቆጣጠር (ለምሳሌ 12:00 ጠዋት = 6:00 ሰዓት፣ 6:00 ከሰዓት = ቀትር)</small>
+                                <input type="time" id="pagTime" style="display:none;" />
                                 </div>
                             </div>
                             <div id="pagStepReason" style="display:none;">
@@ -2802,7 +2815,7 @@ document.addEventListener('click', function (e) {
                         </div>
 
                         <div class="file-upload-area">
-                            <label><i class="fas fa-receipt"></i> 🏦 ወደ ድርጅቱ የገባውን ገንዘብ የባንክ ደረሰኝ</label>
+                            <label><i class="fas fa-receipt"></i> 🏦 ወደ ድርጅቱ የገባውን ገንዘብ የባንክ ደረሰኝ <span style="color:#DC2626; font-size:0.78rem;">(ገቢ ካለ ግዴታ *)</span></label>
                             <input type="file" id="reportBankReceipts" accept="image/*" multiple />
                             <div id="receiptPreview" class="uploaded-files"></div>
                         </div>
@@ -10184,8 +10197,28 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             });
         }
         // 🔒 «ነጻ ነኝ» ማለት ሲከለከል ምክንያቱ በ toast + ከሁኔታ ቁልፎች በታች በሚቆይ ማስታወቂያ (ቆይቶ እንዲነበብ) ይታያል
+        // 🔒 ሪፖርት ያልተደረገባቸውን ቀናት (በኢትዮጵያ አቆጣጠር) ከሁኔታ ቁልፎች በታች ያሳያል — አንድ ቀን ብቻ ከሆነም ቀኑን በትክክል ይጠቅሳል
+        function techRefreshMissingNotice() {
+            try {
+                const el = document.getElementById('techFreeNotice');
+                if (!el) return;
+                const b = techOvernightBlockers();
+                const nd = b ? ((b.missingDays || []).length) : 0;
+                const nu = b ? ((b.unreported || []).length) : 0;
+                if (!b || (!nd && !nu)) { el.style.display = 'none'; el.textContent = ''; return; }
+                let head;
+                if (nd === 1) head = '🔒 የ1 ቀን ሪፖርት አልላኩም!';
+                else if (nd > 1) head = '🔒 የ' + nd + ' ቀናት ሪፖርት አልላኩም!';
+                else head = '🔒 ያደረ ያልተላከ ሪፖርት አለዎት (' + nu + ' ስራ)!';
+                el.textContent = head + '\n' + techMissingDaysText(b) + '\n\nስራ ባይኖርዎትም በዜሮ ሪፖርት መላክ ግዴታ ነው፤ መጀመሪያ ሪፖርት ያድርጉ (ቀኑን በመምረጥ)፣ ከዚያ «ነጻ ነኝ» ማለት ይችላሉ።';
+                el.style.display = 'block';
+            } catch (e) {}
+        }
+        setInterval(techRefreshMissingNotice, 30000);
+        setTimeout(techRefreshMissingNotice, 3000);
         function techFreeBlocked(msg, type) {
             try { showToast(String(msg).split('\n')[0], type || 'error'); } catch (e) {}
+            try { techRefreshMissingNotice(); } catch (e) {}
             try {
                 const btn = document.querySelector('.status-btn');
                 if (!btn) return;
@@ -11747,7 +11780,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (!orderId) return;
             const dd = pagKeyToLocalDate(newDate);
             const dateLabel = dd ? formatEthDate(dd, true) : newDate;
-            if (!confirm(`💰 ${price} ብር\n📅 ${dateLabel} · ⏰ ${newTime}\n\n` + (dest === 'me' ? '👷 ቀኑና ሰዓቱ ሲደርስ ለእርስዎ ይመደባል።' : '🏢 ስራው ወደ ቢሮ ይመለሳል፤ ቀኑ ሲደርስ በአድሚን ዳሽቦርድ ይገባል።') + '\n\nይቀጥል?')) return;
+            if (!confirm(`💰 ${price} ብር\n📅 ${dateLabel} · ⏰ ${heEthClockHM(newTime)}\n\n` + (dest === 'me' ? '👷 ቀኑና ሰዓቱ ሲደርስ ለእርስዎ ይመደባል።' : '🏢 ስራው ወደ ቢሮ ይመለሳል፤ ቀኑ ሲደርስ በአድሚን ዳሽቦርድ ይገባል።') + '\n\nይቀጥል?')) return;
             priceAgreedBusy = true;
             const btns = [document.getElementById('pagToOffice'), document.getElementById('pagToMe')];
             btns.forEach(b => { if (b) b.disabled = true; });
@@ -11802,7 +11835,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
                 💰 *የተስማሙበት ዋጋ:* ${price} ብር
                 📆 *ቀን:* ${dateLabel}
-                ⏰ *ሰዓት:* ${newTime}
+                ⏰ *ሰዓት:* ${heEthClockHM(newTime)}
                 📝 *ዛሬ ያልተሰራበት ምክንያት:* ${reason}
                 👨‍🔧 *ቴክኒሻን:* ${technicianName}
                 ➡️ *ከዚያ በኋላ:* ${dest === 'me' ? 'ቀኑ ሲደርስ ለቴክኒሻኑ ይመደባል' : 'ወደ ቢሮ ይመለሳል — ቀኑ ሲደርስ ወደ ዳሽቦርድ ይገባል'}
@@ -11816,6 +11849,41 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             } catch (error) { showToast('❌ ' + error.message, 'error'); }
             finally { priceAgreedBusy = false; btns.forEach(b => { if (b) b.disabled = false; }); }
         }
+
+        // 🕒 የኢትዮጵያ ሰዓት አቆጣጠር መምረጫ — ከስር ያለው (የተደበቀ) type="time" ግብአት 24 ሰዓት HH:MM ይይዛል (ነባር ኮድ አይለወጥም)
+        function heEthClockHM(s) { var m = /^(\d{1,2}):(\d{2})/.exec(String(s || '')); if (!m) return String(s || ''); var h = +m[1]; var e = ((h + 6) % 12) || 12; var per = h < 6 ? 'ሌሊት' : h < 12 ? 'ጠዋት' : h < 18 ? 'ከሰዓት' : 'ማታ'; return e + ':' + m[2] + ' ' + per; }
+        const HET_HOURS = { 0: [6, 7, 8, 9, 10, 11], 6: [12, 1, 2, 3, 4, 5], 12: [6, 7, 8, 9, 10, 11], 18: [12, 1, 2, 3, 4, 5] };
+        function heEthTimeInit() {
+            document.querySelectorAll('.heEthTime').forEach(box => {
+                if (box.dataset.ready) return; box.dataset.ready = '1';
+                const target = document.getElementById(box.dataset.for);
+                const per = box.querySelector('.het-per'), hh = box.querySelector('.het-h'), mm = box.querySelector('.het-m');
+                for (let m = 0; m < 60; m += 5) mm.insertAdjacentHTML('beforeend', `<option value="${m}">${String(m).padStart(2, '0')}</option>`);
+                const fillHours = () => {
+                    const keep = hh.value; hh.innerHTML = '<option value="">ሰዓት</option>';
+                    (HET_HOURS[per.value] || []).forEach(h => hh.insertAdjacentHTML('beforeend', `<option value="${h}">${h}</option>`));
+                    if ([...hh.options].some(o => o.value === keep)) hh.value = keep;
+                };
+                const update = () => {
+                    let v = '';
+                    if (per.value !== '' && hh.value !== '' && mm.value !== '') {
+                        const s0 = +per.value, e0 = ((s0 + 6) % 12) || 12, e = +hh.value;
+                        const h24 = s0 + (((e % 12) - (e0 % 12) + 12) % 12);
+                        v = String(h24).padStart(2, '0') + ':' + String(+mm.value).padStart(2, '0');
+                    }
+                    if (target.value !== v) { target.value = v; target.dispatchEvent(new Event('input', { bubbles: true })); target.dispatchEvent(new Event('change', { bubbles: true })); }
+                };
+                per.addEventListener('change', () => { fillHours(); update(); });
+                hh.addEventListener('change', update); mm.addEventListener('change', update);
+            });
+        }
+        function heEthTimeReset(id) {
+            const box = document.querySelector('.heEthTime[data-for="' + id + '"]'); if (!box) return;
+            box.querySelector('.het-per').value = ''; box.querySelector('.het-h').innerHTML = '<option value="">ሰዓት</option>'; box.querySelector('.het-m').value = '';
+            const t = document.getElementById(id); if (t) t.value = '';
+        }
+        document.addEventListener('DOMContentLoaded', heEthTimeInit);
+        if (document.readyState !== 'loading') heEthTimeInit();
 
         function anotherDayUpdateSteps() {
             const g = (id) => document.getElementById(id);
@@ -11834,7 +11902,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (!orderId) return;
             {
                 const _dd = pagKeyToLocalDate(newDate);
-                if (!confirm(`📅 ${_dd ? formatEthDate(_dd, true) : newDate} · ⏰ ${newTime}\n\n` + (dest === 'me' ? '👷 ቀጠሮው ሲደርስ ስራው ወደ እርስዎ ይመለሳል።' : '🏢 ቀጠሮው ሲደርስ ስራው ወደ ቢሮ (አድሚን) ይመለሳል።') + '\n\nይቀጥል?')) return;
+                if (!confirm(`📅 ${_dd ? formatEthDate(_dd, true) : newDate} · ⏰ ${heEthClockHM(newTime)}\n\n` + (dest === 'me' ? '👷 ቀጠሮው ሲደርስ ስራው ወደ እርስዎ ይመለሳል።' : '🏢 ቀጠሮው ሲደርስ ስራው ወደ ቢሮ (አድሚን) ይመለሳል።') + '\n\nይቀጥል?')) return;
             }
             anotherDayBusy = true;
             const btns = [document.getElementById('submitAnotherDay'), document.getElementById('anotherDayToOffice')];
@@ -11903,7 +11971,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 🛠️ *ችግር:* ${orderData.problem || '—'}
 
                 📆 *አዲስ ቀን:* ${heEthDay(newDate)}
-                ⏰ *ሰዓት:* ${newTime}
+                ⏰ *ሰዓት:* ${heEthClockHM(newTime)}
                 👨‍🔧 *ቴክኒሻን:* ${technicianName}
                 ➡️ *ቀጠሮ ሲደርስ:* ${dest === 'me' ? '👷 ወደ ቴክኒሻኑ ይመለሳል' : '🏢 ወደ ቢሮ (አድሚን) ይመለሳል'}
                 🔄 *እንደ አዲስ ትዕዛዝ ተፈጥሯል*
@@ -12045,13 +12113,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             document.getElementById('subQuestions').classList.remove('active');
             document.getElementById('anotherDayDate').value = new Date().toISOString().split('T')[0];
             document.getElementById('otherReason').value = '';
-            const _t = document.getElementById('anotherDayTime'); if (_t) _t.value = '';
+            const _t = document.getElementById('anotherDayTime'); if (_t) _t.value = ''; heEthTimeReset('anotherDayTime');
             const _ads = document.getElementById('anotherDayStepDest'); if (_ads) _ads.style.display = 'none';
             const _pna = document.getElementById('priceNotAgreedCalled'); if (_pna) { _pna.value = ''; updatePriceNotAgreedGate(); }
             const _rj = document.getElementById('returnJobReason'); if (_rj) _rj.value = '';
             const _na = document.getElementById('noAnswerOfficeCalled'); if (_na) _na.value = '';
             try {
-                ['pagPrice', 'pagTime', 'pagReason'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+                ['pagPrice', 'pagTime', 'pagReason'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; }); heEthTimeReset('pagTime');
                 const _today = getBizDateKey();
                 const _pc = document.getElementById('pagDateEthContainer'); if (_pc) _pc.innerHTML = techBuildEthiopianPickerHTML('pagDateEth', 'pagDate', _today);
                 const _pd = document.getElementById('pagDate'); if (_pd) _pd.value = _today;
@@ -12688,7 +12756,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     + row('🛠️ ችግር', techEsc(o.problem || ''))
                     + row('📌 ሁኔታ', techEsc(stLabel))
                     + row('📅 የተመደበበት ቀን', techEsc(formatEthDate(techAssignedTs(o))))
-                    + (appt ? row('🗓️ ቀጠሮ', techEsc((window.heEthDay ? heEthDay(appt) : appt) + (o.rescheduledTime ? ' ' + o.rescheduledTime : ''))) : '')
+                    + (appt ? row('🗓️ ቀጠሮ', techEsc((window.heEthDay ? heEthDay(appt) : appt) + (o.rescheduledTime ? ' ' + heEthClockHM(o.rescheduledTime) : ''))) : '')
                     + (notes ? row('✍️ ከኦፕሬተር መልእክት', notes) : '')
                     + '</div>';
                 openModal('👁️ የስራ ዝርዝር', body);
@@ -12788,7 +12856,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (!o) return '';
             switch (o.status) {
                 case 'PriceNotAgreed': return 'ዋጋ አልተስማሙም' + (o.calledOffice === 'yes' ? ' (ቢሮ ተደውሏል)' : '');
-                case 'Rescheduled': return 'ለሌላ ቀን ተላልፏል' + (o.rescheduledDate ? ` (${heEthDay(o.rescheduledDate)}${o.rescheduledTime ? ' ' + o.rescheduledTime : ''})` : '');
+                case 'Rescheduled': return 'ለሌላ ቀን ተላልፏል' + (o.rescheduledDate ? ` (${heEthDay(o.rescheduledDate)}${o.rescheduledTime ? ' ' + heEthClockHM(o.rescheduledTime) : ''})` : '');
                 case 'NotToday': return 'ዛሬ አይመቻቸውም' + (o.notTodayReason ? ' — ' + o.notTodayReason : '');
                 case 'PhoneNoAnswer': return 'ስልክ አይነሳም' + (o.calledOffice ? ` (ከቢሮ ተደውሏል: ${o.calledOffice === 'yes' ? 'አዎ' : 'አይ'})` : '');
                 case 'Other': return o.otherReason || 'ሌላ';
@@ -13108,6 +13176,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         return;
                     }
                 }
+                // 🏦 ገቢ ካለ የባንክ ደረሰኝ ፎቶ ግዴታ ነው
+                if (!(reportPhotoSel.receiptPreview && reportPhotoSel.receiptPreview.length)) {
+                    showToast('⚠️ ገቢ ስላለ የባንክ ደረሰኝ ፎቶ ማያያዝ ግዴታ ነው', 'error');
+                    const _rf = document.getElementById('reportBankReceipts');
+                    if (_rf) { if (_rf.scrollIntoView) _rf.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+                    return;
+                }
             }
 
             // ✅ NEW: "የተላኩ ስራዎች ብዛት" ልክ የተመዘገቡ የስራ አይነቶች
@@ -13308,6 +13383,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     if (!openStatusApplied) techApplyOpenStatusOnce();
                     techEnforceOvernightWorking();
                     techSyncAutoStatus();
+                    techRefreshMissingNotice();
                 } catch (e) { console.warn('open status after reports', e); }
                 techSentReports.sort((a, b) => {
                     const ta = a.submittedAt && a.submittedAt.toDate ? a.submittedAt.toDate().getTime() : 0;
