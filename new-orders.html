@@ -751,6 +751,7 @@ function showStatDetail(kind, refresh) {
      «ዛሬውኑ» ወይም ቀን የሌለው → ወዲያውኑ ከፊት ይታያል
    ============================================================ */
 const WEEKDAY_IDX = { 'እሁድ': 0, 'ሰኞ': 1, 'ማክሰኞ': 2, 'ረቡዕ': 3, 'ሐሙስ': 4, 'አርብ': 5, 'ቅዳሜ': 6 };
+function heEthClockHM(s) { var m = /^(\d{1,2}):(\d{2})/.exec(String(s || '')); if (!m) return String(s || ''); var h = +m[1]; var e = ((h + 6) % 12) || 12; var per = h < 6 ? 'ሌሊት' : h < 12 ? 'ጠዋት' : h < 18 ? 'ከሰዓት' : 'ማታ'; return e + ':' + m[2] + ' ' + per; } // 🕒 24 ሰዓት (HH:MM) → የኢትዮጵያ ሰዓት አቆጣጠር (6:00 = 12 ጠዋት)
 function keyToLocalDate(k) {
     const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(k || ''));
     return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
@@ -832,7 +833,7 @@ function corrAdminTagHtml(o) {
 function holdTagHtml(o) {
     if (o && o.needsAdminAssign && o.status === 'Pending' && !(o.scheduledTechnician && o.scheduledReleaseDate)) return corrAdminTagHtml(o);
     if (!o || !o.scheduledTechnician || !o.scheduledReleaseDate) return '';
-    return `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#EFF6FF; color:#1E40AF; font-size:0.78rem;">📌 ለ <b>${escHtml(o.scheduledTechnician)}</b> ተይዟል — ቀኑ (${escHtml(heEthDay(o.scheduledReleaseDate))}${o.scheduledReleaseTime ? ' ⏰ ' + escHtml(o.scheduledReleaseTime) : ''}) ሲደርስ ለሰራተኛው በራሱ ይላካል</div>`;
+    return `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#EFF6FF; color:#1E40AF; font-size:0.78rem;">📌 ለ <b>${escHtml(o.scheduledTechnician)}</b> ተይዟል — ቀኑ (${escHtml(heEthDay(o.scheduledReleaseDate))}${o.scheduledReleaseTime ? ' ⏰ ' + escHtml(heEthClockHM(o.scheduledReleaseTime)) : ''}) ሲደርስ ለሰራተኛው በራሱ ይላካል</div>`;
 }
 async function _holdOrderForDate(orderId, techName, hold) {
     const t = allTechnicians.find(x => x.name === techName);
@@ -854,7 +855,7 @@ function apptTagHtml(o) {
     const n = daysUntil(d);
     const when = n === 0 ? 'ዛሬ' : n > 0 ? (n === 1 ? 'ነገ' : `ከ${n} ቀን በኋላ`) : `${-n} ቀን አልፏል`;
     const color = n > 0 ? '#B45309' : n === 0 ? 'var(--success)' : 'var(--emergency)';
-    const _tm = (o.rescheduledFrom && o.rescheduledTime) ? ' ⏰ ' + escHtml(String(o.rescheduledTime)) : '';
+    const _tm = (o.rescheduledFrom && o.rescheduledTime) ? ' ⏰ ' + escHtml(heEthClockHM(o.rescheduledTime)) : '';
     return `<span class="tag" style="color:${color}; font-weight:700;">📅 ቀጠሮ: ${escHtml(formatEthDate(d, true))}${_tm} (${when})</span>`;
 }
 /** ⏰ «ያደረ» ስራ = ዛሬ ያልተፈጠረ/ያልተመለሰ/ቀጠሮው ያላለፈ ያልተጠናቀቀ ስራ (ያልተመደበ ወይም የተመደበ ክፍት) — ከአድሚን ገጽ ጋር አንድ ደንብ */
