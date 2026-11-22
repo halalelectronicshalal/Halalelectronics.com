@@ -1556,6 +1556,7 @@ document.addEventListener('click', function (e) {
                 <a href="#" data-tab="inventory"><i class="fas fa-boxes"></i> እቃዎች</a>
                 <a href="#" data-tab="finance"><i class="fas fa-money-bill-wave"></i> ፋይናንስ</a>
                 <a href="#" data-tab="reports"><i class="fas fa-chart-line"></i> ሪፖርቶች</a>
+                <a href="#" data-tab="receiptcheck"><i class="fas fa-search-dollar"></i> ሪፖርት ማረጋገጫ <span class="badge" id="rcBadge">0</span></a>
                 <a href="#" data-tab="map"><i class="fas fa-map-marked-alt"></i> ካርታ</a>
                 <a href="#" data-tab="warranty"><i class="fas fa-shield-alt"></i> ዋራንቲ</a>
                 <a href="#" data-tab="settings"><i class="fas fa-cog"></i> ቅንብሮች</a>
@@ -2103,6 +2104,20 @@ document.addEventListener('click', function (e) {
             <!-- ============================================================
             TAB: ACTIVITY LOG
             ============================================================ -->
+            <!-- ============================================================
+            TAB: 🔎 ሪፖርት ማረጋገጫ (የባንክ ደረሰኝ ብር ከገባው ጋር የማይመሳሰል / ድርብ / ያልተነበበ / ደረሰኝ የሌለው)
+            ============================================================ -->
+            <div id="tab-receiptcheck" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-search-dollar"></i> 🔎 ሪፖርት ማረጋገጫ</h3>
+                        <select id="rcMonthSel" onchange="rcRender()" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border,#cbd5e1); background:var(--card,#fff); color:inherit;"></select>
+                    </div>
+                    <p class="text-muted" style="font-size:0.85rem; margin:0 0 10px;">የባንክ ደረሰኝ ፎቶ በ AI ተነብቦ ከ«ወደ ድርጅት የገባ» ጋር ሲነጻጸር ችግር ያለባቸው የዚህ ወር ሪፖርቶች። <b>✏️ አስተካክል</b> = ቁጥሩን ያርሙ፤ <b>👌 ባለበት ይቀጥል</b> = ትክክል ነው ብለው ከዝርዝሩ ያውጡ (ሁኔታው ከተቀየረ እንደገና ይታያል)። AI ሊሳሳት ይችላል — ፎቶውን ራስዎ ያረጋግጡ።</p>
+                    <div id="rcBody"><div class="text-center text-muted">—</div></div>
+                </div>
+            </div>
+
             <div id="tab-activity" class="tab-content">
                 <div class="card">
                     <div class="card-header">
@@ -4288,6 +4303,7 @@ document.addEventListener('click', function (e) {
                     setTimeout(loadTechMap, 300);
                 }
                 if (tab === 'messages') { try { renderAdminChat(); } catch (e) {} }
+                if (tab === 'receiptcheck') { try { rcRender(); } catch (e) {} }
             }
         }
 
@@ -4305,6 +4321,7 @@ document.addEventListener('click', function (e) {
                 'warranty': '🛡️ ዋራንቲ',
                 'settings': '⚙️ ቅንብሮች',
                 'activity': '📋 እንቅስቃሴ',
+                'receiptcheck': '🔎 ሪፖርት ማረጋገጫ',
                 'messages': '💬 መልእክቶች'
             };
             return titles[tab] || tab;
@@ -4825,6 +4842,7 @@ document.addEventListener('click', function (e) {
                 try { if (!document.activeElement || document.activeElement.id !== 'missMsg') renderMissingReportsCard(); } catch (e) {}
                 try { if (heIsAdminSession() && heApproveAllowedSync()) heSweepApprovedReports(allDailyReports); } catch (e) {} // ✅ ከዚህ በፊት የጸደቁ ስራዎች ወደ አድሚን ይመለሳሉ
                 updateNotifBell();
+                try { rcUpdateBadge(); } catch (e) {}
                 try {
                     const ae = document.activeElement;
                     if (isFinanceUnlocked && !(ae && ae.closest && ae.closest('#techIncomeSummaryBody'))) showTechIncomeSummary();
@@ -7095,6 +7113,7 @@ ${locationLine}
         function editDailyReport(reportId) {
             const r = allDailyReports.find(rep => rep.id === reportId);
             if (!r) { showToast('ሪፖርቱ አልተገኘም', 'error'); return; }
+            if (r.approved && !confirm('⚠️ ይህ ሪፖርት ቀድሞ ጸድቋል።\n\nቴሌግራም ላይ የተላከው መልእክት አይታረምም (የድሮው ቁጥር ይቀራል)፤ ሉሁ እና ሪፖርቱ ግን በአዲሱ ይሻሻላሉ።\n\nቀጥል?')) return;
 
             const html = `
                 <div class="form-row">
@@ -7128,12 +7147,69 @@ ${locationLine}
                     </div>
                 </div>
                 <div class="form-group">
+                    <label>🏦 ወደ ድርጅት የገባ ገንዘብ (ብር)</label>
+                    <input type="number" id="editRepDeposited" step="0.01" value="${r.deposited || 0}" />
+                </div>
+                <div class="form-group">
                     <label>ማብራሪያ / ማስታወሻ</label>
                     <textarea id="editRepNotes">${(r.notes || r.remarks || '').replace(/</g,'&lt;')}</textarea>
                 </div>
                 <button class="btn btn-success btn-block" onclick="saveEditedDailyReport('${reportId}')"><i class="fas fa-save"></i> አስቀምጥ</button>
             `;
             openModal(`✏️ የ${r.technicianName || ''} ሪፖርት ማረሚያ (${r.dateKey || ''})`, html);
+        }
+
+
+        // ============================================================
+        // 🔎 ሪፖርት ማረጋገጫ — የባንክ ደረሰኝ ማረጋገጫ ያልተሳካላቸው ሪፖርቶች (የሚታየው የተመረጠው የኢትዮጵያ ወር ብቻ፤ ወሩ ሲቀየር ራሱ አዲሱን ወር ያሳያል)
+        // ============================================================
+        const RC_BAD = ['none', 'dup', 'unread', 'mismatch'];
+        function rcMonthKey(dateKey) {
+            try {
+                const e = gregorianToEthiopian(new Date(String(dateKey).slice(0, 10) + 'T12:00:00'));
+                return e.year + '-' + String(e.month).padStart(2, '0');
+            } catch (err) { return ''; }
+        }
+        function rcMonthLabel(key) { const p = String(key).split('-'); return (ETH_MONTHS[(+p[1]) - 1] || '') + ' ' + p[0]; }
+        function rcAllFlagged() {
+            return (allDailyReports || []).filter(r => RC_BAD.includes(r.receiptFlag) && r.receiptNote && r.receiptReviewedNote !== r.receiptNote);
+        }
+        function rcCurrentMonthKey() { return rcMonthKey(new Date().toISOString().slice(0, 10)); }
+        function rcUpdateBadge() {
+            try {
+                const cur = rcCurrentMonthKey();
+                const n = rcAllFlagged().filter(r => rcMonthKey(r.dateKey) === cur).length;
+                const b = document.getElementById('rcBadge');
+                if (b) { b.textContent = n; b.classList.toggle('show', n > 0); }
+                const tab = document.getElementById('tab-receiptcheck');
+                if (tab && tab.classList.contains('active')) rcRender();
+            } catch (e) {}
+        }
+        function rcRender() {
+            const body = document.getElementById('rcBody'), sel = document.getElementById('rcMonthSel');
+            if (!body || !sel) return;
+            const flagged = rcAllFlagged();
+            const cur = rcCurrentMonthKey();
+            const keys = [...new Set([cur, ...flagged.map(r => rcMonthKey(r.dateKey))])].filter(Boolean).sort().reverse();
+            const want = sel.value && keys.includes(sel.value) ? sel.value : cur;   // ነባሪ = የአሁኑ ወር
+            sel.innerHTML = keys.map(k => `<option value="${k}" ${k === want ? 'selected' : ''}>${rcMonthLabel(k)}${k === cur ? ' (የአሁኑ)' : ''}</option>`).join('');
+            const list = flagged.filter(r => rcMonthKey(r.dateKey) === want).sort((a, b) => String(b.dateKey).localeCompare(String(a.dateKey)));
+            if (!list.length) { body.innerHTML = '<div class="text-center text-muted" style="padding:18px;">✅ በዚህ ወር ማረጋገጫ የሚፈልግ ሪፖርት የለም</div>'; return; }
+            body.innerHTML = '<div class="table-wrap"><table><thead><tr><th>ቀን</th><th>ቴክኒሻን</th><th>ችግሩ</th><th>ገቢ / የገባ</th><th>ደረሰኝ</th><th></th></tr></thead><tbody>' + list.map(r => {
+                const links = (Array.isArray(r.receiptURLs) ? r.receiptURLs : []).filter(u => /^https:\/\//i.test(u)).map((u, i) => `<a href="${escHtml(u)}" target="_blank" rel="noopener">🧾${i + 1}</a>`).join(' ');
+                return `<tr><td>${escHtml(formatEthDate(String(r.dateKey).slice(0, 10) + 'T12:00:00'))}</td><td>${escHtml(r.technicianName || '')}</td><td>${escHtml(r.receiptNote)}</td><td>${escHtml(String(r.totalIncome ?? r.income ?? 0))} / ${escHtml(String(r.deposited ?? 0))}</td><td>${links || '—'}</td><td style="white-space:nowrap;"><button class="btn btn-sm btn-secondary" onclick="editDailyReport('${escHtml(r.id)}')">✏️ አስተካክል</button> <button class="btn btn-sm btn-success" onclick="rcKeep('${escHtml(r.id)}')">👌 ባለበት ይቀጥል</button></td></tr>`;
+            }).join('') + '</tbody></table></div>';
+        }
+        async function rcKeep(reportId) {
+            const r = (allDailyReports || []).find(x => x.id === reportId);
+            if (!r || !r.receiptNote) return;
+            try {
+                await db.collection('dailyReports').doc(reportId).update({ receiptReviewedNote: r.receiptNote, receiptReviewedBy: (typeof heActorName === 'function' ? heActorName() : ''), receiptReviewedAt: new Date() });
+                r.receiptReviewedNote = r.receiptNote;
+                try { db.collection('activity').add({ user: heActorName(), action: 'receipt_review_keep', details: `ሪፖርት #${reportId.substring(0, 8)} (${r.technicianName || ''} ${r.dateKey || ''}) ባለበት እንዲቀጥል ተረጋግጧል`, timestamp: new Date() }); } catch (e) {}
+                showToast('✅ ባለበት እንዲቀጥል ተመዝግቧል (ሉሁ በ5 ደቂቃ ውስጥ ይታደሳል)', 'success');
+                rcUpdateBadge(); rcRender();
+            } catch (e) { showToast('❌ ' + e.message, 'error'); }
         }
 
         function recalcEditReportShares() {
@@ -7168,6 +7244,7 @@ ${locationLine}
                     profit: profit,
                     techShareAmount: techShare,
                     companyAmount: companyAmount,
+                    deposited: parseFloat((document.getElementById('editRepDeposited') || {}).value) || 0,
                     notes: notes,
                     editedByAdmin: true,
                     editedAt: new Date()
