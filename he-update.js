@@ -77,3 +77,16 @@
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 })();
+
+/* 🔔 ገጹ ክፍት ሲሆን የሚታይ ማሳወቂያ — ሲነኩት ይዘጋል፣ ራሱም ከ8 ሰከንድ በኋላ ይዘጋል (በስክሪኑ ላይ እንዳይቆይ) */
+window.heShowNotif = function (title, opts) {
+    try {
+        if (!('Notification' in window) || Notification.permission !== 'granted') return null;
+        var o = opts || {};
+        if (!o.tag) o.tag = 'he-' + Date.now();
+        var n = new Notification(title, o);
+        n.onclick = function () { try { n.close(); } catch (e) {} try { window.focus(); } catch (e) {} };
+        setTimeout(function () { try { n.close(); } catch (e) {} }, 8000);
+        return n;
+    } catch (e) { return null; }
+};
