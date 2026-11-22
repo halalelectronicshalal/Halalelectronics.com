@@ -79,9 +79,10 @@ let authReady = (async () => {
             let hasRole = false;
             if (cu && cu.uid === s.staff.id) { const tr = await cu.getIdTokenResult(); hasRole = !!tr.claims.role; }
             if (!hasRole) {
-                const r = await callWorker('session', {});
+                let r = await callWorker('session', {}).catch(() => null);
+                if (!(r && r.ok && r.firebaseToken) && !(r && r.error === 'unauthorized')) { await new Promise(x => setTimeout(x, 1500)); r = await callWorker('session', {}).catch(() => null); }
                 if (r && r.ok && r.firebaseToken) { heSetSession(r); await firebase.auth().signInWithCustomToken(r.firebaseToken); return; }
-                await heLogout();
+                if (r && r.error === 'unauthorized') await heLogout();   // የተሻረ/ልክ ያልሆነ session ብቻ ያስወጣል — የአውታረ መረብ/ጊዜያዊ ችግር አያስወጣም
                 return;
             }
             return;
@@ -408,7 +409,7 @@ const HE = (() => {
                 if (r && r.ok) {
                     heSetSession(r);
                     if (r.firebaseToken) await firebase.auth().signInWithCustomToken(r.firebaseToken);
-                } else if (r && !r.ok) { await heLogout(); }
+                } else if (r && r.error === 'unauthorized') { await heLogout(); }
             } catch (e) { console.warn('session refresh failed (offline?)', e); }
             s = heGetSession();
         }
