@@ -29,8 +29,8 @@ fcm.onBackgroundMessage((payload)=>{
 
 self.addEventListener('notificationclick', (event) => {
   const data = event.notification && event.notification.data;
-  if (data && data.FCM_MSG) return; // የ FCM SDK ራሱ የሚያሳየውን ራሱ ያስተናግዳል
-  event.notification.close();
+  try { event.notification.close(); } catch (e) {}   // ሲነኩት ሁልጊዜ ከስክሪን ይጠፋል
+  if (data && data.FCM_MSG) return; // የ FCM SDK ራሱ የሚያሳየውን ራሱ ያስተናግዳል (መክፈቱን)
   // ክፍት ገጽ፦ data.url (ሙሉ አድራሻ) → data.page (ለምሳሌ admin.html፣ ከ SW ማህደር ጋር ይዋሃዳል) → የመጨረሻ አማራጭ ማህደሩ
   let url = (data && data.url) || '';
   if (!url && data && data.page) { try { url = new URL(data.page, self.registration.scope).href; } catch (e) {} }
