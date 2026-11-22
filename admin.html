@@ -21,7 +21,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     
     <!-- SheetJS (Excel export) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- (ይጫናል የሚጫነው Excel ሲወርድ ብቻ — ገጹ እንዲፈጥን) -->
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
 
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -2977,6 +2979,8 @@ document.addEventListener('click', function (e) {
         // This makes Firestore auto-detect that case and fall back to long-polling
         // instead of the streaming connection, so onSnapshot listeners keep working.
         db.settings({ experimentalAutoDetectLongPolling: true, merge: true });
+        // ⚡ ፈጣን መክፈቻ፦ ዳታው በስልኩ/ኮምፒውተሩ ይቀመጣል — ገጹ ሲከፈት ቀድሞ ያለው ወዲያው ይታያል፣ አዲሱ ከበስተጀርባ ይመጣል።
+        try { db.enablePersistence({ synchronizeTabs: true }).catch(function (e) { console.warn('offline cache off:', e && e.code); }); } catch (e) {}
         const storage = firebase.storage();
 
         // ============================================================
@@ -4594,7 +4598,7 @@ document.addEventListener('click', function (e) {
                             }
                         }
                     });
-                } else {
+                } else if (!snapshot.metadata.fromCache) {   // ከስልኩ ማህደር የመጣው የመጀመሪያ ንባብ አይቆጠርም — ከአገልጋዩ ብቻ
                     ordersFirstLoadDone = true;
                 }
 
@@ -5096,7 +5100,7 @@ document.addEventListener('click', function (e) {
                         }
                     });
                 }
-                commentsFirstLoad = false;
+                if (!snapshot.metadata.fromCache) commentsFirstLoad = false;
                 allComments = [];
                 snapshot.forEach(doc => {
                     const data = doc.data();
@@ -7098,6 +7102,15 @@ ${locationLine}
                 <p class="text-muted" style="font-size:0.75rem; margin-top:8px;">ℹ️ ለሌላ ቀን የተላለፉ ስራዎች እንደ አንድ ስራ ብቻ ነው የሚቆጠሩት።</p>`;
         }
         function exportSourceReportExcel() {
+            if (typeof XLSX !== 'undefined') return exportSourceReportExcelNow();
+            showToast('⏳ Excel ላይብረሪ በመጫን ላይ…', 'info');
+            const sc = document.createElement('script');
+            sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+            sc.onload = () => exportSourceReportExcelNow();
+            sc.onerror = () => showToast('❌ Excel ላይብረሪ አልተጫነም - ኢንተርኔት ይፈትሹ', 'error');
+            document.head.appendChild(sc);
+        }
+        function exportSourceReportExcelNow() {
             if (typeof XLSX === 'undefined') { showToast('❌ Excel ላይብረሪ አልተጫነም - ኢንተርኔት ይፈትሹ', 'error'); return; }
             const period = lastReportPeriod || 'daily';
             const label = { daily: 'የዛሬ', weekly: 'የሳምንት', monthly: 'የወር' }[period] || period;
