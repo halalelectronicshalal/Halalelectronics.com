@@ -344,7 +344,7 @@ function notifyNewOrder(order) {
     // 4) Browser system notification (ፍቃድ ካለ)
     try {
         if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification('🆕 አዲስ ትዕዛዝ ደረሰ', {
+            heShowNotif('🆕 አዲስ ትዕዛዝ ደረሰ', {
                 body: `${order.fullName || 'ደንበኛ'} — ${order.appliance || ''} — ${order.address || ''}`,
                 icon: 'icon-192.png'
             });
@@ -1005,7 +1005,7 @@ function notifyFreeAnnounce(t) {
     try { playNewOrderBeep(); } catch (e) {}
     if (document.hidden) { try { flashDocTitle('🟢 ቴክኒሻን ነፃ ሆኗል!'); } catch (e) {} }
     try {
-        if ('Notification' in window && Notification.permission === 'granted') new Notification('🟢 ቴክኒሻን ነፃ ሆኗል', { body: `${t.name || ''} ነፃ ነኝ አለ`, icon: 'icon-192.png' });
+        if ('Notification' in window && Notification.permission === 'granted') heShowNotif('🟢 ቴክኒሻን ነፃ ሆኗል', { body: `${t.name || ''} ነፃ ነኝ አለ`, icon: 'icon-192.png' });
     } catch (e) {}
 }
 /* ============================================================
