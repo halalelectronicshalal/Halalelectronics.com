@@ -7164,7 +7164,7 @@ ${locationLine}
         // ============================================================
         // 🔎 ሪፖርት ማረጋገጫ — የባንክ ደረሰኝ ማረጋገጫ ያልተሳካላቸው ሪፖርቶች (የሚታየው የተመረጠው የኢትዮጵያ ወር ብቻ፤ ወሩ ሲቀየር ራሱ አዲሱን ወር ያሳያል)
         // ============================================================
-        const RC_BAD = ['none', 'dup', 'unread', 'mismatch'];
+        const RC_BAD = ['none', 'dup', 'mismatch'];
         function rcMonthKey(dateKey) {
             try {
                 const e = gregorianToEthiopian(new Date(String(dateKey).slice(0, 10) + 'T12:00:00'));
@@ -7173,7 +7173,7 @@ ${locationLine}
         }
         function rcMonthLabel(key) { const p = String(key).split('-'); return (ETH_MONTHS[(+p[1]) - 1] || '') + ' ' + p[0]; }
         function rcAllFlagged() {
-            return (allDailyReports || []).filter(r => RC_BAD.includes(r.receiptFlag) && r.receiptNote && r.receiptReviewedNote !== r.receiptNote);
+            return (allDailyReports || []).filter(r => RC_BAD.includes(r.receiptFlag) && r.receiptNote && !/^[❓⏳]/.test(String(r.receiptNote)) && r.receiptReviewedNote !== r.receiptNote);
         }
         function rcCurrentMonthKey() { return rcMonthKey(new Date().toISOString().slice(0, 10)); }
         function rcUpdateBadge() {
