@@ -4932,14 +4932,8 @@ document.addEventListener('click', function (e) {
             const c = parseFloat(r.companyAmount);
             return isFinite(c) ? c : 0;
         }
-        function admUpdateCompanyIncomeCards() {
-            const elT = document.getElementById('statCompanyToday');
-            const elY = document.getElementById('statCompanyYesterday');
-            if (!elT || !elY) return;
-            const now = bizNow();
-            const todayKey = getDateKey(now);
-            const yKey = getDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
-            const keyOf = (r) => {
+        // 🗓️ የሪፖርት የስራ ቀን (ያደረ ሪፖርት ለስራው ቀን) — ከ Google Sheet ጋር ተመሳሳይ
+        function admRepDayKey(r) {
                 if (r.dateKey) {
                     const dk = String(r.dateKey).slice(0, 10);
                     // 🌙 ያደረ ሪፖርት፦ ሁሉም ስራዎች ከሪፖርቱ ቀን በፊት የተመዘገቡ ከሆነ (ከ2:30 በፊት ለነበረ ስራ ከ2:30 በኋላ የተላከ) በስራው ቀን (ትላንት) ይመዘገባል
@@ -4950,22 +4944,34 @@ document.addEventListener('click', function (e) {
                 }
                 if (/^\d{4}-\d{2}-\d{2}/.test(String(r.date || ''))) return String(r.date).slice(0, 10);
                 try { const d = r.submittedAt && r.submittedAt.toDate ? r.submittedAt.toDate() : null; return d ? getBizDateKey(d) : ''; } catch (e) { return ''; }
-            };
+            }
+        const admRepIncome = (r) => { const v = parseFloat(r.totalIncome !== undefined ? r.totalIncome : r.income); return isFinite(v) ? v : 0; };
+        function admUpdateCompanyIncomeCards() {
+            const elT = document.getElementById('statCompanyToday');
+            const elY = document.getElementById('statCompanyYesterday');
+            if (!elT || !elY) return;
+            const now = bizNow();
+            const todayKey = getDateKey(now);
+            const yKey = getDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
+            const keyOf = admRepDayKey;
             const amtOf = (r) => {
                 const hasDep = r.deposited !== undefined && r.deposited !== null && r.deposited !== '' && isFinite(parseFloat(r.deposited));
                 let a = hasDep ? parseFloat(r.deposited) : parseFloat(r.companyAmount);
                 if (!isFinite(a)) { const p = parseFloat(r.profit), t = parseFloat(r.techShareAmount); a = (isFinite(p) ? p : 0) - (isFinite(t) ? t : 0); }
                 return isFinite(a) ? a : 0;
             };
-            const S = { t: { ok: 0, wait: 0, n: 0 }, y: { ok: 0, wait: 0, n: 0 } };
+            const S = { t: { ok: 0, wait: 0, n: 0, g: 0 }, y: { ok: 0, wait: 0, n: 0, g: 0 } };
             (financeReports() || []).forEach(r => {
                 const k = keyOf(r);
                 const b = k === todayKey ? S.t : (k === yKey ? S.y : null);
                 if (!b) return;
-                if (r.approved === true) b.ok += amtOf(r);
+                if (r.approved === true) { b.ok += amtOf(r); b.g += admRepIncome(r); }
                 else { b.wait += amtOf(r); b.n++; }
             });
             const fmt = (n) => Math.round(n).toLocaleString() + ' ብር';
+            const gT = document.getElementById('statTodayIncome'), gY = document.getElementById('statYesterdayIncome');   // 💰 ጠቅላላ ገቢ — የጸደቀ ሪፖርት ብቻ
+            if (gT) gT.textContent = Math.round(S.t.g) + ' ብር';
+            if (gY) gY.textContent = Math.round(S.y.g) + ' ብር';
             elT.textContent = fmt(S.t.ok);
             elY.textContent = fmt(S.y.ok);
             const noteT = document.getElementById('statCompanyTodayNote'), noteY = document.getElementById('statCompanyYesterdayNote');
@@ -5359,12 +5365,15 @@ document.addEventListener('click', function (e) {
                 summary = `${list.length} በቴክኒሻን የተመለሱ ገና ያልተመደቡ ስራዎች — ቴክኒሻን መርጠው መመደብ ይቻላል`;
                 rows = list.map(o => orderDetailRowHTML(o, { assignable: 'returned' }));
             } else if (kind === 'income' || kind === 'yesterday') {
-                const y = new Date(); y.setDate(y.getDate() - 1);
-                const list = txOn(kind === 'income' ? todayStr : y.toDateString());
-                const sum = list.reduce((a, t) => a + parseFloat(t.amount || 0), 0);
-                title = kind === 'income' ? '💵 የዛሬ ገቢ ዝርዝር' : '📅 የትላንት ገቢ ዝርዝር';
-                summary = `${list.length} ግብይት • ጠቅላላ ${sum.toFixed(0)} ብር`;
-                rows = list.map(txDetailRowHTML);
+                const _n = bizNow();
+                const wantKey = getDateKey(new Date(_n.getFullYear(), _n.getMonth(), _n.getDate() - (kind === 'income' ? 0 : 1)));
+                const list = financeReports().filter(r => r.approved === true && admRepDayKey(r) === wantKey);
+                const sum = list.reduce((a, r) => a + admRepIncome(r), 0);
+                title = kind === 'income' ? '💵 የዛሬ ገቢ (የጸደቁ ሪፖርቶች)' : '📅 የትላንት ገቢ (የጸደቁ ሪፖርቶች)';
+                summary = `${list.length} የጸደቀ ሪፖርት • ጠቅላላ ገቢ ${sum.toFixed(0)} ብር`;
+                rows = list.map(r => `<div class="stat-row" data-q="${escHtml(String(r.technicianName || '').toLowerCase())}" style="border:1px solid var(--border); border-radius:10px; padding:10px; margin-bottom:8px; background:#fff; display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+                    <div><strong>👷 ${escHtml(r.technicianName || '—')}</strong><div class="text-muted" style="font-size:0.8rem;">✅ ${r.completedCount || 0} ተሰራ • ❌ ${r.notCompletedCount || 0} አልተሰራም</div></div>
+                    <strong style="color:var(--success);">${Math.round(admRepIncome(r))} ብር</strong></div>`);
             } else if (kind === 'techs') {
                 const list = fieldTechs().filter(t => t.status === 'active' || t.isOnline === true);
                 title = '👷 አክቲቭ ቴክኒሻኖች';
@@ -5426,14 +5435,12 @@ document.addEventListener('click', function (e) {
             document.getElementById('statTotalOrders').textContent = total;
             document.getElementById('statPendingOrders').textContent = pending;
             document.getElementById('statCompletedOrders').textContent = completed;
-            document.getElementById('statTodayIncome').textContent = todayIncome.toFixed(0) + ' ብር';
             document.getElementById('statActiveTechs').textContent = activeTechs;
             document.getElementById('statOverdueJobs').textContent = overdueJobs;
             document.getElementById('statUnfinishedJobs').textContent = todayOrders.filter(o => ADM_UNFINISHED_STATUSES.includes(o.status)).length;
             document.getElementById('statCorrectionJobs').textContent = todayOrders.filter(o => admWorkKind(o) === 'correction').length;
             document.getElementById('statReferralJobs').textContent = todayOrders.filter(o => admWorkKind(o) === 'referral').length;
             const _sr = document.getElementById('statReturnedJobs'); if (_sr) _sr.textContent = allOrders.filter(admIsReturnedJob).length;
-            document.getElementById('statYesterdayIncome').textContent = yesterdayIncome.toFixed(0) + ' ብር';
             try { admUpdateCompanyIncomeCards(); } catch (e) {}
             // ✅ NEW: orderBadge (sidebar ላይ ያለው ቀይ ቁጥር) ግን ሁሉንም በመጠባበቅ ላይ ያሉ ትዕዛዞች (ታሪክ ጨምሮ)
             // ማሳየት ስላለበት - አድሚን ምንም pending ትዕዛዝ እንዳያመልጠው - ይህ የተለየ ስሌት ያስፈልገዋል
