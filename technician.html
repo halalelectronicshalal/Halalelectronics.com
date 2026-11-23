@@ -10397,6 +10397,14 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                             techFreeBlocked('🔒 «ነጻ ነኝ» ማለት አይችሉም — የተመደበልዎት ያልተጠናቀቀ ስራ አለ፦\n' + _lines + '\nመጀመሪያ ስራውን ያጠናቅቁ (ወይም ውጤቱን ያስመዝግቡ)', 'error');
                             return;
                         }
+                        // 📦 ከቴክኒሻኑ ጋር የተያዘ ያልተጠናቀቀ ስራ (ለ/ሰ/ሠ አማራጭ — ዋጋ አልተስማሙም / ስልክ አይነሳም / ሌላ) ካለም «ነጻ ነኝ» አይቻልም።
+                        // ስራው ሲጠናቀቅ ወይም ወደ አድሚን እንዲመለስ ሲጸድቅ ብቻ ይከፈታል። (የተጠናቀቀና ሪፖርት የተደረገ ስራ ፈጽሞ አይከለክልም)
+                        const _heldOpen = myOrders.filter(o => techIsHeld(o) && o.status !== 'Completed');
+                        if (_heldOpen.length) {
+                            const _hl = _heldOpen.slice(0, 4).map(o => '• #' + String(o.id).substring(0, 8) + ' ' + (o.fullName || '—') + ' (' + (o.appliance || '—') + ') — ' + techHeldLabel(o.status)).join('\n');
+                            techFreeBlocked('🔒 «ነጻ ነኝ» ማለት አይችሉም — ከእርስዎ ጋር ያልተጠናቀቀ ስራ አለ፦\n' + _hl + '\nስራውን ያጠናቅቁ ወይም ወደ አድሚን እንዲመለስ ይጠይቁ', 'error');
+                            return;
+                        }
                     }
 
                     // 📍 ግዴታ፦ "ነጻ" ለማለት ቦታ (Location) መላክ አለበት። ቦታ ካልተገኘ ሁኔታው አይቀየርም።
@@ -12718,13 +12726,17 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 // 📌 የስራው ቀን = የተመዘገበበት/የተመደበበት (የመጨረሻው)፤ ዛሬ የተላከ ስራ በትላንት (እሁድ) ሪፖርት ውስጥ አይገባም
                 const createdStr = techOrderDateKey(o) || techDateKeyOf(o.createdAt);
                 const completedStr = o.completedAt ? techDateKeyOf(o.completedAt) : '';
-                return createdStr === today || completedStr === today;
+                if (!(createdStr === today || completedStr === today)) return false;
+                // ✅ በሪፖርቱ ላይ የሚገባው «አጠናቅ» የተባለ (የተጠናቀቀ) ስራ ብቻ ነው፤ ያልተጠናቀቀ (በስራ ላይ/የተመደበ/የተያዘ) ስራ ባለበት ይቆያል።
+                // ብቸኛው ልዩነት፦ ያደረ ሆኖ በ ለ–ረ አማራጭ የተዘጋ ስራ — ሪፖርት እስኪደረግበት «ነጻ ነኝ» ስለሚከለክል ከዝርዝሩ መጥፋት የለበትም።
+                if (o.status === 'Completed') return true;
+                try { return !!techIsOvernightClosed(o); } catch (e) { return false; }
             });
 
             const todayJobs = todayJobsAll.filter(o => !reportedSet.has(techJobKey(o)));
 
             if (todayJobs.length === 0) {
-                container.innerHTML = techReportDateChosen ? '<p class="text-muted text-center">በዚህ ቀን ያልተላከ ስራ የለም</p>' : '<p class="text-muted text-center">ዛሬ ምንም ስራ የለም</p>';
+                container.innerHTML = techReportDateChosen ? '<p class="text-muted text-center">በዚህ ቀን ያልተላከ የተጠናቀቀ ስራ የለም</p>' : '<p class="text-muted text-center">ዛሬ የተጠናቀቀ ስራ የለም</p>';
                 try { techRenderExtraWorkCard([]); } catch (e) {}
                 if (todayJobsAll.length > 0) techClearReportAutoFields(); // ሁሉም ተልኳል → ፎርሙ ባዶ ሆኖ ለአዲስ ሪፖርት ዝግጁ
                 return;
