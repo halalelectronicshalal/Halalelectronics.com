@@ -1451,16 +1451,34 @@ function ethClockOf(p) {
     var per = p.h < 6 ? 'ሌሊት' : p.h < 12 ? 'ጠዋት' : p.h < 18 ? 'ከሰዓት' : 'ማታ';
     return h + ':' + m + ' ' + per;
 }
+/* 📅 ሪፖርቱ የሚመለከትበት ቀን (የስራ ቀን) — ያደረ ሪፖርት (ሁሉም ስራዎች ከሪፖርቱ ቀን በፊት ከሆኑ) ለስራዎቹ ቀን ይመዘገባል (ከሺት/ዳሽቦርድ ጋር ተመሳሳይ) */
+function repWorkKey(r) {
+    r = r || {};
+    var dk = String(r.dateKey || '').slice(0, 10);
+    if (dk) {
+        var js = Array.isArray(r.jobStatuses) ? r.jobStatuses : [];
+        var jd = js.map(function (j) { return String((j && j.jobDate) || '').slice(0, 10); }).filter(Boolean);
+        if (js.length && jd.length === js.length && jd.every(function (d) { return d < dk; })) return jd.slice().sort().pop();
+        return dk;
+    }
+    var m = /^(\d{4}-\d{2}-\d{2})/.exec(String(r.date || ''));
+    return m ? m[1] : '';
+}
 function ethReportLabel(r, withWeekday) {
     try {
         r = r || {};
         var out = '';
-        var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(r.dateKey || r.date || ''));
+        var wk = repWorkKey(r);
+        var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(wk);
         var sub = ethAddisParts(r.submittedAt);
-        /* ቀኑ ሪፖርቱ በተደረገበት (በተላከበት) ቀን ነው — ቴክኒሻኑ የመረጠው የሪፖርት ቀን ሳይሆን */
-        var base = sub ? new Date(sub.y, sub.m, sub.d) : (m ? new Date(+m[1], +m[2] - 1, +m[3]) : null);
+        /* ቀኑ ሪፖርቱ የሚመለከትበት (የስራ) ቀን ነው — ያለፈ ቀን ሪፖርት ዛሬ ቢላክም በዛሬ ቀን አይመዘገብም። የተላከበት ጊዜ ከጎኑ ይታያል። */
+        var base = m ? new Date(+m[1], +m[2] - 1, +m[3]) : (sub ? new Date(sub.y, sub.m, sub.d) : null);
         if (base) out = formatEthDate(base, withWeekday !== false);
-        if (sub) out += (out ? ' · ' : '') + '🕐 ' + ethClockOf(sub);
+        if (sub) {
+            var sameDay = m && (+m[1] === sub.y && +m[2] === sub.m + 1 && +m[3] === sub.d);
+            out += (out ? ' · ' : '') + '🕐 ' + ethClockOf(sub);
+            if (m && !sameDay) out += ' (ተላከ፦ ' + formatEthDate(new Date(sub.y, sub.m, sub.d), false) + ')';
+        }
         return out || String(r.dateKey || r.date || '—');
     } catch (e) { return String(r && (r.dateKey || r.date) || '—'); }
 }
@@ -3539,13 +3557,27 @@ document.addEventListener('click', function (e) {
             const lim = Date.now() - UNREPORTED_HOURS * 3600 * 1000;
             return allOrders.filter(o => o.technician === tech.name && o.status === 'Assigned' && toMs(o.assignedAt) > 0 && toMs(o.assignedAt) < lim).length;
         }
+        /** 📅 የቀኖች ዝርዝር (ኢትዮጵያ አቆጣጠር) ከ ms ዝርዝር — ቢበዛ 3 ቀን፣ ቀሪው «+N» */
+        function unrepDatesTxt(msList) {
+            try {
+                const keys = [...new Set((msList || []).filter(Boolean).map(ms => getBizDateKey(new Date(ms))))].sort();
+                if (!keys.length) return '';
+                const f = (k) => { try { return formatEthDate(new Date(k + 'T12:00:00'), false); } catch (e) { return k; } };
+                const shown = keys.slice(0, 3).map(f).join('፣ ');
+                return keys.length > 3 ? shown + ' +' + (keys.length - 3) : shown;
+            } catch (e) { return ''; }
+        }
+        function techUnreportedDates(tech) {
+            const lim = Date.now() - UNREPORTED_HOURS * 3600 * 1000;
+            return unrepDatesTxt(allOrders.filter(o => o.technician === tech.name && o.status === 'Assigned' && toMs(o.assignedAt) > 0 && toMs(o.assignedAt) < lim).map(o => toMs(o.assignedAt)));
+        }
         /** { reasons:[...], manual:bool, auto:bool } ወይም null */
         function techWarning(tech) {
             const reasons = [];
             const manual = !!(tech.warning && tech.warning.active);
             if (manual) reasons.push(tech.warning.reason || 'በአድሚን ዋርኒግ ተሰጥቷል');
             const n = techUnreportedCount(tech);
-            if (n > 0) reasons.push(`${n} ስራ ሪፖርት አልተደረገም (ከ${UNREPORTED_HOURS} ሰዓት በላይ)`);
+            if (n > 0) { const _d = techUnreportedDates(tech); reasons.push(`${n} ስራ ሪፖርት አልተደረገም (${_d ? 'የ ' + _d + ' ስራ · ' : ''}ከ${UNREPORTED_HOURS} ሰዓት በላይ)`); }
             return reasons.length ? { reasons, manual, auto: n > 0 } : null;
         }
         function techNotTodayToday(tech) {
@@ -5028,11 +5060,11 @@ document.addEventListener('click', function (e) {
                                 <span class="text-muted" style="font-size:.78rem;">መልእክት ካልጻፉ ራስ-ሰር «ሪፖርት ያላደረጓቸው ቀናት» ዝርዝር ይላካል</span>
                             </div>
                         </div>
-                        ${rows.map(x => `<div style="border:1px solid var(--border); border-radius:10px; padding:10px; margin-top:8px;">
-                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                                <input type="checkbox" class="missChk" value="${escHtml(x.t.id)}" checked />
-                                <strong>👤 ${escHtml(x.t.name || '—')}</strong>
-                                <span class="status-badge status-pending">⚠️ ${x.days.length} ቀን</span>
+                        ${rows.map(x => `<div style="border:1px solid var(--border); border-radius:10px; padding:10px; margin-top:8px; min-width:0; overflow:hidden;">
+                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; min-width:0; flex-wrap:wrap;">
+                                <input type="checkbox" class="missChk" value="${escHtml(x.t.id)}" checked style="width:18px; height:18px; min-height:0; padding:0; flex:0 0 18px; margin:0;" />
+                                <strong style="flex:1 1 0; min-width:0; overflow-wrap:anywhere;">👤 ${escHtml(x.t.name || '—')}</strong>
+                                <span class="status-badge status-pending" style="flex:0 0 auto;">⚠️ ${x.days.length} ቀን</span>
                             </label>
                             <div style="font-size:.82rem; margin-top:6px; line-height:1.6;">${x.days.map(k => `<span style="display:inline-block; margin:2px 4px 2px 0; padding:2px 8px; border-radius:8px; background:rgba(220,38,38,.1); color:#B91C1C;">📅 ${escHtml(eth(k))}</span>`).join('')}</div>
                         </div>`).join('')}
@@ -5600,7 +5632,7 @@ document.addEventListener('click', function (e) {
         }
         function approveReportFromCard(reportId) {
             const r = allDailyReports.find(x => x.id === reportId);
-            if (!confirm(`የ ${r ? (r.technicianName || r.technician || '') : ''} ሪፖርት (${r ? (r.date || r.dateKey || '') : ''}) ይጽደቅ?`)) return;
+            if (!confirm(`የ ${r ? (r.technicianName || r.technician || '') : ''} ሪፖርት (${r ? ethReportLabel(r, false) : ''}) ይጽደቅ?`)) return;
             approveReport(reportId, r ? r.technicianId : null, true);
         }
                 // ============================================================
@@ -7306,7 +7338,7 @@ ${locationLine}
                         <div style="border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:10px;">
                             <div class="flex-between">
                                 <strong>👤 ${escHtml(tech.name)}</strong>
-                                <span class="status-badge status-pending">⚠️ ${jobs.length} ስራ ሪፖርት አልተደረገም</span>
+                                <span class="status-badge status-pending" style="white-space:normal; text-align:right; min-width:0;">⚠️ ${jobs.length} ስራ ሪፖርት አልተደረገም${unrepDatesTxt(jobs.map(o => (o.status === 'Completed' ? (toMs(o.completedAt) || toMs(o.assignedAt) || toMs(o.createdAt)) : (toMs(o.assignedAt) || toMs(o.createdAt))))) ? ' (' + unrepDatesTxt(jobs.map(o => (o.status === 'Completed' ? (toMs(o.completedAt) || toMs(o.assignedAt) || toMs(o.createdAt)) : (toMs(o.assignedAt) || toMs(o.createdAt))))) + ')' : ''}</span>
                             </div>
                             ${since ? `<div class="text-muted" style="font-size:0.78rem; margin-top:4px;">ከ ${techSummaryDateLabel(since)} ጀምሮ</div>` : ''}
                             <button class="btn btn-outline btn-sm mt-8" onclick="viewTechReportHistory('${tech.id}')"><i class="fas fa-history"></i> ሙሉ ታሪክ ይመልከቱ</button>
