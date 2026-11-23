@@ -10174,7 +10174,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const k = (v) => { try { const d = v && v.toDate ? v.toDate() : (v ? new Date(v) : null); return (d && !isNaN(d.getTime())) ? getBizDateKey(d) : ''; } catch (e) { return ''; } };
             const ap = String((o && ((o.rescheduledFrom && o.rescheduledDate) || o.appointmentDate)) || '').slice(0, 10);
             const apKey = /^\d{4}-\d{2}-\d{2}$/.test(ap) ? ap : '';
-            return [k(o && o.createdAt), k(o && o.returnedAt), apKey].reduce((m, x) => x > m ? x : m, '');
+            // 📌 ስራው ለቴክኒሻኑ የተላከበት (assignedAt) ቀንም ይካተታል፦ ኦፕሬተር እሁድ መዝግቦ ሰኞ ቢልክ ስራው የሰኞ ስራ ነው (የእሁድ «ያደረ» አይደለም)
+            return [k(o && o.createdAt), k(o && o.assignedAt), k(o && o.returnedAt), apKey].reduce((m, x) => x > m ? x : m, '');
         }
         function techIsOvernightClosed(o) {
             if (!o || o.convertedInReportId || o.workTag) return false;
@@ -12706,7 +12707,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         function loadReportJobs() {
             const container = document.getElementById('reportJobList');
             try { techRenderHeldReportBanner(); } catch (e) {}
-            const today = techReportDateChosen || new Date().toISOString().split('T')[0]; // 📅 የተመረጠ ቀን ወይም ዛሬ
+            const today = techReportDateChosen || getBizDateKey(); // 📅 የተመረጠ ቀን ወይም የዛሬ የስራ ቀን (ጠዋት 2:30 ኢት. ይቀየራል)
             try { techStartSentReports(); } catch (e) {}
             // ✅ FIX: ቀድሞ የተጣራው በ 'createdAt' ብቻ ስለነበር፣ ከትናንት/ካለፈ ቀን ተመድቦ ዛሬ የተጠናቀቀ
             // ስራ (ለምሳሌ የ"ለሌላ ቀን ተዘጋጅቷል" ስራዎች) ከሪፖርቱ ውጪ ይቀር ነበር፣ ይህም አውቶ-ካልኩሌት
@@ -12714,8 +12715,9 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const reportedSet = techReportedKeysAll(); // ✅ ቀደም ሲል በማንኛውም ሪፖርት የተላኩ ስራዎች እንደገና አይታዩም
             const todayJobsAll = myOrders.filter(o => {
                 if (o.convertedInReportId) return false; // ከተላከ ሪፖርት ውስጥ ወደ አጠናቅ የተቀየረ — ገቢው ቀድሞ በዚያ ሪፖርት ገብቷል
-                const createdStr = (o.createdAt?.toDate?.() || null)?.toISOString().split('T')[0];
-                const completedStr = (o.completedAt?.toDate?.() || null)?.toISOString().split('T')[0];
+                // 📌 የስራው ቀን = የተመዘገበበት/የተመደበበት (የመጨረሻው)፤ ዛሬ የተላከ ስራ በትላንት (እሁድ) ሪፖርት ውስጥ አይገባም
+                const createdStr = techOrderDateKey(o) || techDateKeyOf(o.createdAt);
+                const completedStr = o.completedAt ? techDateKeyOf(o.completedAt) : '';
                 return createdStr === today || completedStr === today;
             });
 
@@ -13002,8 +13004,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
         // ⏰ «ያደረ» ስራ = ከዛሬ በፊት የተመዘገበ። ስራው ሁልጊዜ በተመዘገበበት ቀን (ትላንት) ይመዘገባል፤ ዛሬ ቢጠናቀቅም እንደ አዲስ የዛሬ ስራ አይሆንም።
         function techOrderDateKey(o) {
-            const d = o && o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : null;
-            return d ? getBizDateKey(d) : '';
+            // 📌 ከ techJobBaseKey ጋር አንድ ነው — የተመዘገበበት፣ የተመደበበት፣ የተመለሰበት ወይም የተቀጠረበት የመጨረሻ ቀን
+            return techJobBaseKey(o) || '';
         }
         function techIsOvernightOrder(o) {
             const k = techOrderDateKey(o);
