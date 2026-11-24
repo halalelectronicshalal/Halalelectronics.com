@@ -10663,7 +10663,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 if (statusEl) { statusEl.textContent = '⚠️ ቦታ ማግኘት አልተቻለም (የአካባቢ ፍቃድ/GPS ያብሩ)'; statusEl.style.color = 'var(--emergency)'; }
                 showToast('⚠️ ቦታ ማግኘት አልተቻለም። የአካባቢ (Location) ፍቃድ እና GPS ያብሩ', 'error');
                 await sendTelegramNotification(`🟢 *ነፃ ሆኗል* (ቦታ አልተላከም - GPS አልተገኘም)\n👨‍🔧 *ቴክኒሻን:* ${safeName}\n📅 ${formatEthDateTime(new Date())}`);
-                notifyDispatchersFree(`🟢 *ነፃ ሆኗል* (ቦታ አልተላከም)\n👨‍🔧 *ቴክኒሻን:* ${safeName}\n📅 ${formatEthDateTime(new Date())}`, `🟢 ነፃ ሆኗል: ${technicianName} (ቦታ አልተላከም)`, null, addrText);
+                notifyDispatchersFree(`🟢 *ነፃ ሆኗል* (ቦታ አልተላከም)\n👨‍🔧 *ቴክኒሻን:* ${safeName}\n📅 ${formatEthDateTime(new Date())}`, `🟢 ነፃ ሆኗል: ${technicianName} (ቦታ አልተላከም)${addrText ? ' — አካባቢ: ' + addrText : ''}`, null, addrText);
                 return;
             }
 
@@ -10700,7 +10700,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             );
             notifyDispatchersFree(
                 `🟢 *ነፃ ሆኗል* 📍\n👨‍🔧 *ቴክኒሻን:* ${safeName}\n📌 *ቦታ:* ${lat}, ${lng}${accuracy ? ` (±${accuracy}ሜ)` : ''}\n${addrTg ? `🏠 *አካባቢ:* ${addrTg}\n` : ''}🔗 https://www.google.com/maps?q=${lat},${lng}\n📅 ${formatEthDateTime(new Date())}`,
-                `🟢 ነፃ ሆኗል: ${technicianName}`, // SMS: ጽሁፍ ብቻ (ሊንክ/ቦታ የለም)
+                `🟢 ነፃ ሆኗል: ${technicianName}${addrText ? ' — አካባቢ: ' + addrText : ''}`, // SMS: ጽሁፍ + ሰፈር (ሊንክ የለም)
                 { lat: parseFloat(lat), lng: parseFloat(lng), acc: accuracy, addr: addrText }
             );
 
