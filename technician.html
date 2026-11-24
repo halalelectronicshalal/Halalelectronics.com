@@ -2778,7 +2778,7 @@ document.addEventListener('click', function (e) {
                             </div>
                             <div class="field">
                                 <label>📊 8️⃣ የባለሙያ ድርሻ (%) <b style="color:var(--primary,#1d4ed8);">ፐርሰንት</b> <span style="color:var(--emergency,#dc2626); font-size:0.75rem;">* ገቢ ካለ ግዴታ</span></label>
-                                <input type="text" inputmode="numeric" maxlength="2" id="reportTechSharePercent" placeholder="ለም: 50 (ፐርሰንት — እስከ 2 አሃዝ)" />
+                                <input type="text" inputmode="decimal" maxlength="6" id="reportTechSharePercent" placeholder="ለም: 50 ወይም 52.72 (ፐርሰንት)" />
                                 <small id="techPctAutoNote" style="color:var(--success); font-size:0.75rem; display:block; margin-top:2px;"></small>
                             </div>
                             <div class="field">
@@ -9804,8 +9804,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             safe(() => {
                 const _pc = document.getElementById('reportTechSharePercent');
                 // 🔢 ፐርሰንት፦ ቁጥር ብቻ፣ ከ 2 አሃዝ (ከ 99) በላይ አይፈቀድም — ከ bindDecimalField በፊት ይሰራል ስለዚህ ስሌቱ የተጣራውን ዋጋ ያነባል
-                _pc.maxLength = 2;
-                _pc.addEventListener('input', function () { const v = this.value.replace(/[^0-9]/g, '').slice(0, 2); if (v !== this.value) this.value = v; });
+                _pc.maxLength = 6;
+                _pc.addEventListener('input', function () { const v = this.value.replace(/[^0-9.]/g, '').replace(/^(\d*\.\d*)\./, '$1').slice(0, 6); if (v !== this.value) this.value = v; });
                 bindDecimalField(_pc);
                 // ተጠቃሚው ራሱ ፐርሰንቱን ከጻፈ በ «አጠናቅ» የገባውን ድርሻ አይተካውም
                 _pc.addEventListener('input', function (ev) { if (ev && ev.isTrusted !== false) { if (String(this.value || '').trim() === '') { delete this.dataset.userPct; } else { this.dataset.userPct = '1'; } delete this.dataset.autoPct; } });
@@ -9991,15 +9991,18 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 if (_usePer) {
                     let sh = 0, pr = 0;
                     _jobs.forEach(j => { if (j.pct !== null) { sh += j.amount; pr += j.profit; } });
-                    techShareAmount = sh + (profit - pr) * (sharePercent / 100);
+                    // 🔧 ቀሪ ትርፍ (በስራዎቹ ያልተሸፈነ) በ«ራስ-ሰር የተሞላ» ፐርሰንት አይሰላም — ያ ፐርሰንት ራሱ ከዚህ ድርሻ የተገኘ ነው (ክብ ስሌት ድርሻውን ያበጥር ነበር)።
+                    //    በራስ-ሰር የተሞላ ከሆነ ቀሪው ለድርጅቱ ይቀራል፤ ባለሙያው ራሱ ፐርሰንት ከጻፈ ብቻ በዚያ ይሰላል።
+                    const _rate = _pcEl.dataset.autoPct ? 0 : sharePercent;
+                    techShareAmount = sh + (profit - pr) * (_rate / 100);
                     // ትርፍ የሌለው (0) ስራ ድርሻ አያስፈልገውም — ሌሎች ሁሉ % ካላቸው ቦታው ዝግ ይሆናል
                     const _all = _jobs.every(j => j.pct !== null || j.profit === 0);
                     if (_all) {
                         const eff = profit !== 0 ? Math.max(0, Math.min(100, techShareAmount / profit * 100)) : 0;
                         _pcEl.value = String(Math.round(eff * 100) / 100);
                         _pcEl.dataset.autoPct = '1';
-                        _pcEl.readOnly = true; _pcEl.style.background = 'var(--bg)'; // 🔒 ከ «አጠናቅ» ድርሻ በራስ-ሰር ስለተሞላ ለመጻፍ ዝግ
-                        if (_note) _note.textContent = '✅ ከ «አጠናቅ» ለእያንዳንዱ ስራ በገባው ድርሻ (%) በራስ-ሰር ተሰልቷል (ዝግ ነው)';
+                        _pcEl.readOnly = false; _pcEl.style.background = '';   // ✏️ ክፍት ነው — ካልተመቸ በእጅ ፐርሰንት መጻፍ ይቻላል (ባዶ ካደረጉት ወደ ራስ-ሰር ይመለሳል)
+                        if (_note) _note.textContent = '✅ ከ «አጠናቅ» ለእያንዳንዱ ስራ በገባው ድርሻ (ብር) በራስ-ሰር ተሰልቷል — ፐርሰንቱ የድምሩ ውጤት ነው። ማስተካከል ከፈለጉ በእጅ ይጻፉ (ባዶ ካደረጉት ወደ ራስ-ሰር ይመለሳል)';
                     } else {
                         _pcEl.readOnly = false; _pcEl.style.background = '';
                         if (_pcEl.dataset.autoPct) { _pcEl.value = ''; delete _pcEl.dataset.autoPct; }
@@ -10243,6 +10246,14 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const jl = Object.keys(jobDays).sort().filter(k => !days.includes(k)).map(k => { let t = k; try { t = formatEthDate(new Date(k + 'T12:00:00'), true); } catch (e) {} return '• ' + t + ' — ' + jobDays[k] + ' ያደረ ስራ ሪፖርት አልተደረገም'; });
             return lines.concat(jl).join('\n');
         }
+        // 📅 ሪፖርት ያልተደረገባቸው ቀናት በአጭሩ (ኢትዮጵያ አቆጣጠር) — ለቀይ ማሳወቂያው የመጀመሪያ መስመር
+        function techMissingDatesShort(b) {
+            try {
+                const keys = new Set((b && b.missingDays) || []);
+                ((b && b.unreported) || []).forEach(o => { const d = (o.completedAt && o.completedAt.toDate ? o.completedAt.toDate() : (o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : null)); if (d) keys.add(getBizDateKey(d)); });
+                return [...keys].sort().map(k => { try { return formatEthDate(new Date(k + 'T12:00:00'), false); } catch (e) { return k; } }).join('፣ ');
+            } catch (e) { return ''; }
+        }
         function techOvernightUnreportedJobs() {
             const b = techOvernightBlockers();
             return b ? b.unreported : null; // ሪፖርት ካደረገ ይበቃል — አድሚን ባያጸድቅም አይከለክልም
@@ -10287,9 +10298,10 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 const nu = b ? ((b.unreported || []).length) : 0;
                 if (!b || (!nd && !nu)) { el.style.display = 'none'; el.textContent = ''; return; }
                 let head;
-                if (nd === 1) head = '🔒 የ1 ቀን ሪፖርት አልላኩም!';
-                else if (nd > 1) head = '🔒 የ' + nd + ' ቀናት ሪፖርት አልላኩም!';
-                else head = '🔒 ያደረ ያልተላከ ሪፖርት አለዎት (' + nu + ' ስራ)!';
+                const _dt = techMissingDatesShort(b);
+                if (nd === 1) head = '🔒 የ1 ቀን ሪፖርት አልላኩም (' + _dt + ')!';
+                else if (nd > 1) head = '🔒 የ' + nd + ' ቀናት ሪፖርት አልላኩም (' + _dt + ')!';
+                else head = '🔒 ያደረ ያልተላከ ሪፖርት አለዎት (' + nu + ' ስራ፦ ' + _dt + ')!';
                 el.textContent = head + '\n' + techMissingDaysText(b) + '\n\nስራ ባይኖርዎትም በዜሮ ሪፖርት መላክ ግዴታ ነው፤ መጀመሪያ ሪፖርት ያድርጉ (ቀኑን በመምረጥ)፣ ከዚያ «ነጻ ነኝ» ማለት ይችላሉ።';
                 el.style.display = 'block';
             } catch (e) {}
@@ -10371,12 +10383,12 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                         }
                         const _ovb = techOvernightBlockers() || { unreported: [], unapproved: [] };
                         if (_ovb.missingDaily) {
-                            techFreeBlocked('🔒 ሪፖርት ያላደረጉባቸው ቀናት አሉ! (' + _ovb.missingDays.length + ' ቀን)\n' + techMissingDaysText(_ovb) + '\n\nስራ ባይኖርዎትም በዜሮ ሪፖርት መላክ ግዴታ ነው። ለእያንዳንዱ ቀን ሪፖርት (የቀኑን በመምረጥ) ያድርጉ፣ ከዚያ «ነጻ ነኝ» ማለት ይችላሉ።', 'error');
+                            techFreeBlocked('🔒 ሪፖርት ያላደረጉባቸው ቀናት አሉ! (' + _ovb.missingDays.length + ' ቀን፦ ' + techMissingDatesShort(_ovb) + ')\n' + techMissingDaysText(_ovb) + '\n\nስራ ባይኖርዎትም በዜሮ ሪፖርት መላክ ግዴታ ነው። ለእያንዳንዱ ቀን ሪፖርት (የቀኑን በመምረጥ) ያድርጉ፣ ከዚያ «ነጻ ነኝ» ማለት ይችላሉ።', 'error');
                             try { document.querySelector('[data-tab="report"]').click(); } catch (e) {}
                             return;
                         }
                         if (_ovb.unreported.length) {
-                            techFreeBlocked('🔒 ያደረ ያልተላከ ሪፖርት አለዎት (' + _ovb.unreported.length + ' ስራ)!\n' + techMissingDaysText(_ovb) + '\n\nመጀመሪያ ሪፖርት ያድርጉ፣ ከዚያ «ነጻ ነኝ» ማለት ይችላሉ።', 'error');
+                            techFreeBlocked('🔒 ያደረ ያልተላከ ሪፖርት አለዎት (' + _ovb.unreported.length + ' ስራ፦ ' + techMissingDatesShort(_ovb) + ')!\n' + techMissingDaysText(_ovb) + '\n\nመጀመሪያ ሪፖርት ያድርጉ፣ ከዚያ «ነጻ ነኝ» ማለት ይችላሉ።', 'error');
                             try { document.querySelector('[data-tab="report"]').click(); } catch (e) {}
                             return;
                         }
