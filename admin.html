@@ -5011,9 +5011,9 @@ document.addEventListener('click', function (e) {
             if (noteY) noteY.textContent = S.y.n ? ('⏳ ' + S.y.n + ' ሪፖርት ማጽደቅ ይጠብቃል (' + fmt(S.y.wait) + ')') : 'ከጸደቁ ሪፖርቶች ብቻ';
         }
         // ============================================================
-        // 📋 ሪፖርት ያላደረጉ ቴክኒሻኖች ካርድ — ከዛሬ በፊት ያሉ ቀናት (ህጉ ከ 2026-11-16 ጀምሮ)
+        // 📋 ሪፖርት ያላደረጉ ቴክኒሻኖች ካርድ — ከዛሬ በፊት ያሉ ቀናት (ህጉ ከ 2026-11-21 (12 ኅዳር 2019) ጀምሮ)
         // ============================================================
-        const MISS_RULE_START = '2026-11-16';
+        const MISS_RULE_START = '2026-11-21';
         let missOpen = false;
         function missingReportDays(tech) {
             const yk = getBizDateKey(new Date(Date.now() - 86400000));
