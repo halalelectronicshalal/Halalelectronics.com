@@ -4746,9 +4746,9 @@ document.addEventListener('click', function (e) {
         function bizNow(d) { return new Date((d ? d.getTime() : Date.now()) - BIZ_DAY_START_MIN * 60000); }
         function getBizDateKey(d) { return getDateKey(bizNow(d)); }
         // ============================================================
-        // 📋 ሪፖርት ያላደረጉ ቴክኒሻኖች ካርድ — ከዛሬ በፊት ያሉ ቀናት (ህጉ ከ 2026-11-16 ጀምሮ)
+        // 📋 ሪፖርት ያላደረጉ ቴክኒሻኖች ካርድ — ከዛሬ በፊት ያሉ ቀናት (ህጉ ከ 2026-11-21 (12 ኅዳር 2019) ጀምሮ)
         // ============================================================
-        const MISS_RULE_START = '2026-11-16';
+        const MISS_RULE_START = '2026-11-21';
         let missOpen = false;
         function missingReportDays(tech) {
             const yk = getBizDateKey(new Date(Date.now() - 86400000));
@@ -10172,7 +10172,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // 🌙 ስራው «ያደረ» ነው? = (ከዛሬ በፊት የተዘጋ) ወይም (ከተመዘገበበት/ከተመለሰበት/ከተቀጠረበት ቀን በኋላ በሌላ ቀን የተዘጋ)።
         // የቀጠሮ ስራ በቀጠሮው ቀን ከተሰራ «ያደረ» አይደለም (ቀጠሮው ቀን የስራው መነሻ ቀን ነው)።
         // 📅 የያደረ/ዕለታዊ ሪፖርት ህግ የሚጀምርበት የስራ ቀን — ከዚህ በፊት ለተዘጉ ስራዎች እና ለቀደሙ ቀናት ሪፖርት አይጠየቅም
-        const TECH_OVN_RULE_START = '2026-11-16';
+        const TECH_OVN_RULE_START = '2026-11-21';
         function techJobBaseKey(o) {
             const k = (v) => { try { const d = v && v.toDate ? v.toDate() : (v ? new Date(v) : null); return (d && !isNaN(d.getTime())) ? getBizDateKey(d) : ''; } catch (e) { return ''; } };
             const ap = String((o && ((o.rescheduledFrom && o.rescheduledDate) || o.appointmentDate)) || '').slice(0, 10);
