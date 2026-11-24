@@ -5022,7 +5022,9 @@ document.addEventListener('click', function (e) {
             const note = (k) => { k = String(k || '').slice(0, 10); if (k && (!first || k < first)) first = k; };
             have.forEach(note);
             (allOrders || []).forEach(o => {
-                const mine = (o.technicianId || o.workedById) ? (o.technicianId || o.workedById) === tech.id : heTechOf(o) === tech.name;
+                // 🔁 ከቴክኒሻኑ ገጽ ጋር ተመሳሳይ፦ አሁን ለቴክኒሻኑ የተመደቡ ስራዎች (technician == ስሙ) ብቻ ጅማሬውን ይወስናሉ።
+                //    ቀድሞ «workedById/technicianId» በሚል ከሌላ ቀን የተፈጠሩ/የተዛወሩ ስራዎች የጅማሬ ቀኑን ወደ ኋላ ስለሚገፉ ቴክኒሻኑ ሪፖርት ያደረገባቸው ቀናት «አልተደረገም» ይባሉ ነበር።
+                const mine = String(o.technician || '').trim() === String(tech.name || '').trim();
                 if (!mine || !o.createdAt) return;
                 const ms = toMs(o.createdAt); if (ms) note(getBizDateKey(new Date(ms)));
             });
