@@ -11824,6 +11824,69 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 returnedAt: new Date()
             }, extra || {}));
         }
+        // ============================================================
+        // 🕒 ከ «ሀ. ተሰራ» ውጪ ያሉ ውጤቶች (ለ፣ ሐ፣ መ፣ ሠ) — ወዲያው አይፈጸሙም፤ ወደ አድሚን ጥያቄ (completionRequest) ይላካሉ።
+        //    አድሚን ሲያጸድቅ ብቻ ይፈጸማሉ (አድሚን ገጽ)፤ ውድቅ ሲያደርግ በመልእክት ወደ ቴክኒሻኑ ይመለሳል፣ ስራው ከቴክኒሻኑ ጋር ይቆያል።
+        //    (ረ እና ሰ ቀድሞውንም የራሳቸው ማጽደቅ አላቸው — returnRequest / holdRequest)
+        // ============================================================
+        const COMP_REQ_LABELS = { 'price-not-agreed': 'ለ. ዋጋ አልተስማሙም', 'another-day': 'ሐ. ለሌላ ቀን', 'price-agreed': 'መ. ዋጋ ተስማምተናል', 'other': 'ሠ. ሌላ' };
+        // Date ሁሉ በአድሚን ማጽደቂያ ሰዓት እንዲሞላ '@now' ይሆናል
+        function techCompJson(plan) { return JSON.stringify(plan, function (k, v) { return (this[k] instanceof Date) ? '@now' : v; }); }
+        function techCompPendingGuard(orderId) {
+            const o = (myOrders || []).find(x => x.id === orderId);
+            const pc = o && o.completionRequest && o.completionRequest.status === 'pending';
+            const pr = o && o.returnRequest && o.returnRequest.status === 'pending';
+            if (pc || pr) { showToast('⏳ የቀደመ ጥያቄዎ አድሚን እስኪወስን እየጠበቀ ነው — ስራው ከእርስዎ ጋር ይቆያል', 'info'); return true; }
+            return false;
+        }
+        function techReturnUpdate(option, reason, extra) {
+            return Object.assign({
+                status: 'Pending', technician: '', completionOption: option, onHold: false,
+                returnedFrom: technicianName, returnedFromId: technicianId || '', returnReason: reason, returnedAt: new Date()
+            }, extra || {});
+        }
+        // ለደንበኛ የሚላከው SMS ጽሁፍ አሁን ይዘጋጃል (ቴክኒሻኑ ቅንብሩን ያነባል)፤ መላኩ ግን አድሚን ሲያጸድቅ ነው
+        async function techPrepCustomerSms(kind, o, extra) {
+            try {
+                const cfg = await loadCustomerSmsSettings();
+                const item = cfg.items[kind];
+                if (!item || !item.enabled || !String(item.text || '').trim() || !o) return null;
+                const to = custSmsPhone(o.phone);
+                if (!to) return null;
+                const vars = { 'ደንበኛ': (o.fullName || '').trim() || 'ደንበኛችን', 'መሳሪያ': (o.appliance || '').trim() || 'መሳሪያ', 'ቀን': (extra && extra.date) || '', 'ሰዓት': (extra && extra.time) || '', 'ዋጋ': (extra && extra.price != null) ? String(extra.price) : '', 'ቴክኒሻን': technicianName || '', 'ቢሮ': cfg.officePhone || '' };
+                const message = String(item.text).replace(/\{([^{}]+)\}/g, (m, k) => (k in vars ? vars[k] : m)).trim().slice(0, 600);
+                return message ? { phone: to, message } : null;
+            } catch (e) { console.warn('sms prep failed', e); return null; }
+        }
+        async function techCompOrderData(orderId) {
+            const cur = (myOrders || []).find(x => x.id === orderId);
+            if (cur) return cur;
+            try { const s = await db.collection('orders').doc(orderId).get(); return s.exists ? (s.data() || {}) : {}; } catch (e) { return {}; }
+        }
+        async function techRequestCompletion(orderId, option, summary, plan) {
+            const label = COMP_REQ_LABELS[option] || option;
+            await db.collection('orders').doc(orderId).update({
+                completionRequest: {
+                    status: 'pending', option: option, label: label, summary: summary || '', planJson: techCompJson(plan),
+                    by: technicianName, byId: technicianId || '', requestedAt: new Date()
+                },
+                history: firebase.firestore.FieldValue.arrayUnion({ t: Date.now(), by: technicianName, text: `🕒 «${label}» ጠይቋል — አድሚን እስኪያጸድቅ ይጠብቃል${summary ? ' — ' + summary : ''}`, st: 'approval-requested' })
+            });
+            db.collection('activity').add({ user: technicianName, action: 'completion_request', details: `ስራ #${orderId.substring(0,8)} — ${label} (ማጽደቅ ይጠብቃል)${summary ? ' — ' + summary : ''}`, timestamp: new Date() }).catch(() => {});
+            try {
+                const adminsSnap = await db.collection('staff').where('role', '==', 'admin').where('status', '==', 'active').get();
+                await Promise.all(adminsSnap.docs.filter(d => d.data().fcmToken).map(d => db.collection('pushQueue').add({
+                    toStaffId: d.id,
+                    title: `🕒 ማጽደቅ ይጠብቃል - ${technicianName}`,
+                    body: `#${orderId.substring(0,8)} — ${label}${summary ? ' · ' + summary : ''}`,
+                    locationUrl: ADMIN_PAGE_URL(),
+                    createdAt: Date.now(),
+                    sent: false
+                })));
+            } catch (pushErr) { console.warn('completion request admin push failed (non-fatal)', pushErr); }
+        }
+        const TECH_WAIT_TOAST = '✅ ጥያቄዎ ወደ አድሚን ተልኳል — እስኪያጸድቅ ስራው ከእርስዎ ጋር ይቆያል';
+
         async function submitPriceNotAgreed() {
             const called = document.getElementById('priceNotAgreedCalled').value;
             if (called !== 'yes') {
@@ -11832,9 +11895,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             }
             const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
             if (!orderId) return;
+            if (techCompPendingGuard(orderId)) return;
             try {
-                await techReturnToAdmin(orderId, 'price-not-agreed', 'ዋጋ አልተስማሙም', { calledOffice: called });
-                sendCustomerSmsFor('price-not-agreed', orderId);
+                const _od = await techCompOrderData(orderId);
+                await techRequestCompletion(orderId, 'price-not-agreed', 'ቢሮ ተደውሏል: አዎ', {
+                    orderUpdate: techReturnUpdate('price-not-agreed', 'ዋጋ አልተስማሙም', { calledOffice: called }),
+                    sms: await techPrepCustomerSms('price-not-agreed', _od, {})
+                });
                 await tgMuted(`
                 💰 *ዋጋ አልተስማሙም!* 💬
                 🆔 *ትዕዛዝ:* #${orderId.substring(0,8)}
@@ -11842,7 +11909,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 📞 *ቢሮ ተደውሏል:* ${called === 'yes' ? '✅ አዎ' : '❌ አይ'}
                 📅 ${formatEthDateTime(new Date())}
                 `);
-                showToast('✅ ውጤቱ ተመዝግቧል — ስራው ወደ አድሚን ተመልሷል', 'success');
+                showToast(TECH_WAIT_TOAST, 'success');
                 try { renderMyJobs(); } catch (e) {}
                 resetCompletionForm();
             } catch (error) { showToast('❌ ' + error.message, 'error'); }
@@ -11878,6 +11945,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (dest !== 'me' && dest !== 'office') return;
             const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
             if (!orderId) return;
+            if (techCompPendingGuard(orderId)) return;
             const dd = pagKeyToLocalDate(newDate);
             const dateLabel = dd ? formatEthDate(dd, true) : newDate;
             if (!confirm(`💰 ${price} ብር\n📅 ${dateLabel} · ⏰ ${heEthClockHM(newTime)}\n\n` + (dest === 'me' ? '👷 ቀኑና ሰዓቱ ሲደርስ ለእርስዎ ይመደባል።' : '🏢 ስራው ወደ ቢሮ ይመለሳል፤ ቀኑ ሲደርስ በአድሚን ዳሽቦርድ ይገባል።') + '\n\nይቀጥል?')) return;
@@ -11892,8 +11960,10 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 const carry = {};
                 ['fullName', 'phone', 'altPhone', 'address', 'appliance', 'problem', 'customerLat', 'customerLng', 'source', 'createdBy', 'createdById', 'createdByName',
                  'orderType', 'orderTypeLabel', 'correctionTechnician', 'correctionDate', 'referredBy', 'returningCustomer'].forEach(k => { if (orderData[k] !== undefined && orderData[k] !== null) carry[k] = orderData[k]; });
-                const newRef = db.collection('orders').doc();
-                const batch = db.batch();
+                // ⏳ ወዲያው አይጻፍም — እቅዱ ይያዝና አድሚን ሲያጸድቅ ይፈጸማል
+                const _plan = { newOrder: null, orderUpdate: null };
+                const newRef = { id: '' };
+                const batch = { set: (ref, d) => { _plan.newOrder = d; }, update: (ref, d) => { _plan.orderUpdate = d; } };
                 batch.set(newRef, Object.assign({
                     status: 'Pending',
                     technician: dest === 'me' ? technicianName : '',
@@ -11923,7 +11993,10 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     completedAt: new Date(),
                     technician: technicianName
                 });
-                await batch.commit();
+                await techRequestCompletion(orderId, 'price-agreed', `💰 ${price} ብር · 📆 ${dateLabel} ⏰ ${heEthClockHM(newTime)} · ${dest === 'me' ? '👷 ለኔ ይመደብ' : '🏢 ወደ ቢሮ'} · 📝 ${reason}`, {
+                    newOrder: _plan.newOrder, orderUpdate: _plan.orderUpdate,
+                    sms: await techPrepCustomerSms('price-agreed', orderData, { date: dateLabel, time: custSmsTime(newTime), price: price })
+                });
                 try {
                     await tgMuted(`
                 🤝 *ዋጋ ተስማምተናል — ለሌላ ቀን ተይዟል!*
@@ -11942,8 +12015,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 📅 ${formatEthDateTime(new Date())}
                 `);
                 } catch (tgErr) { console.warn('telegram notify failed', tgErr); }
-                sendCustomerSmsFor('price-agreed', orderId, { order: orderData, date: dateLabel, time: custSmsTime(newTime), price: price }); // 📱 ለደንበኛ SMS
-                showToast(dest === 'me' ? '✅ ተመዝግቧል — ቀኑና ሰዓቱ ሲደርስ በራሱ ለእርስዎ ይመደባል' : '✅ ተመዝግቧል — ስራው ወደ ቢሮ ተመልሷል፤ ቀኑ ሲደርስ በአድሚን ዳሽቦርድ ይገባል', 'success');
+                showToast(TECH_WAIT_TOAST, 'success');
                 resetCompletionForm();
                 try { renderMyJobs(); } catch (e) {}
             } catch (error) { showToast('❌ ' + error.message, 'error'); }
@@ -12000,6 +12072,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (newDate < getBizDateKey()) { showToast('ያለፈ ቀን መምረጥ አይቻልም', 'error'); return; }
             const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
             if (!orderId) return;
+            if (techCompPendingGuard(orderId)) return;
             {
                 const _dd = pagKeyToLocalDate(newDate);
                 if (!confirm(`📅 ${_dd ? formatEthDate(_dd, true) : newDate} · ⏰ ${heEthClockHM(newTime)}\n\n` + (dest === 'me' ? '👷 ቀጠሮው ሲደርስ ስራው ወደ እርስዎ ይመለሳል።' : '🏢 ቀጠሮው ሲደርስ ስራው ወደ ቢሮ (አድሚን) ይመለሳል።') + '\n\nይቀጥል?')) return;
@@ -12012,8 +12085,10 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 const orderSnap = await orderRef.get();
                 const orderData = orderSnap.data() || {};
                 // ✅ FIX: አዲሱ ቀጠሮ + የድሮው ስራ መዝጊያ በአንድ ላይ (batch) - አንዱ ብቻ ተሳክቶ "pending" ሆኖ እንዳይቀር
-                const newRef = db.collection('orders').doc();
-                const batch = db.batch();
+                // ⏳ ወዲያው አይጻፍም — እቅዱ ይያዝና አድሚን ሲያጸድቅ ይፈጸማል
+                const _plan = { newOrder: null, orderUpdate: null };
+                const newRef = { id: '' };
+                const batch = { set: (ref, d) => { _plan.newOrder = d; }, update: (ref, d) => { _plan.orderUpdate = d; } };
                 batch.set(newRef, {
                     fullName: orderData.fullName || '',
                     phone: orderData.phone || '',
@@ -12056,8 +12131,10 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     completedAt: new Date(),
                     technician: technicianName
                 });
-                await batch.commit();
-                sendCustomerSmsFor('another-day', orderId, { order: orderData, date: formatEthDate(newDate), time: custSmsTime(newTime) });
+                await techRequestCompletion(orderId, 'another-day', `📆 ${heEthDay(newDate)} ⏰ ${heEthClockHM(newTime)} · ${dest === 'me' ? '👷 ወደ ቴክኒሻኑ ይመለስ' : '🏢 ወደ ቢሮ'}`, {
+                    newOrder: _plan.newOrder, orderUpdate: _plan.orderUpdate,
+                    sms: await techPrepCustomerSms('another-day', orderData, { date: formatEthDate(newDate), time: custSmsTime(newTime) })
+                });
                 try {
                     await tgMuted(`
                 📅 *ለሌላ ቀን ተዘጋጅቷል!*
@@ -12078,7 +12155,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 📅 ${formatEthDateTime(new Date())}
                 `);
                 } catch (tgErr) { console.warn('telegram notify failed', tgErr); }
-                showToast(dest === 'me' ? '✅ ለሌላ ቀን ተዘጋጅቷል — ቀኑ እና ሰዓቱ ሲደርስ ስራው ወደ እርስዎ ይመለሳል' : '✅ ለሌላ ቀን ተዘጋጅቷል — ቀኑ እና ሰዓቱ ሲደርስ ስራው ወደ ቢሮ (አድሚን) ይመለሳል', 'success');
+                showToast(TECH_WAIT_TOAST, 'success');
                 resetCompletionForm();
                 try { renderMyJobs(); } catch (e) {}
             } catch (error) { showToast('❌ ' + error.message, 'error'); }
@@ -12090,9 +12167,13 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (!reason) { showToast('እባክዎ ሁሉንም መስኮች ይሙሉ', 'error'); return; }
             const orderId = await validateCompleteOrderId(document.getElementById('completeOrderId').value);
             if (!orderId) return;
+            if (techCompPendingGuard(orderId)) return;
             try {
-                await techReturnToAdmin(orderId, 'other', reason, { otherReason: reason });
-                sendCustomerSmsFor('other', orderId);
+                const _od = await techCompOrderData(orderId);
+                await techRequestCompletion(orderId, 'other', reason, {
+                    orderUpdate: techReturnUpdate('other', reason, { otherReason: reason }),
+                    sms: await techPrepCustomerSms('other', _od, {})
+                });
                 await tgMuted(`
                 📌 *ሌላ ምክንያት!*
                 🆔 *ትዕዛዝ:* #${orderId.substring(0,8)}
@@ -12100,7 +12181,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 📝 *ማብራሪያ:* ${reason}
                 📅 ${formatEthDateTime(new Date())}
                 `);
-                showToast('✅ ውጤቱ ተመዝግቧል — ስራው ወደ አድሚን ተመልሷል', 'success');
+                showToast(TECH_WAIT_TOAST, 'success');
                 try { renderMyJobs(); } catch (e) {}
                 resetCompletionForm();
             } catch (error) { showToast('❌ ' + error.message, 'error'); }
@@ -12121,7 +12202,8 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (btn) btn.disabled = true;
             try {
                 await db.collection('orders').doc(orderId).update({
-                    returnRequest: { status: 'pending', reason: reason, by: technicianName, byId: technicianId || '', requestedAt: new Date() }
+                    returnRequest: { status: 'pending', reason: reason, by: technicianName, byId: technicianId || '', requestedAt: new Date() },
+                    history: firebase.firestore.FieldValue.arrayUnion({ t: Date.now(), by: technicianName, text: '🕒 «ረ. ስራ መልስ» ጠይቋል — አድሚን እስኪያጸድቅ ይጠብቃል — ምክንያት: ' + reason, st: 'approval-requested' })
                 });
                 db.collection('activity').add({
                     user: technicianName,
@@ -12149,6 +12231,12 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
 
         // ↩️ በስራ ካርድ ላይ የመመለስ ጥያቄ ሁኔታ (በመጠባበቅ ላይ / ውድቅ ተደርጓል + የአድሚን ምክንያት)
         function techReturnBanner(o) {
+            // 🕒 ከ«ሀ» ውጪ ያለ ውጤት ጥያቄ (ለ፣ ሐ፣ መ፣ ሠ) እና «ስልክ አይነሳም» ውድቅ ሲደረግ
+            const c = o && o.completionRequest;
+            if (c && c.status === 'pending') return `<div style="background:#FEF3C7; border:1px solid #F59E0B; border-radius:8px; padding:8px 10px; margin:6px 0; font-size:0.85rem;">⏳ <strong>«${techEsc(c.label || '')}» ጥያቄዎ አድሚን እስኪያጸድቅ እየጠበቀ ነው</strong> — ስራው ከእርስዎ ጋር ይቆያል${c.summary ? `<div style="white-space:pre-wrap;">📝 ${techEsc(c.summary)}</div>` : ''}</div>`;
+            if (c && c.status === 'rejected') return `<div style="background:#FEE2E2; border:1px solid #EF4444; border-radius:8px; padding:8px 10px; margin:6px 0; font-size:0.85rem;">❌ <strong>«${techEsc(c.label || '')}» ጥያቄዎ ውድቅ ተደርጓል — ስራውን ይቀጥሉ</strong><div style="white-space:pre-wrap;">💬 ${techEsc(c.decidedBy || 'አድሚን')}፦ ${techEsc(c.rejectMessage || '')}</div></div>`;
+            const h = o && o.holdRequest;
+            if (h && h.status === 'rejected' && o.status === 'Assigned' && h.rejectMessage) return `<div style="background:#FEE2E2; border:1px solid #EF4444; border-radius:8px; padding:8px 10px; margin:6px 0; font-size:0.85rem;">❌ <strong>«ስልክ አይነሳም» ጥያቄዎ ውድቅ ተደርጓል — ስራውን ይቀጥሉ</strong><div style="white-space:pre-wrap;">💬 ${techEsc(h.decidedBy || 'አድሚን')}፦ ${techEsc(h.rejectMessage || '')}</div></div>`;
             const r = o && o.returnRequest;
             if (!r) return '';
             if (r.status === 'pending') return `<div style="background:#FEF3C7; border:1px solid #F59E0B; border-radius:8px; padding:8px 10px; margin:6px 0; font-size:0.85rem;">⏳ <strong>የመመለስ ጥያቄዎ አድሚን እስኪያጸድቅ እየጠበቀ ነው</strong><div style="white-space:pre-wrap;">📝 ${techEsc(r.reason || '')}</div></div>`;
