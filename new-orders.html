@@ -28,6 +28,7 @@ html,body{overflow-x:hidden;max-width:100%}.he-wrap,.card,.modal{min-width:0;max
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="he-history.js"></script>
 <script>
 /* 📅 ቀን በኢትዮጵያ ካላንደር ብቻ — «YYYY-MM-DD» ቁልፍን ወደ ኢትዮጵያ ቀን ይቀይራል (ማሳያ ላይ ብቻ፤ የተቀመጠው ዳታ አይነካም) */
 window.heEthDay = function (k) {
@@ -425,6 +426,20 @@ function pickAssignSelect(orderId) {
     const all = Array.from(document.querySelectorAll(`.dashAssignSelect[data-id="${orderId}"], .assignSelect[data-id="${orderId}"]`));
     return all.find(x => x.value && x.value.trim()) || all[0] || null;
 }
+
+// 🔒 የተመደበ ስራ እስኪጠናቀቅ (ወይም ቴክኒሻኑ እስኪመልሰው) ለሌላ ሰው መመደብ አይቻልም — ሲጠናቀቅ/ሲመለስ መመደቢያው ይከፈታል
+// የተቆለፈ = ቴክኒሻን ያለው + «ተመድቧል» ወይም ከቴክኒሻኑ ጋር የተያዘ (ዋጋ አልተስማሙም/ስልክ አይነሳም/ሌላ) ያልተጠናቀቀ ስራ
+function heAssignLockedTo(o) {
+    try {
+        if (!o || !o.technician) return '';
+        if (o.status === 'Assigned') return String(o.technician);
+        if (o.onHold === true && ['PriceNotAgreed', 'Other', 'PhoneNoAnswer'].includes(o.status)) return String(o.technician);
+    } catch (e) {}
+    return '';
+}
+function heAssignLockedMsg(name) { return '🔒 ይህ ስራ ቀድሞ ለ ' + name + ' ተመድቧል — እስኪጠናቀቅ ወይም ቴክኒሻኑ እስኪመልሰው ድረስ ለሌላ መመደብ አይቻልም'; }
+function heAssignLockedBox(name) { return '<span style="padding:4px 8px;border-radius:6px;background:#FEF3C7;color:#92400E;font-size:0.78rem;font-weight:700;">🔒 ለ ' + String(name).replace(/[&<>"]/g, '') + ' ተመድቧል — እስኪጠናቀቅ ዝግ ነው</span>'; }
+
 async function assignOrder(orderId) {
     if (_assignInFlight.has(orderId)) { showToast('⏳ ምደባው በሂደት ላይ ነው፣ ትንሽ ይጠብቁ', 'error'); return; }
     _assignInFlight.add(orderId);
@@ -469,6 +484,7 @@ async function _assignOrderCore(orderId) {
     let _ord = allOrders.find(x => x.id === orderId) || null;
     if (!_ord) { try { const s0 = await db.collection('orders').doc(orderId).get(); if (s0.exists) { _ord = s0.data(); _ord.id = orderId; } } catch (e) { /* ችላ */ } }
     if (_ord && hiddenFromDispatcher(_ord)) { showToast('🔗 ሪፈራልን አድሚን ብቻ ነው የሚመድበው', 'error'); return; }
+    { const _lk0 = heAssignLockedTo(_ord); if (_lk0) { showToast(heAssignLockedMsg(_lk0), 'error'); return; } }
     const _hold = _ord ? orderHoldInfo(_ord) : null;
     if (_hold) { await _holdOrderForDate(orderId, techName, _hold); return; }
 
@@ -493,7 +509,14 @@ async function _assignOrderCore(orderId) {
             assignedBy: (heGetSession().staff.role === 'admin' ? 'admin' : 'office')
         };
         if (_ord && _ord.scheduledReleaseDate) { _upd.scheduledTechnician = null; _upd.scheduledTechnicianId = null; _upd.scheduledReleaseDate = null; _upd.scheduledReleaseTime = null; } // ተይዞ የነበረ → አሁን ተመደበ
-        await db.collection('orders').doc(orderId).update(_upd);
+        // 🔒 በሰርቨር ላይ በ transaction ይፈትሻል — ሁለት ሰዎች በአንድ ጊዜ ቢመድቡ አንደኛው ብቻ ይሳካል
+        const _aref = db.collection('orders').doc(orderId);
+        await db.runTransaction(async (tx) => {
+            const _s = await tx.get(_aref);
+            const _lk = _s.exists ? heAssignLockedTo(_s.data()) : '';
+            if (_lk) { const _e = new Error('ASSIGN_LOCKED'); _e.lockedTo = _lk; throw _e; }
+            tx.update(_aref, _upd);
+        });
         // 🟢 ለቴክኒሻኑ ስራ ተመድቧል → «ነፃ ነኝ» ዝርዝር ውስጥ አይታይም (አዲስ «ነፃ ነኝ» እስከሚልክ)
         try {
             const _at = allTechnicians.find(t => t.name === techName);
@@ -569,6 +592,7 @@ ${locationLine}
         showToast(`✅ ስራው ለ ${techName} ተመድቧል / Assigned to ${techName}`, 'success');
         
     } catch (error) {
+        if (error && error.message === 'ASSIGN_LOCKED') { showToast(heAssignLockedMsg(error.lockedTo), 'error'); return; }
         showToast('❌ ' + error.message, 'error');
         console.error('Assignment error:', error);
     }
@@ -585,7 +609,8 @@ async function binOrder(orderId, kind) {
         const snap = await ref.get();
         if (!snap.exists) { showToast('ℹ️ ይህ ስራ ቀድሞ ተሰርዟል', 'info'); return true; }
         await db.collection('deletedOrders').doc(orderId).set(Object.assign({}, snap.data(), {
-            binDeletedAt: new Date(), binDeletedBy: heUserName(), binDeletedFrom: kind === 'overnight' ? 'overnight' : 'returned'
+            binDeletedAt: new Date(), binDeletedBy: heUserName(), binDeletedFrom: kind === 'overnight' ? 'overnight' : 'returned',
+            history: (Array.isArray(snap.data().history) ? snap.data().history : []).concat([{ at: Date.now(), by: heUserName(), ev: 'bin', text: '🗑️ ወደ ሪሳይክል ቢን ተሰርዟል' }])
         }));
         await ref.delete();
         try { await db.collection('activity').add({ user: heUserName(), action: 'bin_order', details: `ትዕዛዝ #${orderId.substring(0,8)} ወደ ሪሳይክል ቢን ተሰርዟል (${kind === 'overnight' ? 'ያደረ' : 'የተመለሰ'})`, timestamp: new Date() }); } catch (e) {}
