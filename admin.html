@@ -2286,6 +2286,18 @@ document.addEventListener('click', function (e) {
                     </div>
                     <div id="rulesPreview" style="display:none; margin-top:12px; background:var(--bg); border:2px solid var(--secondary); border-radius:var(--radius-sm); padding:16px; white-space:pre-wrap; max-height:300px; overflow-y:auto;"></div>
                 </div>
+                <div class="card" id="recycleBinCard">
+                    <div class="card-header"><h3><i class="fas fa-recycle"></i> ♻️ ሪሳይክል ቢን — የተሰረዙ ስራዎች <span id="recycleBinCount" class="text-muted" style="font-size:0.85rem;"></span></h3></div>
+                    <p class="text-muted" style="margin-bottom:12px; font-size:0.88rem; line-height:1.6;">
+                        በዳሽቦርድ «⏰ ያደሩ ስራዎች» እና «↩️ የተመለሱ ስራዎች» ዝርዝር ውስጥ የተሰረዙ ስራዎች እዚህ ይቀመጣሉ። <strong>መልስ</strong> ሲሉ ወደ ትዕዛዞች ይመለሳል፤ <strong>ከሰርቨር አጥፋ</strong> ሲሉ ለዘላለም ይጠፋል።
+                    </p>
+                    <div class="flex" style="margin-bottom:10px;">
+                        <button class="btn btn-outline" onclick="admBinLoad()"><i class="fas fa-sync"></i> አድስ</button>
+                        <button class="btn btn-danger" onclick="admBinEmpty()"><i class="fas fa-fire"></i> ቢኑን ባዶ አድርግ (ከሰርቨር)</button>
+                    </div>
+                    <input type="text" id="recycleBinSearch" placeholder="🔍 ፈልግ (ስም፣ ስልክ፣ አድራሻ)" oninput="admBinRender()" style="width:100%; margin-bottom:10px;" />
+                    <div id="recycleBinList" style="max-height:60vh; overflow-y:auto;"></div>
+                </div>
                 <div class="card">
                     <div class="card-header"><h3><i class="fas fa-trash"></i> 🗑️ የሲስተም ቁጥጥር</h3></div>
                     <div class="flex">
@@ -4404,6 +4416,7 @@ document.addEventListener('click', function (e) {
                 if (tab === 'messages') { try { renderAdminChat(); } catch (e) {} }
                 if (tab === 'receiptcheck') { try { rcRender(); } catch (e) {} }
                 if (tab === 'admins') { try { admRenderAdminsTab(); } catch (e) {} }
+                if (tab === 'settings') { try { admBinLoad(); } catch (e) {} }
             }
         }
 
@@ -5273,7 +5286,14 @@ document.addEventListener('click', function (e) {
         // ↩️ ቴክኒሻን «ስራ መልስ» ብሎ ወደ አድሚን የመለሰው ገና ያልተመደበ ስራ (ዛሬ የተመለሰ)፤ ያደረ ከሆነ ወደ «ያደሩ ስራዎች» ብቻ ይገባል
         const admIsReturnedRaw = (o) => !!o && o.status === 'Pending' && !!(o.returnReason || o.returnedAt || o.returnedFrom || o.returnedFromId || o.completionOption === 'return-job');
         // ✅ FIX: ሁሉም ቴክኒሻን የመለሱት ስራ ይታያል — ያደረ ቢሆንም ከዝርዝሩ አይወጣም
-        const admIsReturnedJob = (o) => admIsReturnedRaw(o);
+        // ✅ ሲመደብ ከ«ያደሩ»/«የተመለሱ» ዝርዝር + ቆጣሪ ይወጣል፦ ዛሬ ለቴክኒሻን የተመደበ (Assigned + assignedAt ዛሬ) ወይም ለቀጠሮ የተያዘ (scheduledTechnician)
+        function admIsHandledNow(o) {
+            if (!o) return false;
+            if (o.status === 'Pending' && o.scheduledTechnician && o.scheduledReleaseDate) return true;
+            if (o.status === 'Assigned') { const a = toMs(o.assignedAt); const s = new Date(); s.setHours(0, 0, 0, 0); return a >= s.getTime(); }
+            return false;
+        }
+        const admIsReturnedJob = (o) => admIsReturnedRaw(o) && !admIsHandledNow(o);
         const isAdmOvernightJob = (o) => !!o && !o.workTag && !ADM_FINISHED_STATUSES.includes(o.status);
         function orderReasonText(o) {
             return o.notTodayReason || o.returnReason || o.otherReason || o.priceNotAgreedReason || o.phoneNoAnswerNote || o.reason || '';
@@ -5305,6 +5325,114 @@ document.addEventListener('click', function (e) {
             // ዝርዝሩ አዲሱን ቴክኒሻን እንዲያሳይ ከ Firestore ማዘመኛ በኋላ እንደገና ይከፈታል
             setTimeout(() => { try { openStatDetail(kind); } catch (e) {} }, 700);
         }
+        // ============================================================
+        // ♻️ ሪሳይክል ቢን — በ«ያደሩ»/«የተመለሱ» ዝርዝር የተሰረዘ ስራ ወደ `deletedOrders` ይገባል (ከ `orders` ይወጣል)።
+        //    ከቅንብሮች ▸ ሪሳይክል ቢን መመለስ ወይም ከሰርቨር ለዘላለም ማጥፋት ይቻላል።
+        // ============================================================
+        async function admBinOrder(orderId, kind) {
+            const o = (allOrders || []).find(x => x.id === orderId);
+            const asg = (o && o.status === 'Assigned' && o.technician) ? `\n\n⚠️ ለ ${o.technician} ተመድቧል — ከቴክኒሻኑ ዝርዝርም ይጠፋል።` : '';
+            if (!confirm(`🗑️ ${o ? '«' + (o.fullName || '—') + '» ' : ''}ይህ ስራ ወደ ሪሳይክል ቢን ይሂድ?\n\n(በኋላ ከ ቅንብሮች ▸ ሪሳይክል ቢን መመለስ ወይም ከሰርቨር ማጥፋት ይቻላል)${asg}`)) return;
+            try {
+                const ref = db.collection('orders').doc(orderId);
+                const snap = await ref.get();
+                if (!snap.exists) { showToast('ℹ️ ይህ ስራ ቀድሞ ተሰርዟል', 'info'); setTimeout(() => { try { openStatDetail(kind); } catch (e) {} }, 300); return; }
+                await db.collection('deletedOrders').doc(orderId).set(Object.assign({}, snap.data(), {
+                    binDeletedAt: new Date(), binDeletedBy: heActorName(), binDeletedFrom: kind === 'overdue' ? 'overnight' : 'returned'
+                }));
+                await ref.delete();
+                try { await db.collection('activity').add({ user: heActorName(), action: 'bin_order', details: `ትዕዛዝ #${orderId.substring(0, 8)} ወደ ሪሳይክል ቢን ተሰርዟል (${kind === 'overdue' ? 'ያደረ' : 'የተመለሰ'})`, timestamp: new Date() }); } catch (e) {}
+                showToast('🗑️ ወደ ሪሳይክል ቢን ተሰርዟል', 'success');
+                setTimeout(() => { try { openStatDetail(kind); } catch (e) {} }, 700);
+            } catch (e) {
+                showToast('❌ ' + (e && e.message ? e.message : 'መሰረዝ አልተቻለም') + ' — (ለ deletedOrders ስብስብ Firestore ሩልስ ያስፈልጋል)', 'error');
+            }
+        }
+        let admBinItems = [];
+        const admBinFrom = (d) => d.binDeletedFrom === 'overnight' ? '⏰ ያደረ' : '↩️ የተመለሰ';
+        async function admBinLoad() {
+            const box = document.getElementById('recycleBinList');
+            if (!box) return;
+            box.innerHTML = '<p class="text-muted text-center">⏳ በመጫን ላይ…</p>';
+            try {
+                const snap = await db.collection('deletedOrders').get();
+                admBinItems = [];
+                snap.forEach(doc => admBinItems.push({ id: doc.id, data: doc.data() }));
+                admBinItems.sort((a, b) => toMs(b.data.binDeletedAt) - toMs(a.data.binDeletedAt));
+                admBinRender();
+            } catch (e) {
+                box.innerHTML = `<p style="color:#B91C1C; font-size:0.85rem;">❌ ${escHtml((e && e.message) || 'መጫን አልተቻለም')} — ለ <code>deletedOrders</code> ስብስብ Firestore ሩልስ (አድሚን ብቻ ማንበብ/መጻፍ) ያስፈልጋል።</p>`;
+            }
+        }
+        function admBinRender() {
+            const box = document.getElementById('recycleBinList');
+            if (!box) return;
+            const q = String((document.getElementById('recycleBinSearch') || {}).value || '').toLowerCase().trim();
+            const cnt = document.getElementById('recycleBinCount');
+            if (cnt) cnt.textContent = admBinItems.length ? `(${admBinItems.length})` : '';
+            const list = admBinItems.filter(x => !q || [x.data.fullName, x.data.phone, x.data.address, x.data.appliance, x.data.technician].join(' ').toLowerCase().includes(q));
+            if (!list.length) { box.innerHTML = `<p class="text-muted text-center">${admBinItems.length ? 'ከፍለጋው ጋር የሚመሳሰል የለም' : '♻️ ሪሳይክል ቢኑ ባዶ ነው'}</p>`; return; }
+            box.innerHTML = list.map(x => {
+                const d = x.data, t = toMs(d.binDeletedAt);
+                return `<div style="border:1px solid var(--border); border-right:4px solid #DC2626; border-radius:10px; padding:10px; margin-bottom:8px; background:#fff;">
+                    <div style="display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap;"><strong>👤 ${escHtml(d.fullName || '—')}</strong><span class="status-badge" style="background:#FEE2E2; color:#B91C1C;">${admBinFrom(d)}</span></div>
+                    <div style="font-size:0.85rem; margin-top:4px; display:grid; gap:2px;">
+                        <div>📱 ${escHtml(d.phone || '—')} &nbsp;•&nbsp; 🔧 ${escHtml(d.appliance || '—')}</div>
+                        <div>📍 ${escHtml(d.address || '—')}</div>
+                        ${d.technician ? `<div>👷 ${escHtml(d.technician)}</div>` : ''}
+                        <div class="text-muted">🗑️ ${t ? formatEthDateTime(new Date(t)) : '—'}${d.binDeletedBy ? ' • በ ' + escHtml(d.binDeletedBy) : ''}</div>
+                    </div>
+                    <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;">
+                        <button class="btn btn-xs btn-success" onclick="admBinRestore('${x.id}')"><i class="fas fa-undo"></i> መልስ</button>
+                        <button class="btn btn-xs btn-danger" onclick="admBinPurge('${x.id}')"><i class="fas fa-fire"></i> ከሰርቨር አጥፋ</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+        async function admBinRestore(id) {
+            const it = admBinItems.find(x => x.id === id);
+            if (!it) return;
+            if (!confirm(`↩️ «${it.data.fullName || '—'}» ወደ ትዕዛዞች ይመለስ?`)) return;
+            try {
+                const ex = await db.collection('orders').doc(id).get();
+                if (ex.exists) { showToast('ℹ️ ይህ ትዕዛዝ በትዕዛዞች ውስጥ አለ — ከቢን ብቻ ለማጥፋት «ከሰርቨር አጥፋ» ይጠቀሙ', 'info'); return; }
+                const orig = Object.assign({}, it.data);
+                delete orig.binDeletedAt; delete orig.binDeletedBy; delete orig.binDeletedFrom;
+                await db.collection('orders').doc(id).set(orig);
+                await db.collection('deletedOrders').doc(id).delete();
+                try { await db.collection('activity').add({ user: heActorName(), action: 'restore_order', details: `ትዕዛዝ #${id.substring(0, 8)} ከሪሳይክል ቢን ተመልሷል`, timestamp: new Date() }); } catch (e) {}
+                admBinItems = admBinItems.filter(x => x.id !== id);
+                admBinRender();
+                showToast('✅ ተመልሷል', 'success');
+            } catch (e) { showToast('❌ ' + ((e && e.message) || 'መመለስ አልተቻለም'), 'error'); }
+        }
+        async function admBinPurge(id) {
+            const it = admBinItems.find(x => x.id === id);
+            if (!it) return;
+            if (!confirm(`🔥 «${it.data.fullName || '—'}» ከሰርቨር ለዘላለም ይጥፋ?\n\nመልሶ ማግኘት አይቻልም!`)) return;
+            try {
+                await db.collection('deletedOrders').doc(id).delete();
+                try { await db.collection('activity').add({ user: heActorName(), action: 'purge_order', details: `ትዕዛዝ #${id.substring(0, 8)} ከሰርቨር ለዘላለም ተሰርዟል`, timestamp: new Date() }); } catch (e) {}
+                admBinItems = admBinItems.filter(x => x.id !== id);
+                admBinRender();
+                showToast('🔥 ከሰርቨር ተሰርዟል', 'success');
+            } catch (e) { showToast('❌ ' + ((e && e.message) || 'መሰረዝ አልተቻለም'), 'error'); }
+        }
+        async function admBinEmpty() {
+            if (!admBinItems.length) { showToast('ሪሳይክል ቢኑ ባዶ ነው', 'info'); return; }
+            if (!confirm(`🔥 በሪሳይክል ቢን ውስጥ ያሉ ሁሉም ${admBinItems.length} ስራዎች ከሰርቨር ለዘላለም ይጥፉ?\n\nመልሶ ማግኘት አይቻልም!`)) return;
+            try {
+                for (let i = 0; i < admBinItems.length; i += 400) {
+                    const b = db.batch();
+                    admBinItems.slice(i, i + 400).forEach(x => b.delete(db.collection('deletedOrders').doc(x.id)));
+                    await b.commit();
+                }
+                try { await db.collection('activity').add({ user: heActorName(), action: 'purge_order', details: `ሪሳይክል ቢን ባዶ ተደርጓል (${admBinItems.length} ስራዎች ከሰርቨር ተሰርዘዋል)`, timestamp: new Date() }); } catch (e) {}
+                admBinItems = [];
+                admBinRender();
+                showToast('🔥 ሪሳይክል ቢኑ ባዶ ተደርጓል', 'success');
+            } catch (e) { showToast('❌ ' + ((e && e.message) || 'መሰረዝ አልተቻለም'), 'error'); }
+        }
         function orderDetailRowHTML(o, opts = {}) {
             const _cMs = toMs(o.createdAt); const d = _cMs ? new Date(_cMs) : null;
             const phone = String(o.phone || '').trim();
@@ -5334,7 +5462,8 @@ document.addEventListener('click', function (e) {
                     ${opts.assignable ? `<select class="dashAssignSelect" data-id="${o.id}" style="padding:4px 8px; font-size:0.78rem; border:1px solid var(--border); border-radius:6px;">
                             <option value="">ቴክኒሻን ምረጥ</option>${admAssignOptionsHtml(o.technician)}
                         </select>
-                        <button class="btn btn-xs btn-success" onclick="admAssignFromList('${o.id}', '${opts.assignable}')"><i class="fas fa-check"></i> ${o.technician ? 'መልሰህ መድብ' : 'መድብ'}</button>` : ''}
+                        <button class="btn btn-xs btn-success" onclick="admAssignFromList('${o.id}', '${opts.assignable}')"><i class="fas fa-check"></i> ${o.technician ? 'መልሰህ መድብ' : 'መድብ'}</button>
+                        <button class="btn btn-xs btn-danger" onclick="admBinOrder('${o.id}', '${opts.assignable}')" title="ወደ ሪሳይክል ቢን"><i class="fas fa-trash"></i> ሰርዝ</button>` : ''}
                     <button class="btn btn-xs btn-primary" onclick="viewOrder('${o.id}')"><i class="fas fa-eye"></i> ሙሉ ዝርዝር</button>
                 </div>
             </div>`;
@@ -5387,7 +5516,7 @@ document.addEventListener('click', function (e) {
                 summary = `ጠቅላላ ${list.length} • ✅ ተጠናቋል ${done} • ❌ አልተጠናቀቀም ${list.length - done}`;
                 rows = list.map(o => orderDetailRowHTML(o));
             } else if (kind === 'overdue') {
-                const list = allOrders.filter(o => isAdmOvernightJob(o) && overnightBaseMs(o) > 0 && overnightBaseMs(o) < new Date().setHours(0, 0, 0, 0))
+                const list = allOrders.filter(o => isAdmOvernightJob(o) && !admIsHandledNow(o) && overnightBaseMs(o) > 0 && overnightBaseMs(o) < new Date().setHours(0, 0, 0, 0))
                     .sort((a, b) => overnightBaseMs(a) - overnightBaseMs(b));
                 title = '⏰ ያደሩ ስራዎች';
                 summary = `${list.length} ያልተጠናቀቁ ስራዎች ከትናንት እና ከዚያ በፊት የቆዩ (ከአሮጌው ይጀምራል)`;
@@ -5451,6 +5580,7 @@ document.addEventListener('click', function (e) {
             // ✅ NEW: "ያደሩ ስራዎች" (overdue) - ገና ካልተጠናቀቁ status ውስጥ ካሉ እና ዛሬ ካልተፈጠሩ (ካደሩ) ብቻ
             const overdueJobs = allOrders.filter(o => {
                 if (!isAdmOvernightJob(o)) return false; // አጠናቅ የተነካ (ሀ–ሰ) እና ሪፈራል/እርማት አይቆጠርም
+                if (admIsHandledNow(o)) return false; // ✅ ዛሬ የተመደበ/የተያዘ ከቆጣሪው ይቀንሳል
                 const ms = overnightBaseMs(o);
                 const _s = new Date(); _s.setHours(0, 0, 0, 0);
                 return ms > 0 && ms < _s.getTime(); // ከዛሬ በፊት ያለፈ ብቻ (ወደፊት የተቀጠረ አይቆጠርም)፤ ከዝርዝሩ ጋር አንድ ደንብ
