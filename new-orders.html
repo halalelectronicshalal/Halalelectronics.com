@@ -574,6 +574,29 @@ ${locationLine}
     }
 }
 
+/** ♻️ በ«ያደሩ»/«የተመለሱ» ዝርዝር መሰረዝ — ወደ `deletedOrders` (ሪሳይክል ቢን) ይገባል፤ ከአድሚን ▸ ቅንብሮች ▸ ሪሳይክል ቢን መመለስ/ከሰርቨር ማጥፋት ይቻላል */
+async function binOrder(orderId, kind) {
+    if (!isAdminUser()) { showToast('🔒 አድሚን ብቻ ነው መሰረዝ የሚችለው', 'error'); return false; }
+    const o = allOrders.find(x => x.id === orderId);
+    const asg = (o && o.status === 'Assigned' && o.technician) ? `\n\n⚠️ ለ ${o.technician} ተመድቧል — ከቴክኒሻኑ ዝርዝርም ይጠፋል።` : '';
+    if (!confirm(`🗑️ ${o ? '«' + (o.fullName || '—') + '» ' : ''}ይህ ስራ ወደ ሪሳይክል ቢን ይሂድ?\n\n(አድሚን ▸ ቅንብሮች ▸ ሪሳይክል ቢን ውስጥ መመለስ ወይም ከሰርቨር ማጥፋት ይቻላል)${asg}`)) return false;
+    try {
+        const ref = db.collection('orders').doc(orderId);
+        const snap = await ref.get();
+        if (!snap.exists) { showToast('ℹ️ ይህ ስራ ቀድሞ ተሰርዟል', 'info'); return true; }
+        await db.collection('deletedOrders').doc(orderId).set(Object.assign({}, snap.data(), {
+            binDeletedAt: new Date(), binDeletedBy: heUserName(), binDeletedFrom: kind === 'overnight' ? 'overnight' : 'returned'
+        }));
+        await ref.delete();
+        try { await db.collection('activity').add({ user: heUserName(), action: 'bin_order', details: `ትዕዛዝ #${orderId.substring(0,8)} ወደ ሪሳይክል ቢን ተሰርዟል (${kind === 'overnight' ? 'ያደረ' : 'የተመለሰ'})`, timestamp: new Date() }); } catch (e) {}
+        showToast('🗑️ ወደ ሪሳይክል ቢን ተሰርዟል', 'success');
+        return true;
+    } catch (error) {
+        showToast('❌ ' + error.message + ' — (ለ deletedOrders ስብስብ Firestore ሩልስ ያስፈልጋል)', 'error');
+        return false;
+    }
+}
+
 async function deleteOrder(orderId) {
     if (!confirm('ይህን ትዕዛዝ መሰረዝ እርግጠኛ ነዎት?')) return;
     try {
@@ -593,8 +616,8 @@ async function deleteOrder(orderId) {
 }
 
 /** ከዝርዝር መስኮት (የተመለሱ ስራዎች) ውስጥ መሰረዝ — ከተሰረዘ ወደ ዝርዝሩ ይመለሳል */
-async function deleteFromDetail(orderId, back) {
-    const ok = await deleteOrder(orderId);
+async function deleteFromDetail(orderId, back, kind) {
+    const ok = await binOrder(orderId, kind === 'overnight' ? 'overnight' : 'returned');
     if (!ok) return;
     allOrders = allOrders.filter(x => x.id !== orderId); // snapshot እስኪመጣ ዝርዝሩ ወዲያው እንዲታደስ
     if (back) showStatDetail(back); else closeModal();
@@ -636,8 +659,8 @@ function viewOrder(orderId) {
             <button class="btn btn-success" onclick="assignFromDetail('${o.id}')"><i class="fas fa-check"></i> መድብ</button>`;
     }
     if (back) footer += ` <button class="btn btn-secondary" onclick="showStatDetail('${back}')"><i class="fas fa-arrow-right"></i> ወደ ዝርዝር ተመለስ</button>`;
-    // 🗑️ የተመለሰ ስራ ከሆነ «ሰርዝ» (አድሚን ብቻ)
-    if (o.status === 'Pending' && orderIsReturned(o)) footer += ` <button class="btn btn-danger admin-only" onclick="deleteFromDetail('${o.id}', ${back ? "'" + back + "'" : 'null'})"><i class="fas fa-trash"></i> ሰርዝ</button>`;
+    // 🗑️ የተመለሰ ወይም ከ«ያደሩ ስራዎች» የተከፈተ ስራ ከሆነ «ሰርዝ» (አድሚን ብቻ) → ሪሳይክል ቢን
+    if ((o.status === 'Pending' && orderIsReturned(o)) || back === 'overnight') footer += ` <button class="btn btn-danger admin-only" onclick="deleteFromDetail('${o.id}', ${back ? "'" + back + "'" : 'null'}, '${back === 'overnight' ? 'overnight' : 'returned'}')"><i class="fas fa-trash"></i> ሰርዝ</button>`;
     footer += ' <button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>';
     openModal('🧾 የትዕዛዝ ዝርዝር', html, footer);
 }
@@ -691,12 +714,12 @@ function showStatDetail(kind, refresh) {
         body = l.length ? l.map(orderItem).join('') : '<p class="text-muted text-center">ምንም የለም</p>';
     } else if (kind === 'returned') {
         title = '↩️ የተመለሱ ስራዎች';
-        const l = visibleOrders().filter(o => o.status === 'Pending' && orderIsReturned(o))
+        const l = visibleOrders().filter(orderIsReturnedOpen)
             .sort((a, b) => (toMs(b.returnedAt) || toMs(b.createdAt)) - (toMs(a.returnedAt) || toMs(a.createdAt)));
         const keepSel = {};
         document.querySelectorAll('#modalBody .dashAssignSelect').forEach(x => { if (x.value) keepSel[x.dataset.id] = x.value; });
         const opts = techOptionsHtml();
-        body = l.length ? l.map(o => orderRowHtml(o, opts)).join('')
+        body = l.length ? l.map(o => orderRowHtml(o, opts, 'returned')).join('')
             : '<p class="text-muted text-center">የተመለሰ ስራ የለም</p>';
         if (refresh) {
             document.getElementById('modalBody').innerHTML = body;
@@ -705,11 +728,11 @@ function showStatDetail(kind, refresh) {
         }
     } else if (kind === 'overnight') {
         title = '⏰ ያደሩ ስራዎች';
-        const l = visibleOrders().filter(orderIsOvernight).sort((a, b) => overnightBaseMs(a) - overnightBaseMs(b)); // ከአሮጌው ይጀምራል
+        const l = visibleOrders().filter(orderIsOvernightOpen).sort((a, b) => overnightBaseMs(a) - overnightBaseMs(b)); // ከአሮጌው ይጀምራል
         const keepSel = {};
         document.querySelectorAll('#modalBody .dashAssignSelect').forEach(x => { if (x.value) keepSel[x.dataset.id] = x.value; });
         const opts = techOptionsHtml();
-        body = l.length ? `<div class="text-muted" style="font-size:.8rem;margin-bottom:6px;">${l.length} ያደሩ ስራዎች — መድብ ሲሉ ለአዲሱ ቴክኒሻን ይመደባል</div>` + l.map(o => orderRowHtml(o, opts)).join('')
+        body = l.length ? `<div class="text-muted" style="font-size:.8rem;margin-bottom:6px;">${l.length} ያደሩ ስራዎች — መድብ ሲሉ ለአዲሱ ቴክኒሻን ይመደባል</div>` + l.map(o => orderRowHtml(o, opts, 'overnight')).join('')
             : '<p class="text-muted text-center">ያደረ ስራ የለም</p>';
         if (refresh) {
             document.getElementById('modalBody').innerHTML = body;
@@ -870,11 +893,20 @@ function orderIsOvernight(o) {
     const ms = overnightBaseMs(o);
     return ms > 0 && ms < startOfTodayMs();
 }
+/** ✅ ሲመደብ ከ«ያደሩ»/«የተመለሱ» ዝርዝር + ቆጣሪ ይወጣል፦ ዛሬ ለቴክኒሻን የተመደበ ወይም ለቀጠሮ የተያዘ */
+function orderHandledNow(o) {
+    if (!o) return false;
+    if (o.status === 'Pending' && o.scheduledTechnician && o.scheduledReleaseDate) return true;
+    if (o.status === 'Assigned') return toMs(o.assignedAt) >= startOfTodayMs();
+    return false;
+}
+const orderIsOvernightOpen = (o) => orderIsOvernight(o) && !orderHandledNow(o);
+const orderIsReturnedOpen = (o) => o.status === 'Pending' && orderIsReturned(o) && !orderHandledNow(o);
 function overnightDays(o) {
     const a = new Date(overnightBaseMs(o)); a.setHours(0, 0, 0, 0);
     return Math.max(0, Math.round((startOfTodayMs() - a.getTime()) / 86400000));
 }
-function orderRowHtml(order, techOptions) {
+function orderRowHtml(order, techOptions, binKind) {
     const _cMs = toMs(order.createdAt); // ✅ FIX: ትዕዛዙ የገባበት እውነተኛ ቀን — ወደ «ዛሬ» አይመለስም
     const date = _cMs ? new Date(_cMs) : null;
     const hl = order.id === highlightOrderId ? ' hl' : '';
@@ -898,7 +930,7 @@ function orderRowHtml(order, techOptions) {
                 <button class="btn btn-xs btn-secondary" onclick="recommendTechnician('${order.id}')" title="ዝቅተኛ ስራ ያለበትን ቴክኒሻን ምከር"><i class="fas fa-robot"></i></button>
                 <button class="btn btn-sm btn-success" onclick="assignOrder('${order.id}')"><i class="fas fa-check"></i> መድብ</button>
                 <button class="btn btn-sm btn-primary" onclick="viewOrder('${order.id}')" title="ዝርዝር"><i class="fas fa-eye"></i></button>
-                <button class="btn btn-xs btn-danger admin-only" onclick="deleteOrder('${order.id}')" title="ሰርዝ"><i class="fas fa-trash"></i></button>
+                ${binKind ? `<button class="btn btn-xs btn-danger admin-only" onclick="deleteFromDetail('${order.id}', '${binKind}', '${binKind}')" title="ወደ ሪሳይክል ቢን ሰርዝ"><i class="fas fa-trash"></i></button>` : `<button class="btn btn-xs btn-danger admin-only" onclick="deleteOrder('${order.id}')" title="ሰርዝ"><i class="fas fa-trash"></i></button>`}
             </div>
         </div>`;
 }
@@ -924,7 +956,7 @@ function renderDashNewOrders() {
 
     // 📅 ቀጠሯቸው የደረሰ (ዛሬ/ያለፈ/ቀጠሮ የሌለው) ከፊት፤ ቀጠሯቸው ያልደረሰ ወደ «እስከሚደርስ ቀጠሮ»
     // ↩️ የተመለሱ ስራዎች ወደ «የተመለሱ ስራዎች» ካርድ ይገባሉ (ከአዲስ ትዕዛዞች ዝርዝር ይወጣሉ)
-    const returned = visibleOrders().filter(o => o.status === 'Pending' && orderIsReturned(o))
+    const returned = visibleOrders().filter(orderIsReturnedOpen)
         .sort((a, b) => (toMs(b.returnedAt) || toMs(b.createdAt)) - (toMs(a.returnedAt) || toMs(a.createdAt)));
     const fresh = pending.filter(o => !orderIsReturned(o));
     const due = fresh.filter(o => !orderApptWaiting(o));
@@ -938,7 +970,7 @@ function renderDashNewOrders() {
     document.getElementById('statAssigned').textContent = visibleOrders().filter(o => o.status === 'Assigned' && !orderHasFutureAppt(o)).length;
     document.getElementById('statScheduled').textContent = scheduled.length + apptAssigned.length;
     document.getElementById('statReturned').textContent = returned.length;
-    const so = document.getElementById('statOvernight'); if (so) so.textContent = visibleOrders().filter(orderIsOvernight).length;
+    const so = document.getElementById('statOvernight'); if (so) so.textContent = visibleOrders().filter(orderIsOvernightOpen).length;
     document.getElementById('statFree').textContent = fieldTechs().filter(t => techWorkState(t) === 'free').length;
 
     // በግማሽ የተመረጠ ቴክኒሻን እንዳይጠፋ ማስቀመጥ
