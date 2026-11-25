@@ -39,6 +39,7 @@
     </script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js">
     </script>
+<script src="he-history.js"></script>
 <script>
 /* 📅 ቀን በኢትዮጵያ ካላንደር ብቻ — «YYYY-MM-DD» ቁልፍን ወደ ኢትዮጵያ ቀን ይቀይራል (ማሳያ ላይ ብቻ፤ የተቀመጠው ዳታ አይነካም) */
 window.heEthDay = function (k) {
@@ -13315,6 +13316,20 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 const _rb = document.querySelector('input[name="readyTomorrow"]');
                 if (_rb && _rb.scrollIntoView) _rb.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 return;
+            }
+
+            // 🚫 ዜሮ ሪፖርት (ምንም ስራ/ገቢ/ወጪ የሌለው) ያልተጠናቀቀ ስራ ካለ አይፈቀድም — ስራ ከሌለ ብቻ በዜሮ ይላክ
+            {
+                const _isZeroReport = !jobStatuses.length && totalSent <= 0 && completedCount <= 0 && notCompletedCount <= 0 && !totalIncome && !totalExpense;
+                if (_isZeroReport) {
+                    let _open = [];
+                    try { _open = (techOpenJobs() || []).filter(o => o && !o.workTag && !techApprovedGone(o)); } catch (_) { _open = []; }
+                    try { _open = _open.concat((myOrders || []).filter(o => techIsHeld(o) && !techApprovedGone(o) && !_open.includes(o))); } catch (_) {}
+                    if (_open.length) {
+                        showToast('🚫 ያልተጠናቀቀ ስራ (' + _open.length + ') አለዎት — በዜሮ ሪፖርት መላክ አይቻልም። መጀመሪያ ስራውን «አጠናቅ» ወይም ወደ አድሚን ይመልሱ፤ ከዚያ ሪፖርት ያድርጉ። ስራ ከሌለ ብቻ በዜሮ ይላካል።', 'error');
+                        return;
+                    }
+                }
             }
 
             // ✅ FIX: «የተላኩ ስራዎች ብዛት» ባዶ/0 ሆኖ «የተጠናቀቁ» ብቻ እየተላከ ነበር (የተላከ ስራ ሳይኖር የተጠናቀቀ አይኖርም)።
