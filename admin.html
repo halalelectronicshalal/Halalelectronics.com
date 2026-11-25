@@ -1687,6 +1687,7 @@ document.addEventListener('click', function (e) {
                 <div id="pendingReportsCard"></div>
                 <div id="holdRequestsCard"></div>
                 <div id="returnRequestsCard"></div>
+                <div id="completionRequestsCard"></div>
 
                 <!-- Stats -->
                 <div class="stats-grid" id="dashboardStats">
@@ -4654,6 +4655,7 @@ document.addEventListener('click', function (e) {
                 try { admReturnFutureAssigned(); } catch (e) {}
                 try { admRenderHoldRequests(); } catch (e) { console.warn('hold requests card failed', e); }
                 try { admRenderReturnRequests(); } catch (e) { console.warn('return requests card failed', e); }
+                try { admRenderCompletionRequests(); } catch (e) { console.warn('completion requests card failed', e); }
                 renderTechnicians();
                 try { resyncLiveTechPins(); } catch (e) {} // 🗺️ ተመደበ/ተጠናቀቀ ሲሆን የካርታ ፒኖች ይታደሳሉ
                 updateChart();
@@ -5648,22 +5650,29 @@ document.addEventListener('click', function (e) {
             }).join('');
             box.innerHTML = `<div class="card" style="margin-bottom:14px; border:1px solid #F59E0B;"><div class="card-header"><h3>📵 «ስልክ አይነሳም» ማጽደቂያ (${list.length})</h3></div><div style="padding:10px;">${rows}</div></div>`;
         }
-        async function admDecideHold(orderId, approve) {
+        async function admDecideHold(orderId, approve, rejMsg) {
             const o = (allOrders || []).find(x => x.id === orderId);
             if (!o || !o.holdRequest || o.holdRequest.status !== 'pending') return;
             const keep = o.holdRequest.type === 'keep';
-            if (!confirm(approve ? (keep ? 'ስራው ከቴክኒሻኑ ጋር ይቆይ?' : 'ስራው ወደ አድሚን ይመለስ?') : 'ጥያቄው ውድቅ ይደረግ? (ስራው ወደ ቴክኒሻኑ «ተመድቧል» ይመለሳል)')) return;
-            const now = new Date();
-            let upd;
+            if (!approve && rejMsg === undefined) { admOpenRejectComposer({ kind: 'hold', orderId }); return; } // ✍️ ውድቅ ሲሆን መልእክት መጻፊያ
+            if (approve && !confirm(keep ? 'ስራው ከቴክኒሻኑ ጋር ይቆይ?' : 'ስራው ወደ አድሚን ይመለስ?')) return;
+            const now = new Date(), who = admWho();
+            let upd, text;
             if (!approve) {
-                upd = { status: 'Assigned', onHold: false, 'holdRequest.status': 'rejected', 'holdRequest.decidedAt': now };
+                upd = { status: 'Assigned', onHold: false, 'holdRequest.status': 'rejected', 'holdRequest.decidedAt': now, 'holdRequest.decidedBy': who, 'holdRequest.rejectMessage': rejMsg };
+                text = `❌ ${who} «ስልክ አይነሳም» ጥያቄን ውድቅ አደረገ — 💬 ${rejMsg}`;
             } else if (keep) {
-                upd = { onHold: true, heldAt: now, heldReason: 'ስልክ አይነሳም', 'holdRequest.status': 'approved', 'holdRequest.decidedAt': now };
+                upd = { onHold: true, heldAt: now, heldReason: 'ስልክ አይነሳም', 'holdRequest.status': 'approved', 'holdRequest.decidedAt': now, 'holdRequest.decidedBy': who };
+                text = `✅ ${who} «ስልክ አይነሳም» — ስራው ከቴክኒሻኑ ጋር እንዲቆይ አጸደቀ`;
             } else {
-                upd = { status: 'Pending', technician: '', onHold: false, returnedFrom: o.technician || '', returnedFromId: o.technicianId || '', returnReason: 'ስልክ አይነሳም (አድሚን አጽድቋል)', returnedAt: now, 'holdRequest.status': 'approved', 'holdRequest.decidedAt': now };
+                upd = { status: 'Pending', technician: '', onHold: false, returnedFrom: o.technician || '', returnedFromId: o.technicianId || '', returnReason: 'ስልክ አይነሳም (አድሚን አጽድቋል)', returnedAt: now, 'holdRequest.status': 'approved', 'holdRequest.decidedAt': now, 'holdRequest.decidedBy': who };
+                text = `✅ ${who} «ስልክ አይነሳም» — ስራው ወደ አድሚን እንዲመለስ አጸደቀ`;
             }
+            upd.history = firebase.firestore.FieldValue.arrayUnion({ t: Date.now(), by: who, text: text, st: approve ? 'approval-approved' : 'approval-rejected' });
             try { await db.collection('orders').doc(orderId).update(upd); showToast('✅ ተመዝግቧል', 'success'); }
-            catch (err) { showToast('❌ ' + err.message, 'error'); }
+            catch (err) { showToast('❌ ' + err.message, 'error'); return; }
+            try { db.collection('activity').add({ user: who, action: approve ? 'hold_approved' : 'hold_rejected', details: `ስራ #${String(orderId).substring(0, 8)} — ${text}`, timestamp: now }).catch(() => {}); } catch (e) {}
+            admNotifyTech(o.technicianId || '', approve ? '✅ «ስልክ አይነሳም» ጸድቋል' : '❌ «ስልክ አይነሳም» ውድቅ ተደርጓል', `#${String(orderId).substring(0, 8)}${approve ? '' : ' — ' + rejMsg}`);
         }
 
         // ============================================================
@@ -5687,9 +5696,10 @@ document.addEventListener('click', function (e) {
                 </div>`).join('');
             box.innerHTML = `<div class="card" style="margin-bottom:14px; border:1px solid #EF4444;"><div class="card-header"><h3>↩️ «ስራ መልስ» ማጽደቂያ (${list.length})</h3></div><div style="padding:10px;">${rows}</div></div>`;
         }
-        async function admDecideReturn(orderId, approve) {
+        async function admDecideReturn(orderId, approve, rejMsg) {
             const o = (allOrders || []).find(x => x.id === orderId);
             if (!o || !o.returnRequest || o.returnRequest.status !== 'pending') return;
+            if (!approve && rejMsg === undefined) { admOpenRejectComposer({ kind: 'return', orderId }); return; } // ✍️ ውድቅ ሲሆን መልእክት መጻፊያ
             const now = new Date();
             const who = (typeof heGetSession === 'function' && heGetSession() && heGetSession().staff && heGetSession().staff.name) || 'አድሚን';
             const techId = o.technicianId || o.returnRequest.byId || '';
@@ -5704,11 +5714,13 @@ document.addEventListener('click', function (e) {
                     returnedFrom: techName, returnedFromId: techId, returnReason: reason, returnedAt: now,
                     'returnRequest.status': 'approved', 'returnRequest.decidedAt': now, 'returnRequest.decidedBy': who
                 };
+                upd.history = firebase.firestore.FieldValue.arrayUnion({ t: Date.now(), by: who, text: `✅ ${who} የስራ መመለስ ጥያቄን አጸደቀ — ምክንያት: ${reason}`, st: 'approval-approved' });
                 pushTitle = '✅ ስራ መመለስ ጸድቋል'; pushBody = `#${short} — ስራው ከእርስዎ ወጥቷል`;
             } else {
-                const why = (prompt('ውድቅ የሚያደርጉበትን ምክንያት ይጻፉ (ለቴክኒሻኑ ይደርሰዋል)፦') || '').trim();
+                const why = String(rejMsg || '').trim();
                 if (!why) { showToast('⚠️ ውድቅ ለማድረግ ምክንያት ያስፈልጋል', 'error'); return; }
-                upd = { 'returnRequest.status': 'rejected', 'returnRequest.rejectReason': why, 'returnRequest.decidedAt': now, 'returnRequest.decidedBy': who };
+                upd = { 'returnRequest.status': 'rejected', 'returnRequest.rejectReason': why, 'returnRequest.decidedAt': now, 'returnRequest.decidedBy': who,
+                    history: firebase.firestore.FieldValue.arrayUnion({ t: Date.now(), by: who, text: `❌ ${who} የስራ መመለስ ጥያቄን ውድቅ አደረገ — 💬 ${why}`, st: 'approval-rejected' }) };
                 pushTitle = '❌ ስራ መመለስ ውድቅ ተደርጓል'; pushBody = `#${short} — ${why}`;
             }
             try {
@@ -5722,6 +5734,115 @@ document.addEventListener('click', function (e) {
             if (approve) {
                 try { callWorker('pushNotify', { audience: ['newOrders'], title: `↩️ ስራ ተመለሰ - ${techName}`, body: `#${short} — ${reason}`, url: new URL('new-orders.html', location.href).href }).catch(() => {}); } catch (e) {}
                 try { if (typeof sendCustomerSmsFor === 'function') sendCustomerSmsFor('return-job', orderId); } catch (e) {}
+            }
+        }
+
+        // ============================================================
+        // 🕒 «አጠናቅ» ጥያቄዎች (ለ. ዋጋ አልተስማሙም · ሐ. ለሌላ ቀን · መ. ዋጋ ተስማምተናል · ሠ. ሌላ) — ቴክኒሻኑ ሲልክ ስራው ከእሱ ጋር ይቆያል፤
+        //    አድሚን ሲያጸድቅ ብቻ ይፈጸማል። ውድቅ ሲሆን መልእክት ተጽፎ ለቴክኒሻኑ ይላካል። ማን እንዳጸደቀ/ውድቅ እንዳደረገ በስራው ታሪክ (history) ይመዘገባል።
+        // ============================================================
+        function admWho() {
+            return (typeof heGetSession === 'function' && heGetSession() && heGetSession().staff && heGetSession().staff.name) || 'አድሚን';
+        }
+        // ቴክኒሻኑን በ push (እና ቴሌግራም ካለው) ማሳወቅ — አይወድቅም
+        async function admNotifyTech(techId, title, body) {
+            if (!techId) return;
+            try { await db.collection('pushQueue').add({ toStaffId: techId, title: title, body: body, locationUrl: location.origin + location.pathname.replace(/[^/]*$/, 'technician.html'), createdAt: Date.now(), sent: false }); } catch (e) { console.warn('tech push failed (non-fatal)', e); }
+            try { const t = (allTechnicians || []).find(x => x.id === techId); if (t && t.chatId) await sendTelegramNotification(`${title}\n${body}`, t.chatId); } catch (e) {}
+        }
+        // ✍️ ውድቅ ሲደረግ የመልእክት መጻፊያ (ለ «ማጽደቅ ይጠብቃል» ሁሉም ዓይነቶች)
+        let _admRej = null;
+        const ADM_REJ_PRESETS = ['ምክንያቱ በቂ አይደለም — ስራውን ይቀጥሉ።', 'ደንበኛውን እንደገና አነጋግረው ይጨርሱ።', 'ዋጋውን እንደገና ይነጋገሩ።', 'ቢሮ ደውለው ያረጋግጡ፣ ከዚያ እንደገና ይላኩ።'];
+        function admOpenRejectComposer(ctx) {
+            _admRej = ctx;
+            const o = (allOrders || []).find(x => x.id === ctx.orderId) || {};
+            const chips = ADM_REJ_PRESETS.map((p, i) => `<button type="button" class="btn btn-outline btn-xs" style="margin:0 4px 6px 0;" onclick="admRejPreset(${i})">${escHtml(p)}</button>`).join('');
+            openModal('❌ ጥያቄውን ውድቅ አድርግ — መልእክት ጻፍ',
+                `<div class="text-muted" style="font-size:0.85rem; margin-bottom:8px;">👷 ${escHtml(o.technician || '—')} · 👤 ${escHtml(o.fullName || '—')} · 🆔 #${escHtml(String(ctx.orderId).substring(0, 8))}</div>
+                 <div style="margin-bottom:6px;">${chips}</div>
+                 <textarea id="admRejMsg" rows="4" placeholder="ለቴክኒሻኑ የሚላክ መልእክት (ግዴታ)…" style="width:100%; padding:10px; border:2px solid var(--border); border-radius:var(--radius-sm); font-family:inherit;"></textarea>
+                 <div class="text-muted" style="font-size:0.8rem; margin-top:6px;">መልእክቱ በ push/ቴሌግራም ለቴክኒሻኑ ይላካል፣ በስራ ካርዱ ላይም ይታያል፣ በስራው ታሪክም ከስምዎ ጋር ይመዘገባል።</div>`,
+                `<button class="btn btn-danger" onclick="admRejSubmit()"><i class="fas fa-paper-plane"></i> ውድቅ አድርግና ላክ</button> <button class="btn btn-secondary" onclick="closeModal()">ተመለስ</button>`);
+        }
+        function admRejPreset(i) { const el = document.getElementById('admRejMsg'); if (el) el.value = ADM_REJ_PRESETS[i] || ''; }
+        async function admRejSubmit() {
+            const el = document.getElementById('admRejMsg');
+            const msg = String((el && el.value) || '').trim();
+            if (!msg) { showToast('⚠️ ውድቅ ለማድረግ መልእክት ያስፈልጋል', 'error'); return; }
+            const ctx = _admRej; if (!ctx) return;
+            _admRej = null;
+            closeModal();
+            if (ctx.kind === 'completion') await admDecideCompletion(ctx.orderId, false, msg);
+            else if (ctx.kind === 'return') await admDecideReturn(ctx.orderId, false, msg);
+            else if (ctx.kind === 'hold') await admDecideHold(ctx.orderId, false, msg);
+        }
+        function admRenderCompletionRequests() {
+            const box = document.getElementById('completionRequestsCard');
+            if (!box) return;
+            const list = (allOrders || []).filter(o => o && o.completionRequest && o.completionRequest.status === 'pending');
+            if (!list.length) { box.innerHTML = ''; return; }
+            const e = escHtml;
+            const rows = list.map(o => {
+                const c = o.completionRequest;
+                return `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px; background:#fff; border:1px solid var(--border); border-radius:10px; margin-bottom:8px;">
+                    <div style="flex:1; min-width:170px;">
+                        <strong>👷 ${e(c.by || o.technician || '—')}</strong> — ${e(o.fullName || '—')} (${e(o.appliance || '—')})
+                        <div style="font-size:0.8rem; color:var(--text-muted);">🕒 ${e(c.label || '')} · 🆔 #${e(String(o.id).substring(0, 8))}</div>
+                        ${c.summary ? `<div style="font-size:0.85rem; margin-top:4px; white-space:pre-wrap;">📝 ${e(c.summary)}</div>` : ''}
+                    </div>
+                    <button class="btn btn-outline btn-sm" onclick="viewOrder('${o.id}')"><i class="fas fa-eye"></i></button>
+                    <button class="btn btn-success btn-sm" onclick="admDecideCompletion('${o.id}', true)"><i class="fas fa-check"></i> አጽድቅ</button>
+                    <button class="btn btn-danger btn-sm" onclick="admDecideCompletion('${o.id}', false)"><i class="fas fa-times"></i> ውድቅ</button>
+                </div>`;
+            }).join('');
+            box.innerHTML = `<div class="card" style="margin-bottom:14px; border:1px solid #7C3AED;"><div class="card-header"><h3>🕒 «አጠናቅ» ማጽደቂያ (${list.length})</h3></div><div style="padding:10px;">${rows}</div></div>`;
+        }
+        // የተያዘውን እቅድ መፈጸም — ('@now' → አሁን)፤ ስራው + (ካለ) አዲሱ ቀጠሮ በአንድ batch
+        async function admRunCompletionPlan(o, plan, c, who, now, entry) {
+            const rev = (v) => v === '@now' ? new Date() : Array.isArray(v) ? v.map(rev) : (v && typeof v === 'object') ? Object.keys(v).reduce((m, k) => { m[k] = rev(v[k]); return m; }, {}) : v;
+            const batch = db.batch();
+            if (plan.newOrder) {
+                const nr = db.collection('orders').doc();
+                batch.set(nr, Object.assign({}, rev(plan.newOrder), { history: [{ t: Date.now(), by: who, text: `📦 ትዕዛዝ ተፈጠረ (ለሌላ ቀን የተላለፈ) — በ ${who} ከጸደቀ «${c.label || ''}» የመጣ`, st: 'created' }] }));
+            }
+            batch.update(db.collection('orders').doc(o.id), Object.assign({}, rev(plan.orderUpdate || {}), {
+                'completionRequest.status': 'approved', 'completionRequest.decidedAt': now, 'completionRequest.decidedBy': who,
+                history: firebase.firestore.FieldValue.arrayUnion(entry)
+            }));
+            await batch.commit();
+        }
+        async function admDecideCompletion(orderId, approve, rejMsg) {
+            const o = (allOrders || []).find(x => x.id === orderId);
+            const c = o && o.completionRequest;
+            if (!o || !c || c.status !== 'pending') return;
+            if (!approve && rejMsg === undefined) { admOpenRejectComposer({ kind: 'completion', orderId }); return; }
+            const who = admWho(), now = new Date(), short = String(orderId).substring(0, 8);
+            const techId = c.byId || o.technicianId || '';
+            if (approve) {
+                let plan;
+                try { plan = JSON.parse(c.planJson || '{}'); } catch (e) { showToast('❌ የጥያቄው እቅድ ተበላሽቷል — ውድቅ አድርገው ቴክኒሻኑ እንደገና ይላክ', 'error'); return; }
+                if (!plan || !plan.orderUpdate) { showToast('❌ የጥያቄው እቅድ ባዶ ነው — ውድቅ ያድርጉት', 'error'); return; }
+                if (o.status !== 'Assigned' && !confirm(`⚠️ ስራው አሁን «${o.status || '—'}» ነው (ከቴክኒሻኑ ጋር «ተመድቧል» አይደለም)።\n\nቢሆንም ይጽደቅ?`)) return;
+                if (!confirm(`✅ «${c.label || ''}» ይጽደቅ?\n\n${c.summary || ''}`)) return;
+                const entry = { t: Date.now(), by: who, text: `✅ ${who} «${c.label || ''}» ጥያቄን አጸደቀ${c.summary ? ' — ' + c.summary : ''}`, st: 'approval-approved' };
+                try { await admRunCompletionPlan(o, plan, c, who, now, entry); showToast('✅ ጸድቋል — ውጤቱ ተፈጽሟል', 'success'); }
+                catch (err) { showToast('❌ ' + err.message, 'error'); return; }
+                try { db.collection('activity').add({ user: who, action: 'completion_approved', details: `ስራ #${short} — ${c.by || ''}: «${c.label || ''}» ጸድቋል`, timestamp: now }).catch(() => {}); } catch (e) {}
+                if (plan.sms && plan.sms.phone && plan.sms.message) {
+                    try { const r = await callWorker('sendSms', { phone: plan.sms.phone, message: plan.sms.message }); showToast((r && (r.success || r.acknowledge === 'success')) ? '📱 ለደንበኛ SMS ተልኳል' : '⚠️ ለደንበኛ SMS አልተላከም', (r && (r.success || r.acknowledge === 'success')) ? 'success' : 'error'); } catch (e) { showToast('⚠️ ለደንበኛ SMS አልተላከም', 'error'); }
+                }
+                admNotifyTech(techId, '✅ ጥያቄዎ ጸድቋል', `#${short} — ${c.label || ''}`);
+            } else {
+                const entry = { t: Date.now(), by: who, text: `❌ ${who} «${c.label || ''}» ጥያቄን ውድቅ አደረገ — 💬 ${rejMsg}`, st: 'approval-rejected' };
+                try {
+                    await db.collection('orders').doc(orderId).update({
+                        'completionRequest.status': 'rejected', 'completionRequest.decidedAt': now, 'completionRequest.decidedBy': who, 'completionRequest.rejectMessage': rejMsg,
+                        history: firebase.firestore.FieldValue.arrayUnion(entry)
+                    });
+                    showToast('✅ ውድቅ ተደርጎ ለቴክኒሻኑ ተላከ', 'success');
+                } catch (err) { showToast('❌ ' + err.message, 'error'); return; }
+                try { db.collection('activity').add({ user: who, action: 'completion_rejected', details: `ስራ #${short} — ${c.by || ''}: «${c.label || ''}» ውድቅ — ${rejMsg}`, timestamp: now }).catch(() => {}); } catch (e) {}
+                admNotifyTech(techId, `❌ «${c.label || ''}» ውድቅ ተደርጓል`, `#${short} — ${rejMsg}`);
             }
         }
 
