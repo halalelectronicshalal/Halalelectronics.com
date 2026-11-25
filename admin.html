@@ -41,6 +41,7 @@
     </script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js">
     </script>
+<script src="he-history.js"></script>
 <script>
 /* 📅 ቀን በኢትዮጵያ ካላንደር ብቻ — «YYYY-MM-DD» ቁልፍን ወደ ኢትዮጵያ ቀን ይቀይራል (ማሳያ ላይ ብቻ፤ የተቀመጠው ዳታ አይነካም) */
 window.heEthDay = function (k) {
@@ -5340,7 +5341,8 @@ document.addEventListener('click', function (e) {
                 const snap = await ref.get();
                 if (!snap.exists) { showToast('ℹ️ ይህ ስራ ቀድሞ ተሰርዟል', 'info'); setTimeout(() => { try { openStatDetail(kind); } catch (e) {} }, 300); return; }
                 await db.collection('deletedOrders').doc(orderId).set(Object.assign({}, snap.data(), {
-                    binDeletedAt: new Date(), binDeletedBy: heActorName(), binDeletedFrom: kind === 'overdue' ? 'overnight' : 'returned'
+                    binDeletedAt: new Date(), binDeletedBy: heActorName(), binDeletedFrom: kind === 'overdue' ? 'overnight' : 'returned',
+                    history: (Array.isArray(snap.data().history) ? snap.data().history : []).concat([{ at: Date.now(), by: heActorName(), ev: 'bin', text: '🗑️ ወደ ሪሳይክል ቢን ተሰርዟል' }])
                 }));
                 await ref.delete();
                 try { await db.collection('activity').add({ user: heActorName(), action: 'bin_order', details: `ትዕዛዝ #${orderId.substring(0, 8)} ወደ ሪሳይክል ቢን ተሰርዟል (${kind === 'overdue' ? 'ያደረ' : 'የተመለሰ'})`, timestamp: new Date() }); } catch (e) {}
@@ -6718,10 +6720,11 @@ document.addEventListener('focusout', function (e) {
             if (!o || !o.scheduledTechnician || !o.scheduledReleaseDate) return '';
             return `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#EFF6FF; color:#1E40AF; font-size:0.78rem;">📌 ለ <b>${escHtml(o.scheduledTechnician)}</b> ተይዟል — ቀኑ (${escHtml(heEthDay(o.scheduledReleaseDate))}${o.scheduledReleaseTime ? ' ⏰ ' + escHtml(heEthClockHM(o.scheduledReleaseTime)) : ''}) ሲደርስ ለሰራተኛው በራሱ ይላካል</div>`;
         }
-        async function assignOrder(orderId) {
+        async function assignOrder(orderId, forcedTech) {
             // ✅ NEW: ከ Dashboard ላይ ካለው quick-assign select ወይም ከ Orders ትር ላይ ካለው select ይነበብ
-            const select = pickAssignSelect(orderId);
-            let techName = select ? select.value.trim() : '';
+            // 🆕 forcedTech ከተሰጠ (አዲስ ስራ ሲመዘገብ የተመረጠው ቴክኒሻን) ከ DOM select ላይ አይመካም
+            const select = forcedTech ? null : pickAssignSelect(orderId);
+            let techName = forcedTech ? String(forcedTech).trim() : (select ? select.value.trim() : '');
 
             if (!techName) {
                 showToast('እባክዎ ቴክኒሻን ይምረጡ / Please select a technician', 'error');
@@ -6764,7 +6767,10 @@ document.addEventListener('focusout', function (e) {
                 if (techNotTodayToday(_selTech)) _warns.push('⚠️ ዛሬ "አይመቸኝም" ብሎ ልኳል');
                 const _w = techWarning(_selTech);
                 if (_w) _warns.push('🚩 ዋርኒግ: ' + _w.reasons.join('፣ '));
-                if (_warns.length && !confirm(`${techName}\n${_warns.join('\n')}\n\nቢሆንም ይመድቡት?`)) return;
+                if (_warns.length && !confirm(`${techName}\n${_warns.join('\n')}\n\nቢሆንም ይመድቡት?`)) {
+                    if (forcedTech) showToast('ℹ️ ስራው ተመዝግቧል ግን አልተመደበም — በ«አዲስ ትዕዛዞች» ውስጥ ሊመድቡት ይችላሉ', 'info');
+                    return;
+                }
             }
 
             try {
@@ -7076,6 +7082,11 @@ ${locationLine}
                 <div class="timeline" style="padding-left:20px; border-left:3px solid var(--secondary);">
                     ${timelineHTML}
                 </div>
+
+                <hr style="border:none; border-top:2px solid var(--border); margin:16px 0;" />
+
+                <h4>🕘 የስራው ሙሉ ታሪክ (ሂስትሪ)</h4>
+                <div>${(typeof heOrderHistoryHtml === 'function') ? heOrderHistoryHtml(order, formatEthDateTime) : ''}</div>
             `;
 
             const footerHTML = `
@@ -9741,15 +9752,19 @@ ${locationLine}
 
                 // ወዲያውኑ ቴክኒሻን ከተመረጠ፣ ነባሩን assignOrder() pipeline ተጠቅሞ ይመድብ
                 // (Telegram + push notification ሁሉ በራሱ ይላካል)
+                // 🆕 በ DOM select ላይ አይመካም — ቴክኒሻኑ በቀጥታ ይተላለፋል፤ ካልተመደበ ግልጽ መልእክት ይታያል
                 if (technician) {
-                    const fakeSelect = document.createElement('select');
-                    fakeSelect.className = 'assignSelect';
-                    fakeSelect.dataset.id = docRef.id;
-                    fakeSelect.innerHTML = `<option value="${technician}" selected>${technician}</option>`;
-                    fakeSelect.value = technician;
-                    document.body.appendChild(fakeSelect);
-                    await assignOrder(docRef.id);
-                    fakeSelect.remove();
+                    try {
+                        await assignOrder(docRef.id, technician);
+                        const _chk = await db.collection('orders').doc(docRef.id).get();
+                        const _d = _chk.exists ? _chk.data() : null;
+                        if (!_d || !(_d.status === 'Assigned' || _d.scheduledTechnician)) {
+                            showToast('⚠️ ስራው ተመዝግቧል ግን ለ ' + technician + ' አልተመደበም — «አዲስ ትዕዛዞች» ውስጥ ይመድቡ', 'error');
+                        }
+                    } catch (asgErr) {
+                        console.error('assign after add failed', asgErr);
+                        showToast('⚠️ ስራው ተመዝግቧል ግን መመደብ አልተቻለም: ' + (asgErr && asgErr.message ? asgErr.message : asgErr), 'error');
+                    }
                 }
             } catch (error) {
                 showToast('❌ ' + error.message, 'error');
