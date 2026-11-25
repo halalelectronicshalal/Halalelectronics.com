@@ -5323,7 +5323,7 @@ document.addEventListener('click', function (e) {
             const sel = pickAssignSelect(orderId);
             if (!sel || !sel.value) { showToast('እባክዎ ቴክኒሻን ይምረጡ', 'error'); return; }
             const o = allOrders.find(x => x.id === orderId);
-            if (o && o.technician === sel.value && o.status === 'Assigned' && !confirm(`ይህ ስራ ቀድሞ ለ ${sel.value} ተመድቧል። እንደገና ይላክለት?`)) return;
+            { const _lk = heAssignLockedTo(o); if (_lk) { showToast(heAssignLockedMsg(_lk), 'error'); return; } }
             await assignOrder(orderId);
             // ዝርዝሩ አዲሱን ቴክኒሻን እንዲያሳይ ከ Firestore ማዘመኛ በኋላ እንደገና ይከፈታል
             setTimeout(() => { try { openStatDetail(kind); } catch (e) {} }, 700);
@@ -5463,10 +5463,10 @@ document.addEventListener('click', function (e) {
                     ${!done && reason ? `<div style="color:#B91C1C;">📝 ምክንያት: ${escHtml(reason)}</div>` : ''}
                 </div>
                 <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
-                    ${opts.assignable ? `<select class="dashAssignSelect" data-id="${o.id}" style="padding:4px 8px; font-size:0.78rem; border:1px solid var(--border); border-radius:6px;">
+                    ${opts.assignable ? `${heAssignLockedTo(o) ? heAssignLockedBox(heAssignLockedTo(o)) : `<select class="dashAssignSelect" data-id="${o.id}" style="padding:4px 8px; font-size:0.78rem; border:1px solid var(--border); border-radius:6px;">
                             <option value="">ቴክኒሻን ምረጥ</option>${admAssignOptionsHtml(o.technician)}
                         </select>
-                        <button class="btn btn-xs btn-success" onclick="admAssignFromList('${o.id}', '${opts.assignable}')"><i class="fas fa-check"></i> ${o.technician ? 'መልሰህ መድብ' : 'መድብ'}</button>
+                        <button class="btn btn-xs btn-success" onclick="admAssignFromList('${o.id}', '${opts.assignable}')"><i class="fas fa-check"></i> ${o.technician ? 'መልሰህ መድብ' : 'መድብ'}</button>`}
                         <button class="btn btn-xs btn-danger" onclick="admBinOrder('${o.id}', '${opts.assignable}')" title="ወደ ሪሳይክል ቢን"><i class="fas fa-trash"></i> ሰርዝ</button>` : ''}
                     <button class="btn btn-xs btn-primary" onclick="viewOrder('${o.id}')"><i class="fas fa-eye"></i> ሙሉ ዝርዝር</button>
                 </div>
@@ -6543,10 +6543,7 @@ document.addEventListener('focusout', function (e) {
                     actions = `
                         <button class="btn btn-xs btn-primary" onclick="viewOrder('${order.id}')"><i class="fas fa-eye"></i></button>
                         <button class="btn btn-xs btn-success" onclick="completeOrder('${order.id}')"><i class="fas fa-check"></i> አጠናቅ</button>
-                        ${isOvernightNow(order) ? `<select class="assignSelect" data-id="${order.id}" style="padding:2px 6px; font-size:0.7rem; width:100px; border:1px solid var(--border); border-radius:4px;">
-                            <option value="">ምረጥ</option>${admAssignOptionsHtml(order.technician)}
-                        </select>
-                        <button class="btn btn-xs btn-success" onclick="assignOrder('${order.id}')" title="ያደረ ስራ ለሌላ ቴክኒሻን መድብ"><i class="fas fa-exchange-alt"></i> መልሰህ መድብ</button>` : ''}
+                        ${isOvernightNow(order) && heAssignLockedTo(order) ? heAssignLockedBox(heAssignLockedTo(order)) : ''}
                         <button class="btn btn-xs btn-danger" onclick="deleteOrder('${order.id}')"><i class="fas fa-trash"></i></button>
                     `;
                 } else {
@@ -6720,6 +6717,20 @@ document.addEventListener('focusout', function (e) {
             if (!o || !o.scheduledTechnician || !o.scheduledReleaseDate) return '';
             return `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#EFF6FF; color:#1E40AF; font-size:0.78rem;">📌 ለ <b>${escHtml(o.scheduledTechnician)}</b> ተይዟል — ቀኑ (${escHtml(heEthDay(o.scheduledReleaseDate))}${o.scheduledReleaseTime ? ' ⏰ ' + escHtml(heEthClockHM(o.scheduledReleaseTime)) : ''}) ሲደርስ ለሰራተኛው በራሱ ይላካል</div>`;
         }
+
+        // 🔒 የተመደበ ስራ እስኪጠናቀቅ (ወይም ቴክኒሻኑ እስኪመልሰው) ለሌላ ሰው መመደብ አይቻልም — ሲጠናቀቅ/ሲመለስ መመደቢያው ይከፈታል
+        // የተቆለፈ = ቴክኒሻን ያለው + «ተመድቧል» ወይም ከቴክኒሻኑ ጋር የተያዘ (ዋጋ አልተስማሙም/ስልክ አይነሳም/ሌላ) ያልተጠናቀቀ ስራ
+        function heAssignLockedTo(o) {
+            try {
+                if (!o || !o.technician) return '';
+                if (o.status === 'Assigned') return String(o.technician);
+                if (o.onHold === true && ['PriceNotAgreed', 'Other', 'PhoneNoAnswer'].includes(o.status)) return String(o.technician);
+            } catch (e) {}
+            return '';
+        }
+        function heAssignLockedMsg(name) { return '🔒 ይህ ስራ ቀድሞ ለ ' + name + ' ተመድቧል — እስኪጠናቀቅ ወይም ቴክኒሻኑ እስኪመልሰው ድረስ ለሌላ መመደብ አይቻልም'; }
+        function heAssignLockedBox(name) { return '<span style="padding:4px 8px;border-radius:6px;background:#FEF3C7;color:#92400E;font-size:0.78rem;font-weight:700;">🔒 ለ ' + String(name).replace(/[&<>"]/g, '') + ' ተመድቧል — እስኪጠናቀቅ ዝግ ነው</span>'; }
+
         async function assignOrder(orderId, forcedTech) {
             // ✅ NEW: ከ Dashboard ላይ ካለው quick-assign select ወይም ከ Orders ትር ላይ ካለው select ይነበብ
             // 🆕 forcedTech ከተሰጠ (አዲስ ስራ ሲመዘገብ የተመረጠው ቴክኒሻን) ከ DOM select ላይ አይመካም
@@ -6741,6 +6752,7 @@ document.addEventListener('focusout', function (e) {
             // 📅 ቀጠሮ ያልደረሰ ስራ → ለሰራተኛው አይላክም፤ ይያዛል፣ ቀኑ ሲደርስ Worker በራሱ ይልካል
             let _ord0 = (allOrders || []).find(x => x.id === orderId) || null;
             if (!_ord0) { try { const _s0 = await db.collection('orders').doc(orderId).get(); if (_s0.exists) { _ord0 = _s0.data(); _ord0.id = orderId; } } catch (e) { /* ችላ */ } } // ገና ወደ ዝርዝሩ ያልገባ አዲስ ትዕዛዝ እንኳ ቀጠሮው ይጠበቃል
+            { const _lk0 = heAssignLockedTo(_ord0); if (_lk0) { showToast(heAssignLockedMsg(_lk0), 'error'); try { renderOrders(); } catch (e) {} return; } }
             const _hold = _ord0 && _ord0.status === 'Pending' ? schedHoldInfo(_ord0) : null;
             if (_hold) {
                 const _t0 = allTechnicians.find(t => t.name === techName);
@@ -6781,7 +6793,14 @@ document.addEventListener('focusout', function (e) {
                     assignedBy: 'admin'
                 };
                 if (_ord0 && _ord0.scheduledReleaseDate) { _upd.scheduledTechnician = null; _upd.scheduledTechnicianId = null; _upd.scheduledReleaseDate = null; _upd.scheduledReleaseTime = null; } // ተይዞ የነበረ → አሁን ተመደበ
-                await db.collection('orders').doc(orderId).update(_upd);
+                // 🔒 በሰርቨር ላይ በ transaction ይፈትሻል — ሁለት ሰዎች በአንድ ጊዜ ቢመድቡ አንደኛው ብቻ ይሳካል
+                const _aref = db.collection('orders').doc(orderId);
+                await db.runTransaction(async (tx) => {
+                    const _s = await tx.get(_aref);
+                    const _lk = _s.exists ? heAssignLockedTo(_s.data()) : '';
+                    if (_lk) { const _e = new Error('ASSIGN_LOCKED'); _e.lockedTo = _lk; throw _e; }
+                    tx.update(_aref, _upd);
+                });
 
                 await db.collection('activity').add({
                     user: heActorName(),
@@ -6851,6 +6870,7 @@ ${locationLine}
                 showToast(`✅ ስራው ለ ${techName} ተመድቧል / Assigned to ${techName}`, 'success');
                 renderOrders();
             } catch (error) {
+                if (error && error.message === 'ASSIGN_LOCKED') { showToast(heAssignLockedMsg(error.lockedTo), 'error'); try { renderOrders(); } catch (e) {} return; }
                 showToast('❌ ' + error.message, 'error');
                 console.error('Assignment error:', error);
             }
