@@ -5508,23 +5508,27 @@ document.addEventListener('click', function (e) {
                 let list = allOrders.filter(isToday);
                 title = '📋 የዛሬ ጠቅላላ ትዕዛዞች';
                 if (kind === 'pending') { list = list.filter(o => o.status === 'Pending'); title = '⏳ የዛሬ በመጠባበቅ ላይ ያሉ'; }
-                if (kind === 'completed') { list = list.filter(o => o.status === 'Completed'); title = '✅ የዛሬ የተጠናቀቁ'; }
+                if (kind === 'completed') { list = list.filter(admIsClosedJob); title = '✅ የዛሬ የተጠናቀቁ (በአጠናቅ የተዘጉ)'; }
                 const done = list.filter(o => o.status === 'Completed').length;
                 summary = `ጠቅላላ ${list.length} • ✅ ተጠናቋል ${done} • ❌ አልተጠናቀቀም ${list.length - done}`;
                 rows = list.map(o => orderDetailRowHTML(o));
-            } else if (kind === 'unfinished' || kind === 'correction' || kind === 'referral') {
+            } else if (kind === 'unfinished') {
+                const list = allOrders.filter(admIsInProgress).sort((a, b) => toMs(b.assignedAt || b.createdAt) - toMs(a.assignedAt || a.createdAt));
+                title = '❌ ያልተጠናቀቁ ስራዎች (የተመደቡ)';
+                summary = `${list.length} ለቴክኒሻን የተመደቡ ገና ያልተዘጉ ስራዎች`;
+                rows = list.map(o => orderDetailRowHTML(o));
+            } else if (kind === 'correction' || kind === 'referral') {
                 let list = allOrders.filter(isToday);
-                if (kind === 'unfinished') { list = list.filter(o => ADM_UNFINISHED_STATUSES.includes(o.status)); title = '❌ የዛሬ ያልተጠናቀቁ ስራዎች'; }
-                else if (kind === 'correction') { list = list.filter(o => admWorkKind(o) === 'correction'); title = '🛠️ የዛሬ የእርማት ስራዎች'; }
+                if (kind === 'correction') { list = list.filter(o => admWorkKind(o) === 'correction'); title = '🛠️ የዛሬ የእርማት ስራዎች'; }
                 else { list = list.filter(o => admWorkKind(o) === 'referral'); title = '🔗 የዛሬ የሪፈራል ስራዎች'; }
                 const done = list.filter(o => o.status === 'Completed').length;
                 summary = `ጠቅላላ ${list.length} • ✅ ተጠናቋል ${done} • ❌ አልተጠናቀቀም ${list.length - done}`;
                 rows = list.map(o => orderDetailRowHTML(o));
             } else if (kind === 'overdue') {
                 const list = allOrders.filter(o => isAdmOvernightJob(o) && !admIsHandledNow(o) && overnightBaseMs(o) > 0 && overnightBaseMs(o) < new Date().setHours(0, 0, 0, 0))
-                    .sort((a, b) => overnightBaseMs(a) - overnightBaseMs(b));
+                    .sort((a, b) => overnightBaseMs(b) - overnightBaseMs(a));
                 title = '⏰ ያደሩ ስራዎች';
-                summary = `${list.length} ያልተጠናቀቁ ስራዎች ከትናንት እና ከዚያ በፊት የቆዩ (ከአሮጌው ይጀምራል)`;
+                summary = `${list.length} ያልተጠናቀቁ ስራዎች ከትናንት እና ከዚያ በፊት የቆዩ (አዲሱ ከላይ)`;
                 rows = list.map(o => orderDetailRowHTML(o, { overdue: true, showAge: true, assignable: 'overdue' }));
             } else if (kind === 'returned') {
                 const rms = (o) => toMs(o.returnedAt) || toMs(o.createdAt);
@@ -5560,6 +5564,10 @@ document.addEventListener('click', function (e) {
         // ============================================================
         // ❌ ያልተጠናቀቀ = አጠናቅ ላይ «ተሰራ» ያልሆነ ውጤት የተመረጠበት (ዋጋ አልተስማሙም፣ ለሌላ ቀን፣ ዛሬ አይመቻቸውም፣ ስልክ አይነሳም፣ ሌላ)
         const ADM_UNFINISHED_STATUSES = ['PriceNotAgreed', 'Rescheduled', 'NotToday', 'PhoneNoAnswer', 'Other'];
+        // 🆕 ❌ ያልተጠናቀቁ = ለቴክኒሻን የተመደበ እና ገና ያልተዘጋ (Assigned) ስራ — ከ«አዲስ ትዕዛዝ» (ያልተመደበ) ይወጣል
+        //    ✅ ተጠናቋል = በ«አጠናቅ» ሀ–ረ ውጤት የተዘጋ ስራ (ተሰራ፣ ዋጋ አልተስማሙም፣ ለሌላ ቀን፣ ሌላ፣ ዛሬ አይመቻቸውም፣ ስልክ አይነሳም…)
+        const admIsInProgress = (o) => !!o && o.status === 'Assigned' && !admIsFutureAppt(o);
+        const admIsClosedJob = (o) => !!o && ADM_FINISHED_STATUSES.includes(o.status);
         const admWorkKind = (o) => (o && (o.workTag || o.orderType)) || '';
         function updateStats() {
             // ✅ FIX: Dashboard Today-scoping - "ጠቅላላ ትዕዛዝ"/"በመጠባበቅ ላይ"/"ተጠናቋል" ከዚህ በፊት
@@ -5573,7 +5581,7 @@ document.addEventListener('click', function (e) {
             });
             const total = todayOrders.length;
             const pending = todayOrders.filter(o => o.status === 'Pending').length;
-            const completed = todayOrders.filter(o => o.status === 'Completed').length;
+            const completed = todayOrders.filter(admIsClosedJob).length;
             const today = todayStr;
             const todayTx = allTransactions.filter(t => {
                 const d = t.date ? new Date(t.date) : (t.createdAt?.toDate?.() || new Date(0));
@@ -5606,7 +5614,7 @@ document.addEventListener('click', function (e) {
             document.getElementById('statCompletedOrders').textContent = completed;
             document.getElementById('statActiveTechs').textContent = activeTechs;
             document.getElementById('statOverdueJobs').textContent = overdueJobs;
-            document.getElementById('statUnfinishedJobs').textContent = todayOrders.filter(o => ADM_UNFINISHED_STATUSES.includes(o.status)).length;
+            document.getElementById('statUnfinishedJobs').textContent = allOrders.filter(admIsInProgress).length;
             document.getElementById('statCorrectionJobs').textContent = todayOrders.filter(o => admWorkKind(o) === 'correction').length;
             document.getElementById('statReferralJobs').textContent = todayOrders.filter(o => admWorkKind(o) === 'referral').length;
             const _sr = document.getElementById('statReturnedJobs'); if (_sr) _sr.textContent = allOrders.filter(admIsReturnedJob).length;
@@ -5864,6 +5872,7 @@ document.addEventListener('click', function (e) {
                             <strong>👤 ${escHtml(r.technicianName || r.technician || '—')}</strong>${admReportBadges(r)}
                             <div style="font-size:0.8rem; color:var(--text-muted);">📅 ${escHtml(ethReportLabel(r))} · 💰 ${escHtml(income)} ብር${photos ? ' · 📸 ' + photos : ''}</div>
                             ${admHasCorrection(r) ? `<div style="font-size:0.8rem; color:#DC2626; margin-top:4px; white-space:pre-wrap;">✍️ ${escHtml(r.correctionRequest.text)}</div>` : ''}
+                            <details style="margin-top:6px;"><summary style="cursor:pointer; font-size:0.8rem; color:var(--primary);">📜 የስራ ታሪክ እና 🧾 የወጪ ዝርዝር</summary>${admReportExtraHtml(r)}</details>
                         </div>
                         <button class="btn btn-outline btn-sm" onclick="viewReportDetail('${r.id}')"><i class="fas fa-eye"></i> ተመልከት</button>
                         <button class="btn btn-outline btn-sm" onclick="admOpenFullEdit('${r.id}')"><i class="fas fa-pen"></i> አርም</button>
@@ -5916,6 +5925,30 @@ document.addEventListener('click', function (e) {
                 if (j.convertedFromNotCompleted) h += `<div style="color:#047857; font-size:0.8rem;">🔄 ከቆይታ በኋላ ወደ «ተሰራ» ተቀይሯል — ገቢ ${admEsc(j.lateIncome)} | ወጪ ${admEsc(j.lateExpense)} ብር</div>`;
                 return h + `</div>`;
             }).join('');
+        }
+
+        // 📜🧾 ሪፖርት ማጽደቂያ፦ እያንዳንዱ ስራ ከምደባ ጀምሮ ያለው ታሪክ + የወጪ ዝርዝር
+        function admReportExtraHtml(r) {
+            try {
+                const jobs = Array.isArray(r.jobStatuses) ? r.jobStatuses : [];
+                const toT = (h) => Number(h && (h.t || h.at)) || 0;
+                const jobBlocks = jobs.map((j, i) => {
+                    const o = (allOrders || []).find(x => x.id === j.orderId);
+                    let hist = o && Array.isArray(o.history) ? o.history.filter(h => h && h.text).slice().sort((a, b) => toT(a) - toT(b)) : [];
+                    const k = hist.findIndex(h => h.st === 'Assigned' || /ተመድቧል/.test(String(h.text || '')));
+                    if (k > 0) hist = hist.slice(k);                          // ከምደባ ጀምሮ
+                    let lines = hist.map(h => `<div style="font-size:0.78rem; padding:2px 0; border-bottom:1px dashed var(--border-light);"><span style="color:var(--text-muted);">${escHtml(formatEthDateTime(new Date(toT(h))))}${h.by ? ' — 👤 ' + escHtml(h.by) : ''}</span> ${escHtml(h.text)}</div>`).join('');
+                    if (!lines && o && o.assignedAt) lines = `<div style="font-size:0.78rem;"><span style="color:var(--text-muted);">${escHtml(formatEthDateTime(o.assignedAt) || '—')}</span> 📋 ለ ${escHtml(o.technician || r.technicianName || '')} ተመድቧል</div>`;
+                    if (!lines) lines = '<div style="font-size:0.78rem; color:var(--text-muted);">ታሪክ አልተገኘም</div>';
+                    const done = j.status === 'completed';
+                    return `<details style="margin:4px 0;"><summary style="cursor:pointer; font-size:0.83rem;">${i + 1}. ${escHtml(j.customer || '—')}${j.appliance ? ' · ' + escHtml(j.appliance) : ''} — ${done ? '✅' : '❌'} ታሪክ</summary><div style="padding:4px 0 4px 10px;">${lines}</div></details>`;
+                }).join('');
+                const exp = (Array.isArray(r.expenseItems) ? r.expenseItems : []).filter(x => x && (x.location || x.amount));
+                const expRows = exp.map(x => `<div style="font-size:0.82rem; display:flex; justify-content:space-between; gap:8px; padding:2px 0; border-bottom:1px dashed var(--border-light);"><span>• ${escHtml(x.location || '—')}</span><strong>${escHtml(x.amount != null ? x.amount : '')} ብር</strong></div>`).join('');
+                const expTotal = r.totalExpense != null ? r.totalExpense : r.expense;
+                const expBlock = `<div style="margin-top:8px;"><div style="font-weight:700; font-size:0.83rem;">🧾 የወጪ ዝርዝር${expTotal != null && expTotal !== '' ? ` — ጠቅላላ ${escHtml(expTotal)} ብር` : ''}</div>${expRows || '<div style="font-size:0.8rem; color:var(--text-muted);">የወጪ ዝርዝር አልተመዘገበም</div>'}${r.expenseDetails ? `<div style="font-size:0.8rem; margin-top:3px;">📝 ${escHtml(r.expenseDetails)}</div>` : ''}</div>`;
+                return `${jobBlocks ? `<div style="margin-top:8px;"><div style="font-weight:700; font-size:0.83rem;">📜 የእያንዳንዱ ስራ ታሪክ (ከምደባ ጀምሮ)</div>${jobBlocks}</div>` : ''}${expBlock}`;
+            } catch (e) { console.warn('admReportExtraHtml failed', e); return ''; }
         }
         function admReportBadges(r) {
             return admHasCorrection(r) ? ' <span style="color:#DC2626; font-weight:700; font-size:0.75rem;">✍️ እርማት ጥያቄ</span>' : '';
@@ -6067,7 +6100,7 @@ document.addEventListener('click', function (e) {
                     <div>💰 ገቢ: ${n(r.totalIncome != null ? r.totalIncome : r.income)} ብር | ወጪ: ${n(r.totalExpense)} ብር | ትርፍ: ${n(r.profit)} ብር</div>
                     <div>📊 ድርሻ: ${n(r.techSharePercent)}% (ባለሙያ ${n(r.techShareAmount)} | ድርጅት ${n(r.companyAmount)})</div>
                     <div>🏦 ወደ ድርጅት የገባ: ${n(r.deposited)} ብር</div>
-                    ${r.expenseDetails ? `<div>🧾 ወጪ: ${escHtml(r.expenseDetails)}</div>` : ''}
+                    ${admReportExtraHtml(r)}
                     <div>📝 ${n(r.remarks || r.notes)}</div>
                     ${r.readyTomorrow ? `<div>🚶 ለነገ ስራ ይወጣል: ${r.readyTomorrow === 'yes' ? 'አዎ' : 'አይ'}</div>` : ''}
                     ${(r.photosPending && !phRc(r).length && !phWr(r).length) ? '<div style="color:#b45309;">⏳ ፎቶዎች አሁንም እየተጫኑ ሊሆን ይችላል</div>' : ''}
@@ -6498,7 +6531,7 @@ document.addEventListener('focusout', function (e) {
                 const _opt = document.querySelector('#orderFilter option[value="__overnight"]');
                 if (_opt) _opt.textContent = '⏰ ያደሩ ስራዎች (' + allOrders.filter(isOvernightNow).length + ')';
             } catch (e) {}
-            if (filter === '__overnight') filtered = filtered.filter(isOvernightNow).slice().sort((a, b) => overnightBaseMs(a) - overnightBaseMs(b)); // ከአሮጌው ይጀምራል
+            if (filter === '__overnight') filtered = filtered.filter(isOvernightNow).slice().sort((a, b) => overnightBaseMs(b) - overnightBaseMs(a)); // አዲሱ ከላይ
             else if (filter === '__new') filtered = filtered.filter(o => !o.workTag && (!o.orderType || o.orderType === 'new') && o.status === 'Pending' && !(o.returnReason || o.returnedAt || o.returnedFrom || o.returnedFromId || o.completionOption === 'return-job')); // 🆕 አዲስ (ገና ያልተመደበ)
             else if (filter === '__referral') filtered = filtered.filter(o => (o.workTag || o.orderType) === 'referral');
             else if (filter === '__correction') filtered = filtered.filter(o => (o.workTag || o.orderType) === 'correction');
