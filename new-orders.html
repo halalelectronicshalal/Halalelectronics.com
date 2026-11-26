@@ -104,6 +104,23 @@ window.heEthDay = function (k) {
     }
 })();
 </script>
+<script>
+/* 🆔 እያንዳንዱ የእንቅስቃሴ መዝገብ ግቤት የሰራውን ሰው መለያ (userId) እና ሚና (userRole) አብሮ ይይዛል — ስም ቢመሳሰልም ማን እንደሆነ ይታወቃል */
+(function () {
+    if (window.__heActUid || !window.firebase || !firebase.firestore || !firebase.firestore.CollectionReference) return;
+    window.__heActUid = true;
+    var CR = firebase.firestore.CollectionReference.prototype, add0 = CR.add;
+    CR.add = function (d) {
+        try {
+            if (this.id === 'activity' && d && typeof d === 'object' && !('userId' in d)) {
+                var s = (typeof heGetSession === 'function') ? heGetSession() : null;
+                if (s && s.staff && s.staff.id) d = Object.assign({}, d, { userId: String(s.staff.id), userRole: String(s.staff.role || '') });
+            }
+        } catch (e) {}
+        return add0.call(this, d);
+    };
+})();
+</script>
 <style>.stat-click{cursor:pointer;transition:transform .12s}.stat-click:active{transform:scale(.97)}.op-note{background:#EEF2FF;border-radius:8px;padding:6px 10px;margin-top:6px;font-size:.8rem;color:#1e293b}.op-note div{margin-top:3px;white-space:pre-wrap}.op-note small{color:#64748B}.sd-item{padding:10px 0;border-bottom:1px solid #E2E8F0;font-size:.88rem}.sd-item:last-child{border-bottom:0}</style>
 <script>window.APP_ROLE = "newOrders"; // 🔐 እያንዳንዱ ገጽ የራሱ ለብቻ session አለው (እንደ ኦፕሬተር)</script>
 <script src="he-common.js"></script>
