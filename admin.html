@@ -41,7 +41,6 @@
     </script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js">
     </script>
-<script src="he-history.js"></script>
 <script>
 /* 📅 ቀን በኢትዮጵያ ካላንደር ብቻ — «YYYY-MM-DD» ቁልፍን ወደ ኢትዮጵያ ቀን ይቀይራል (ማሳያ ላይ ብቻ፤ የተቀመጠው ዳታ አይነካም) */
 window.heEthDay = function (k) {
@@ -70,7 +69,9 @@ window.heEthDay = function (k) {
         return 'አስተዳዳሪ';
     }
     function mk(d) {
-        var st = d.status; if (!st) return null;
+        var st = d.status;
+        if (!st && typeof d.scheduledTechnician === 'string' && d.scheduledTechnician) return { t: Date.now(), by: actor(), text: '📅 ለ ' + d.scheduledTechnician + ' ተይዟል (የቀጠሮ ቀን ሲደርስ ይመደባል)', st: 'scheduled' };
+        if (!st) return null;
         var txt = '';
         if (st === 'Assigned') txt = '📋 ለ ' + (d.technician || '—') + ' ተመድቧል';
         else if (st === 'Pending') txt = d.returnReason ? ('↩️ ከ ' + (d.returnedFrom || 'ቴክኒሻን') + ' ተመለሰ — ምክንያት: ' + d.returnReason) : '⏳ ወደ ያልተመደበ ተመልሷል';
@@ -2367,7 +2368,7 @@ document.addEventListener('click', function (e) {
                         <h3><i class="fas fa-search-dollar"></i> 🔎 ሪፖርት ማረጋገጫ</h3>
                         <select id="rcMonthSel" onchange="rcRender()" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border,#cbd5e1); background:var(--card,#fff); color:inherit;"></select>
                     </div>
-                    <p class="text-muted" style="font-size:0.85rem; margin:0 0 10px;">የባንክ ደረሰኝ ፎቶ በ AI ተነብቦ ከ«ወደ ድርጅት የገባ» ጋር ሲነጻጸር ችግር ያለባቸው የዚህ ወር ሪፖርቶች። <b>✏️ አስተካክል</b> = ቁጥሩን ያርሙ፤ <b>👌 ባለበት ይቀጥል</b> = ትክክል ነው ብለው ከዝርዝሩ ያውጡ (ሁኔታው ከተቀየረ እንደገና ይታያል)። AI ሊሳሳት ይችላል — ፎቶውን ራስዎ ያረጋግጡ።</p>
+                    <p class="text-muted" style="font-size:0.85rem; margin:0 0 10px;">የባንክ ደረሰኝ ፎቶ በ AI ተነብቦ ከ«ወደ ድርጅት የገባ» ጋር ሲነጻጸር ችግር ያለባቸው የትላንት ሪፖርቶች (ውጤት ያላቸው ብቻ)። <b>✏️ አስተካክል</b> = ቁጥሩን ያርሙ፤ <b>👌 ባለበት ይቀጥል</b> = ትክክል ነው ብለው ከዝርዝሩ ያውጡ (ሁኔታው ከተቀየረ እንደገና ይታያል)። AI ሊሳሳት ይችላል — ፎቶውን ራስዎ ያረጋግጡ።</p>
                     <div id="rcBody"><div class="text-center text-muted">—</div></div>
                 </div>
             </div>
@@ -5342,7 +5343,7 @@ document.addEventListener('click', function (e) {
                 if (!snap.exists) { showToast('ℹ️ ይህ ስራ ቀድሞ ተሰርዟል', 'info'); setTimeout(() => { try { openStatDetail(kind); } catch (e) {} }, 300); return; }
                 await db.collection('deletedOrders').doc(orderId).set(Object.assign({}, snap.data(), {
                     binDeletedAt: new Date(), binDeletedBy: heActorName(), binDeletedFrom: kind === 'overdue' ? 'overnight' : 'returned',
-                    history: (Array.isArray(snap.data().history) ? snap.data().history : []).concat([{ at: Date.now(), by: heActorName(), ev: 'bin', text: '🗑️ ወደ ሪሳይክል ቢን ተሰርዟል' }])
+                    history: (Array.isArray(snap.data().history) ? snap.data().history : []).concat([{ t: Date.now(), by: heActorName(), text: '🗑️ ወደ ሪሳይክል ቢን ተሰርዟል', st: 'bin' }])
                 }));
                 await ref.delete();
                 try { await db.collection('activity').add({ user: heActorName(), action: 'bin_order', details: `ትዕዛዝ #${orderId.substring(0, 8)} ወደ ሪሳይክል ቢን ተሰርዟል (${kind === 'overdue' ? 'ያደረ' : 'የተመለሰ'})`, timestamp: new Date() }); } catch (e) {}
@@ -6752,7 +6753,7 @@ document.addEventListener('focusout', function (e) {
             // 📅 ቀጠሮ ያልደረሰ ስራ → ለሰራተኛው አይላክም፤ ይያዛል፣ ቀኑ ሲደርስ Worker በራሱ ይልካል
             let _ord0 = (allOrders || []).find(x => x.id === orderId) || null;
             if (!_ord0) { try { const _s0 = await db.collection('orders').doc(orderId).get(); if (_s0.exists) { _ord0 = _s0.data(); _ord0.id = orderId; } } catch (e) { /* ችላ */ } } // ገና ወደ ዝርዝሩ ያልገባ አዲስ ትዕዛዝ እንኳ ቀጠሮው ይጠበቃል
-            { const _lk0 = heAssignLockedTo(_ord0); if (_lk0) { showToast(heAssignLockedMsg(_lk0), 'error'); try { renderOrders(); } catch (e) {} return; } }
+            { const _lk0 = heAssignLockedTo(_ord0); if (_lk0 && _lk0 !== techName) { showToast(heAssignLockedMsg(_lk0), 'error'); try { renderOrders(); } catch (e) {} return; } }
             const _hold = _ord0 && _ord0.status === 'Pending' ? schedHoldInfo(_ord0) : null;
             if (_hold) {
                 const _t0 = allTechnicians.find(t => t.name === techName);
@@ -6793,12 +6794,14 @@ document.addEventListener('focusout', function (e) {
                     assignedBy: 'admin'
                 };
                 if (_ord0 && _ord0.scheduledReleaseDate) { _upd.scheduledTechnician = null; _upd.scheduledTechnicianId = null; _upd.scheduledReleaseDate = null; _upd.scheduledReleaseTime = null; } // ተይዞ የነበረ → አሁን ተመደበ
+                // 📜 transaction.update ከነባሩ የታሪክ መመዝገቢያ (DocumentReference.update) ውጭ ስለሆነ ታሪኩን እዚህ በግልጽ እንጨምራለን
+                _upd.history = firebase.firestore.FieldValue.arrayUnion({ t: Date.now(), by: (typeof heActorName === 'function' ? heActorName() : 'አስተዳዳሪ'), text: '📋 ለ ' + techName + ' ተመድቧል', st: 'Assigned' });
                 // 🔒 በሰርቨር ላይ በ transaction ይፈትሻል — ሁለት ሰዎች በአንድ ጊዜ ቢመድቡ አንደኛው ብቻ ይሳካል
                 const _aref = db.collection('orders').doc(orderId);
                 await db.runTransaction(async (tx) => {
                     const _s = await tx.get(_aref);
                     const _lk = _s.exists ? heAssignLockedTo(_s.data()) : '';
-                    if (_lk) { const _e = new Error('ASSIGN_LOCKED'); _e.lockedTo = _lk; throw _e; }
+                    if (_lk && _lk !== techName) { const _e = new Error('ASSIGN_LOCKED'); _e.lockedTo = _lk; throw _e; }
                     tx.update(_aref, _upd);
                 });
 
@@ -7102,11 +7105,6 @@ ${locationLine}
                 <div class="timeline" style="padding-left:20px; border-left:3px solid var(--secondary);">
                     ${timelineHTML}
                 </div>
-
-                <hr style="border:none; border-top:2px solid var(--border); margin:16px 0;" />
-
-                <h4>🕘 የስራው ሙሉ ታሪክ (ሂስትሪ)</h4>
-                <div>${(typeof heOrderHistoryHtml === 'function') ? heOrderHistoryHtml(order, formatEthDateTime) : ''}</div>
             `;
 
             const footerHTML = `
@@ -8721,7 +8719,10 @@ ${locationLine}
         // ============================================================
         // 🔎 ሪፖርት ማረጋገጫ — የባንክ ደረሰኝ ማረጋገጫ ያልተሳካላቸው ሪፖርቶች (የሚታየው የተመረጠው የኢትዮጵያ ወር ብቻ፤ ወሩ ሲቀየር ራሱ አዲሱን ወር ያሳያል)
         // ============================================================
-        const RC_BAD = ['none', 'dup', 'mismatch'];
+        // 🔎 የሚታየው የትላንት (የኢትዮጵያ ሰዓት) ሪፖርት ብቻ፣ እና ውጤት ያለው (ድርብ ደረሰኝ / አይመሳሰልም) ብቻ።
+        //    «ፎቶ አልተነበበም» (❓⏳) እና «ፎቶ አልተላከም / ደረሰኝ የለም» (none) አይታዩም — የወሩ ሙሉ ዝርዝር በ Google Sheet ላይ ይቀጥላል።
+        const RC_BAD = ['dup', 'mismatch'];
+        function rcYesterdayKey() { return new Date(Date.now() + 3 * 3600 * 1000 - 24 * 3600 * 1000).toISOString().slice(0, 10); }
         function rcMonthKey(dateKey) {
             try {
                 const e = gregorianToEthiopian(new Date(String(dateKey).slice(0, 10) + 'T12:00:00'));
@@ -8735,8 +8736,8 @@ ${locationLine}
         function rcCurrentMonthKey() { return rcMonthKey(new Date().toISOString().slice(0, 10)); }
         function rcUpdateBadge() {
             try {
-                const cur = rcCurrentMonthKey();
-                const n = rcAllFlagged().filter(r => rcMonthKey(r.dateKey) === cur).length;
+                const yk = rcYesterdayKey();
+                const n = rcAllFlagged().filter(r => String(r.dateKey).slice(0, 10) === yk).length;
                 const b = document.getElementById('rcBadge');
                 if (b) { b.textContent = n; b.classList.toggle('show', n > 0); }
                 const tab = document.getElementById('tab-receiptcheck');
@@ -8747,12 +8748,10 @@ ${locationLine}
             const body = document.getElementById('rcBody'), sel = document.getElementById('rcMonthSel');
             if (!body || !sel) return;
             const flagged = rcAllFlagged();
-            const cur = rcCurrentMonthKey();
-            const keys = [...new Set([cur, ...flagged.map(r => rcMonthKey(r.dateKey))])].filter(Boolean).sort().reverse();
-            const want = sel.value && keys.includes(sel.value) ? sel.value : cur;   // ነባሪ = የአሁኑ ወር
-            sel.innerHTML = keys.map(k => `<option value="${k}" ${k === want ? 'selected' : ''}>${rcMonthLabel(k)}${k === cur ? ' (የአሁኑ)' : ''}</option>`).join('');
-            const list = flagged.filter(r => rcMonthKey(r.dateKey) === want).sort((a, b) => String(b.dateKey).localeCompare(String(a.dateKey)));
-            if (!list.length) { body.innerHTML = '<div class="text-center text-muted" style="padding:18px;">✅ በዚህ ወር ማረጋገጫ የሚፈልግ ሪፖርት የለም</div>'; return; }
+            const yk = rcYesterdayKey();
+            sel.style.display = 'none';   // የወር ምርጫ አያስፈልግም — የትላንት ብቻ ይታያል
+            const list = flagged.filter(r => String(r.dateKey).slice(0, 10) === yk).sort((a, b) => String(a.technicianName || '').localeCompare(String(b.technicianName || '')));
+            if (!list.length) { body.innerHTML = '<div class="text-center text-muted" style="padding:18px;">✅ የትላንት (' + escHtml(formatEthDate(yk + 'T12:00:00')) + ') ማረጋገጫ የሚፈልግ ሪፖርት የለም</div>'; return; }
             body.innerHTML = '<div class="table-wrap"><table><thead><tr><th>ቀን</th><th>ቴክኒሻን</th><th>ችግሩ</th><th>ገቢ / የገባ</th><th>ደረሰኝ</th><th></th></tr></thead><tbody>' + list.map(r => {
                 const links = (Array.isArray(r.receiptURLs) ? r.receiptURLs : []).filter(u => /^https:\/\//i.test(u)).map((u, i) => `<a href="${escHtml(u)}" target="_blank" rel="noopener">🧾${i + 1}</a>`).join(' ');
                 return `<tr><td>${escHtml(formatEthDate(String(r.dateKey).slice(0, 10) + 'T12:00:00'))}</td><td>${escHtml(r.technicianName || '')}</td><td>${escHtml(r.receiptNote)}</td><td>${escHtml(String(r.totalIncome ?? r.income ?? 0))} / ${escHtml(String(r.deposited ?? 0))}</td><td>${links || '—'}</td><td style="white-space:nowrap;"><button class="btn btn-sm btn-secondary" onclick="editDailyReport('${escHtml(r.id)}')">✏️ አስተካክል</button> <button class="btn btn-sm btn-success" onclick="rcKeep('${escHtml(r.id)}')">👌 ባለበት ይቀጥል</button></td></tr>`;
