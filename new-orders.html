@@ -122,7 +122,7 @@ window.heEthDay = function (k) {
 <main class="he-wrap">
     <div class="stats-grid">
         <div class="stat-card stat-click" onclick="showStatDetail('pending')" role="button" tabindex="0"><div class="icon"><i class="fas fa-clock" style="color:var(--warning);"></i></div><div class="number" id="statPending" style="color:var(--warning);">0</div><div class="label">ገና ያልተመደቡ</div></div>
-        <div class="stat-card stat-click" onclick="showStatDetail('assigned')" role="button" tabindex="0"><div class="icon"><i class="fas fa-user-check" style="color:var(--primary);"></i></div><div class="number" id="statAssigned">0</div><div class="label">የተመደቡ (ክፍት ስራ)</div></div>
+        <div class="stat-card stat-click" style="display:none" onclick="showStatDetail('assigned')" role="button" tabindex="0"><div class="icon"><i class="fas fa-user-check" style="color:var(--primary);"></i></div><div class="number" id="statAssigned">0</div><div class="label">የተመደቡ (ክፍት ስራ)</div></div>
         <div class="stat-card stat-click" onclick="showStatDetail('free')" role="button" tabindex="0"><div class="icon"><i class="fas fa-circle" style="color:var(--success);"></i></div><div class="number" id="statFree" style="color:var(--success);">0</div><div class="label">ነጻ ቴክኒሻኖች</div></div>
         <div class="stat-card stat-click" onclick="showStatDetail('scheduled')" role="button" tabindex="0"><div class="icon"><i class="fas fa-calendar-alt" style="color:#B45309;"></i></div><div class="number" id="statScheduled" style="color:#B45309;">0</div><div class="label">📅 እስከሚደርስ ቀጠሮ</div></div>
         <div class="stat-card stat-click" onclick="showStatDetail('returned')" role="button" tabindex="0"><div class="icon"><i class="fas fa-undo-alt" style="color:#DC2626;"></i></div><div class="number" id="statReturned" style="color:#DC2626;">0</div><div class="label">↩️ የተመለሱ ስራዎች</div></div>
@@ -756,7 +756,7 @@ function showStatDetail(kind, refresh) {
         }
     } else if (kind === 'overnight') {
         title = '⏰ ያደሩ ስራዎች';
-        const l = visibleOrders().filter(orderIsOvernightOpen).sort((a, b) => overnightBaseMs(a) - overnightBaseMs(b)); // ከአሮጌው ይጀምራል
+        const l = visibleOrders().filter(orderIsOvernightOpen).sort((a, b) => overnightBaseMs(b) - overnightBaseMs(a)); // አዲሱ ከላይ
         const keepSel = {};
         document.querySelectorAll('#modalBody .dashAssignSelect').forEach(x => { if (x.value) keepSel[x.dataset.id] = x.value; });
         const opts = techOptionsHtml();
