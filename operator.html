@@ -89,6 +89,23 @@ window.heEthDay = function (k) {
     }
 })();
 </script>
+<script>
+/* 🆔 እያንዳንዱ የእንቅስቃሴ መዝገብ ግቤት የሰራውን ሰው መለያ (userId) እና ሚና (userRole) አብሮ ይይዛል — ስም ቢመሳሰልም ማን እንደሆነ ይታወቃል */
+(function () {
+    if (window.__heActUid || !window.firebase || !firebase.firestore || !firebase.firestore.CollectionReference) return;
+    window.__heActUid = true;
+    var CR = firebase.firestore.CollectionReference.prototype, add0 = CR.add;
+    CR.add = function (d) {
+        try {
+            if (this.id === 'activity' && d && typeof d === 'object' && !('userId' in d)) {
+                var s = (typeof heGetSession === 'function') ? heGetSession() : null;
+                if (s && s.staff && s.staff.id) d = Object.assign({}, d, { userId: String(s.staff.id), userRole: String(s.staff.role || '') });
+            }
+        } catch (e) {}
+        return add0.call(this, d);
+    };
+})();
+</script>
 <style>
 :root{--primary:#0F4C81;--secondary:#2DAAE1;--bg:#F1F5F9;--card:#fff;--text:#1F2937;--muted:#64748B;--border:#E2E8F0;--ok:#16A34A;--warn:#F59E0B;--bad:#DC2626;--phone:#7c3aed;--shop:#0891b2}
 *{box-sizing:border-box}
