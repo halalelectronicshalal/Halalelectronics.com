@@ -3330,6 +3330,14 @@ document.addEventListener('click', function (e) {
             if (includeWeekday) result = `${ETH_WEEKDAYS[d.getDay()]}፣ ` + result;
             return result;
         }
+        // 🇪🇹 «2026-11-23» (የቀን ቁልፍ) → «14 ኅዳር 2019»፤ ሌላ ጽሁፍ ከሆነ እንዳለ ይመልሳል
+        function techEthKey(k, withWeekday) {
+            try {
+                const t = String(k == null ? '' : k).trim();
+                if (/^\d{4}-\d{2}-\d{2}/.test(t)) return formatEthDate(new Date(t.slice(0, 10) + 'T12:00:00'), !!withWeekday);
+                return t;
+            } catch (e) { return String(k == null ? '' : k); }
+        }
         function formatEthDateTime(dateInput) {
             if (!dateInput) return '—';
             const d = (dateInput && dateInput.toDate) ? dateInput.toDate() : (dateInput instanceof Date ? dateInput : new Date(dateInput));
@@ -10213,6 +10221,19 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const baseKey = techJobBaseKey(o);
             return !!baseKey && baseKey < closeKey;              // ዛሬ ተዘግቷል ግን ከትላንት/ከዚያ በፊት የጀመረ
         }
+        // 🆕 ስራው በተዘጋበት ቀን የተላከ እና በአድሚን የጸደቀ ሪፖርት (ከመዘጋቱ በኋላ የተላከ) ካለ ስራው እንደተሸፈነ ይቆጠራል
+        function techDayApprovedCovers(o) {
+            try {
+                const d = (o.completedAt && o.completedAt.toDate ? o.completedAt.toDate() : null) || (o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : null);
+                if (!d) return false;
+                const ck = getBizDateKey(d), cm = d.getTime();
+                return (techSentReports || []).some(r => {
+                    if (!r || r.approved !== true || String(r.dateKey || '').slice(0, 10) !== ck) return false;
+                    const sm = r.submittedAt && r.submittedAt.toDate ? r.submittedAt.toDate().getTime() : 0;
+                    return !sm || sm >= cm - 60000;
+                });
+            } catch (e) { return false; }
+        }
         function techApprovedReportedKeys() {
             const set = new Set();
             (techSentReports || []).forEach(r => { if (r && r.approved === true) (Array.isArray(r.jobStatuses) ? r.jobStatuses : []).forEach(j => {
@@ -10251,6 +10272,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 if (!techIsOvernightClosed(o)) return;
                 const key = techJobKey(o);
                 if (approved.has(key)) return;
+                if (techDayApprovedCovers(o)) return;   // 🆕 የዚያ ቀን ሪፖርት ጸድቋል (የስራ ዝርዝር ባይኖረውም) — «አልተላከም» አይባልም
                 (reported.has(key) ? out.unapproved : out.unreported).push(o);
             });
             return out;
@@ -10258,7 +10280,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         // 📅 ሪፖርት ያልተደረገባቸውን ቀናት በኢትዮጵያ አቆጣጠር ዘርዝሮ ያሳያል
         function techMissingDaysText(b) {
             const days = (b && b.missingDays) || [];
-            const lines = days.map(k => { let t = k; try { t = formatEthDate(new Date(k + 'T12:00:00'), true); } catch (e) {} return '• ' + t + ' (' + k + ')'; });
+            const lines = days.map(k => { let t = k; try { t = formatEthDate(new Date(k + 'T12:00:00'), true); } catch (e) {} return '• ' + t; });
             const jobDays = {};
             ((b && b.unreported) || []).forEach(o => { const d = (o.completedAt && o.completedAt.toDate ? o.completedAt.toDate() : (o.createdAt && o.createdAt.toDate ? o.createdAt.toDate() : null)); if (d) jobDays[getBizDateKey(d)] = (jobDays[getBizDateKey(d)] || 0) + 1; });
             const jl = Object.keys(jobDays).sort().filter(k => !days.includes(k)).map(k => { let t = k; try { t = formatEthDate(new Date(k + 'T12:00:00'), true); } catch (e) {} return '• ' + t + ' — ' + jobDays[k] + ' ያደረ ስራ ሪፖርት አልተደረገም'; });
@@ -12916,7 +12938,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 `;
                 html += `
                     <div class="job-status-row">
-                        <span class="job-info">${index+1}. ${order.fullName || '—'} - ${order.appliance || '—'}${techIsOvernightOrder(order) ? ` <span style="display:inline-block; background:#FEE2E2; color:#B91C1C; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">⏰ ያደረ — ከ${techEsc(techOrderDateKey(order))}</span>` : ''}${techIsHeld(order) ? ` <span style="display:inline-block; background:#FEF3C7; color:#92400E; border:1px solid #F59E0B; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">📦 ያልተጠናቀቀ — ከእኔ ጋር ተይዟል</span>` : ''}${order.completedAfterHold ? ` <span style="display:inline-block; background:#D1FAE5; color:#047857; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">✅ ከመጠባበቂያ የተጠናቀቀው: ${techEsc(formatEthDate(order.completedAt))}</span>` : ''}<br><small style="color:var(--text-muted);">📅 የተመደበበት ቀን: ${techEsc(formatEthDate(techAssignedTs(order)))}</small></span>
+                        <span class="job-info">${index+1}. ${order.fullName || '—'} - ${order.appliance || '—'}${techIsOvernightOrder(order) ? ` <span style="display:inline-block; background:#FEE2E2; color:#B91C1C; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">⏰ ያደረ — ከ${techEsc(techEthKey(techOrderDateKey(order)))}</span>` : ''}${techIsHeld(order) ? ` <span style="display:inline-block; background:#FEF3C7; color:#92400E; border:1px solid #F59E0B; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">📦 ያልተጠናቀቀ — ከእኔ ጋር ተይዟል</span>` : ''}${order.completedAfterHold ? ` <span style="display:inline-block; background:#D1FAE5; color:#047857; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">✅ ከመጠባበቂያ የተጠናቀቀው: ${techEsc(formatEthDate(order.completedAt))}</span>` : ''}<br><small style="color:var(--text-muted);">📅 የተመደበበት ቀን: ${techEsc(formatEthDate(techAssignedTs(order)))}</small></span>
                         <button type="button" class="btn btn-outline btn-sm" title="የስራ ዝርዝር ይመልከቱ" aria-label="የስራ ዝርዝር" onclick="techReportJobView('${order.id}')" style="padding:4px 9px;"><i class="fas fa-eye"></i></button>
                         <select class="job-status-select" data-order-id="${order.id}">
                             ${statusOptions}
@@ -13638,7 +13660,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     const canConvert = !done;
                     let h = `<div style="padding:8px 0; border-top:1px solid var(--border-light); font-size:0.82rem;">
                         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-                            <span>${i + 1}. ${techEsc(j.customer || '—')} - ${techEsc(j.appliance || '—')}${hePctTxt(j) ? ` <small style="color:var(--text-muted);">${hePctTxt(j)}</small>` : ''}${j.orderId ? ` <button type="button" class="btn btn-outline btn-sm" title="የስራ ዝርዝር ይመልከቱ" aria-label="የስራ ዝርዝር" onclick="techReportJobView('${j.orderId}')" style="padding:2px 8px; margin-left:4px;"><i class="fas fa-eye"></i></button>` : ''}${j.overnight ? ` <span style="background:#FEE2E2; color:#B91C1C; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">⏰ ያደረ — ከ${techEsc(j.jobDate || '')}</span>` : ''}${(!done && j.reason) ? ' <span style="color:var(--text-muted);">(' + techEsc(j.reason) + ')</span>' : ''}${j.onHold ? ' <span style="background:#FEF3C7; color:#92400E; border:1px solid #F59E0B; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">📦 ያልተጠናቀቀ — ከእኔ ጋር</span>' : ''}${(j.completedAfterHold && j.completedDateEth) ? ' <span style="color:#047857; font-size:0.72rem; font-weight:700;">✅ ከመጠባበቂያ የተጠናቀቀው: ' + techEsc(j.completedDateEth) + '</span>' : ''}${j.assignedDateEth ? '<br><small style="color:var(--text-muted);">📅 የተመደበበት ቀን: ' + techEsc(j.assignedDateEth) + '</small>' : ''}</span>
+                            <span>${i + 1}. ${techEsc(j.customer || '—')} - ${techEsc(j.appliance || '—')}${hePctTxt(j) ? ` <small style="color:var(--text-muted);">${hePctTxt(j)}</small>` : ''}${j.orderId ? ` <button type="button" class="btn btn-outline btn-sm" title="የስራ ዝርዝር ይመልከቱ" aria-label="የስራ ዝርዝር" onclick="techReportJobView('${j.orderId}')" style="padding:2px 8px; margin-left:4px;"><i class="fas fa-eye"></i></button>` : ''}${j.overnight ? ` <span style="background:#FEE2E2; color:#B91C1C; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">⏰ ያደረ — ከ${techEsc(techEthKey(j.jobDate || ''))}</span>` : ''}${(!done && j.reason) ? ' <span style="color:var(--text-muted);">(' + techEsc(j.reason) + ')</span>' : ''}${j.onHold ? ' <span style="background:#FEF3C7; color:#92400E; border:1px solid #F59E0B; border-radius:6px; padding:1px 6px; font-size:0.72rem; font-weight:700;">📦 ያልተጠናቀቀ — ከእኔ ጋር</span>' : ''}${(j.completedAfterHold && j.completedDateEth) ? ' <span style="color:#047857; font-size:0.72rem; font-weight:700;">✅ ከመጠባበቂያ የተጠናቀቀው: ' + techEsc(j.completedDateEth) + '</span>' : ''}${j.assignedDateEth ? '<br><small style="color:var(--text-muted);">📅 የተመደበበት ቀን: ' + techEsc(j.assignedDateEth) + '</small>' : ''}</span>
                             ${done ? `<span class="status-badge status-completed">✅ ተሰራ${doneLater ? ' — በሚቀጥለው ሪፖርት ይገባል' : ''}</span>`
                                    : `<select onchange="techSentStatusChange(this, '${r.id}', ${i})" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); font-size:0.8rem;"><option value="">❌ አልተጠናቀቀም</option><option value="done">✅ ተሰራ (ሀ)</option></select>`}
                         </div>`;
@@ -13648,7 +13670,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                 const inc = r.totalIncome != null ? r.totalIncome : (r.income || 0);
                 return `<div style="border:1px solid var(--border); border-radius:10px; padding:10px; margin-bottom:10px;">
                     <div style="display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; align-items:center;">
-                        <strong>📅 ${techEsc(r.date || r.dateKey || '')}</strong>
+                        <strong>📅 ${techEsc(techEthKey(r.dateKey || r.date || ''))}</strong>
                         ${r.approved ? '<span class="status-badge status-completed">✅ ጸድቋል</span>' : '<span class="status-badge status-pending">⏳ አልጸደቀም</span>'}
                     </div>
                     <div style="font-size:0.78rem; color:var(--text-muted); margin:4px 0;">ተጠናቀቁ ${techEsc(r.completedCount || 0)} · አልተጠናቀቁ ${techEsc(r.notCompletedCount || 0)} · ገቢ ${techEsc(inc)} ብር · ወጪ ${techEsc(r.totalExpense || 0)} ብር${r.reopenedForApproval ? ' · <span style="color:#047857;">🔄 እንደገና ማጽደቅ ይጠብቃል</span>' : ''}</div>
@@ -13665,7 +13687,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             if (!r) { showToast('ሪፖርቱ አልተገኘም', 'error'); return; }
             if (r.approved) { showToast('⚠️ ሪፖርቱ ጸድቋል — ከዚህ በኋላ እርማት መጻፍ አይቻልም', 'error'); return; }
             const html = `
-                <div style="font-size:0.85rem; margin-bottom:8px;">📅 ሪፖርት: ${techEsc(r.date || r.dateKey || '')}</div>
+                <div style="font-size:0.85rem; margin-bottom:8px;">📅 ሪፖርት: ${techEsc(techEthKey(r.dateKey || r.date || ''))}</div>
                 <div class="form-group">
                     <label style="color:#DC2626; font-weight:700;">✍️ የተሳሳተው ነገር እና የእርማት ጥያቄ</label>
                     <textarea id="techNoteText" rows="4" style="color:#DC2626; font-weight:600; border:1.5px solid #DC2626;" placeholder="በሪፖርቱ ውስጥ ምን እንደተሳሳተ እና ምን እንዲስተካከል እንደሚፈልጉ ይጻፉ...">${techEsc((r.correctionRequest && r.correctionRequest.text) || '')}</textarea>
@@ -13718,7 +13740,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const j = r && r.jobStatuses && r.jobStatuses[idx];
             if (!r || !j) { showToast('ሪፖርቱ አልተገኘም', 'error'); return; }
             const html = `
-                <div style="font-size:0.85rem; margin-bottom:8px;">📋 ${techEsc(j.customer || '—')} - ${techEsc(j.appliance || '—')}<br/><span class="text-muted">ሪፖርት: ${techEsc(r.date || r.dateKey || '')}</span></div>
+                <div style="font-size:0.85rem; margin-bottom:8px;">📋 ${techEsc(j.customer || '—')} - ${techEsc(j.appliance || '—')}<br/><span class="text-muted">ሪፖርት: ${techEsc(techEthKey(r.dateKey || r.date || ''))}</span></div>
                 <div class="form-row">
                     <div class="form-group"><label>💰 ዋጋ (ከደንበኛው የተቀበሉት) *</label><input type="number" id="cvPrice" min="0" step="0.01" inputmode="decimal" oninput="techConvertCalc()" /></div>
                     <div class="form-group"><label>🧾 ወጪ (ለዚህ ስራ የወጣ)</label><input type="number" id="cvExpense" min="0" step="0.01" inputmode="decimal" oninput="techConvertCalc()" /></div>
