@@ -39,7 +39,6 @@
     </script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js">
     </script>
-<script src="he-history.js"></script>
 <script>
 /* 📅 ቀን በኢትዮጵያ ካላንደር ብቻ — «YYYY-MM-DD» ቁልፍን ወደ ኢትዮጵያ ቀን ይቀይራል (ማሳያ ላይ ብቻ፤ የተቀመጠው ዳታ አይነካም) */
 window.heEthDay = function (k) {
@@ -68,7 +67,9 @@ window.heEthDay = function (k) {
         return 'አስተዳዳሪ';
     }
     function mk(d) {
-        var st = d.status; if (!st) return null;
+        var st = d.status;
+        if (!st && typeof d.scheduledTechnician === 'string' && d.scheduledTechnician) return { t: Date.now(), by: actor(), text: '📅 ለ ' + d.scheduledTechnician + ' ተይዟል (የቀጠሮ ቀን ሲደርስ ይመደባል)', st: 'scheduled' };
+        if (!st) return null;
         var txt = '';
         if (st === 'Assigned') txt = '📋 ለ ' + (d.technician || '—') + ' ተመድቧል';
         else if (st === 'Pending') txt = d.returnReason ? ('↩️ ከ ' + (d.returnedFrom || 'ቴክኒሻን') + ' ተመለሰ — ምክንያት: ' + d.returnReason) : '⏳ ወደ ያልተመደበ ተመልሷል';
@@ -5527,12 +5528,24 @@ document.addEventListener('click', function (e) {
         // ============================================================
         // ASSIGN ORDER - FIXED: trim and validate
         // ============================================================
-        async function assignOrder(orderId) {
-            // ✅ NEW: ከ Dashboard ላይ ካለው quick-assign select ወይም ከ Orders ትር ላይ ካለው select ይነበብ
-            const dashSelect = document.querySelector(`.dashAssignSelect[data-id="${orderId}"]`);
-            const ordersSelect = document.querySelector(`.assignSelect[data-id="${orderId}"]`);
+
+        // 🔒 የተመደበ ስራ እስኪጠናቀቅ (ወይም ቴክኒሻኑ እስኪመልሰው) ለሌላ ሰው መመደብ አይቻልም
+        function heAssignLockedTo(o) {
+            try {
+                if (!o || !o.technician) return '';
+                if (o.status === 'Assigned') return String(o.technician);
+                if (o.onHold === true && ['PriceNotAgreed', 'Other', 'PhoneNoAnswer'].includes(o.status)) return String(o.technician);
+            } catch (e) {}
+            return '';
+        }
+        function heAssignLockedMsg(name) { return '🔒 ይህ ስራ ቀድሞ ለ ' + name + ' ተመድቧል — እስኪጠናቀቅ ወይም ቴክኒሻኑ እስኪመልሰው ድረስ ለሌላ መመደብ አይቻልም'; }
+
+        async function assignOrder(orderId, forcedTech) {
+            // ✅ NEW: ከ Dashboard ላይ ካለው quick-assign select ወይም ከ Orders ትር ላይ ካለው select ይነበብ (forcedTech ከተሰጠ በ DOM ላይ አይመካም)
+            const dashSelect = forcedTech ? null : document.querySelector(`.dashAssignSelect[data-id="${orderId}"]`);
+            const ordersSelect = forcedTech ? null : document.querySelector(`.assignSelect[data-id="${orderId}"]`);
             const select = (dashSelect && dashSelect.value) ? dashSelect : ordersSelect;
-            let techName = select ? select.value.trim() : '';
+            let techName = forcedTech ? String(forcedTech).trim() : (select ? select.value.trim() : '');
 
             if (!techName) {
                 showToast('እባክዎ ቴክኒሻን ይምረጡ / Please select a technician', 'error');
@@ -5558,11 +5571,20 @@ document.addEventListener('click', function (e) {
             }
 
             try {
-                await db.collection('orders').doc(orderId).update({
+                const _upd = {
                     status: 'Assigned',
                     technician: techName,  // store exact name
                     assignedAt: new Date(),
-                    assignedBy: 'admin'
+                    assignedBy: 'admin',
+                    history: firebase.firestore.FieldValue.arrayUnion({ t: Date.now(), by: (typeof heActorName === 'function' ? heActorName() : 'አስተዳዳሪ'), text: '📋 ለ ' + techName + ' ተመድቧል', st: 'Assigned' })
+                };
+                // 🔒 በሰርቨር ላይ በ transaction ይፈትሻል (ለሌላ ሰው የተመደበ ስራ አይመደብም፤ ለተመሳሳይ ቴክኒሻን ዳግም መላክ ይፈቀዳል)
+                const _aref = db.collection('orders').doc(orderId);
+                await db.runTransaction(async (tx) => {
+                    const _s = await tx.get(_aref);
+                    const _lk = _s.exists ? heAssignLockedTo(_s.data()) : '';
+                    if (_lk && _lk !== techName) { const _e = new Error('ASSIGN_LOCKED'); _e.lockedTo = _lk; throw _e; }
+                    tx.update(_aref, _upd);
                 });
 
                 await db.collection('activity').add({
@@ -5633,6 +5655,7 @@ ${locationLine}
                 showToast(`✅ ስራው ለ ${techName} ተመድቧል / Assigned to ${techName}`, 'success');
                 renderOrders();
             } catch (error) {
+                if (error && error.message === 'ASSIGN_LOCKED') { showToast(heAssignLockedMsg(error.lockedTo), 'error'); return; }
                 showToast('❌ ' + error.message, 'error');
                 console.error('Assignment error:', error);
             }
@@ -7761,14 +7784,8 @@ ${locationLine}
                 // ወዲያውኑ ቴክኒሻን ከተመረጠ፣ ነባሩን assignOrder() pipeline ተጠቅሞ ይመድብ
                 // (Telegram + push notification ሁሉ በራሱ ይላካል)
                 if (technician) {
-                    const fakeSelect = document.createElement('select');
-                    fakeSelect.className = 'assignSelect';
-                    fakeSelect.dataset.id = docRef.id;
-                    fakeSelect.innerHTML = `<option value="${technician}" selected>${technician}</option>`;
-                    fakeSelect.value = technician;
-                    document.body.appendChild(fakeSelect);
-                    await assignOrder(docRef.id);
-                    fakeSelect.remove();
+                    try { await assignOrder(docRef.id, technician); }
+                    catch (asgErr) { console.error('assign after add failed', asgErr); showToast('⚠️ ስራው ተመዝግቧል ግን መመደብ አልተቻለም: ' + (asgErr && asgErr.message ? asgErr.message : asgErr), 'error'); }
                 }
             } catch (error) {
                 showToast('❌ ' + error.message, 'error');
