@@ -63,6 +63,7 @@ window.heEthDay = function (k) {
             if (PAGE.indexOf('operator') === 0) { return (typeof me !== 'undefined' && me && me.name) ? me.name : 'ኦፕሬተር'; }
             if (PAGE.indexOf('new-orders') === 0) { var s = (typeof heGetSession === 'function') ? heGetSession() : null; return (s && s.staff && s.staff.name) ? s.staff.name + ' (መዳቢ)' : 'ስራ መዳቢ'; }
         } catch (e) {}
+        try { if (typeof heActorName === 'function') return heActorName(); } catch (e) {}
         try { var _s = (typeof heGetSession === 'function') ? heGetSession() : null; if (_s && _s.staff && _s.staff.name) return String(_s.staff.name); } catch (e) {}
         return 'አስተዳዳሪ';
     }
@@ -114,6 +115,23 @@ window.heEthDay = function (k) {
             return origAdd.call(this, data);
         };
     }
+})();
+</script>
+<script>
+/* 🆔 እያንዳንዱ የእንቅስቃሴ መዝገብ ግቤት የሰራውን ሰው መለያ (userId) እና ሚና (userRole) አብሮ ይይዛል — ስም ቢመሳሰልም ማን እንደሆነ ይታወቃል */
+(function () {
+    if (window.__heActUid || !window.firebase || !firebase.firestore || !firebase.firestore.CollectionReference) return;
+    window.__heActUid = true;
+    var CR = firebase.firestore.CollectionReference.prototype, add0 = CR.add;
+    CR.add = function (d) {
+        try {
+            if (this.id === 'activity' && d && typeof d === 'object' && !('userId' in d)) {
+                var s = (typeof heGetSession === 'function') ? heGetSession() : null;
+                if (s && s.staff && s.staff.id) d = Object.assign({}, d, { userId: String(s.staff.id), userRole: String(s.staff.role || '') });
+            }
+        } catch (e) {}
+        return add0.call(this, d);
+    };
 })();
 </script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js">
@@ -3019,9 +3037,18 @@ document.addEventListener('click', function (e) {
         function heApproveAllowedSync() { return true; }
         function heTechOf(o) { return (o && (o.technician || o.workedBy)) || ''; }
         function heActorName() {
+            // 👤 በ እንቅስቃሴ መዝገብ የሚገባ ስም — የገባው አድሚን በራሱ ስም። ስሙ አጠቃላይ («አስተዳዳሪ») ከሆነ በስልኩ የመጨረሻ 4 ዲጂት ይለያል
             try {
                 const s = (typeof heGetSession === 'function') ? heGetSession() : null;
-                if (s && s.staff && s.staff.name) return String(s.staff.name);
+                if (s && s.staff) {
+                    const n = String(s.staff.name || '').trim();
+                    const generic = !n || /^(አስተዳዳሪ|አስተዳደር|አድሚን|admin)$/i.test(n);
+                    if (generic && s.staff.role === 'admin') {
+                        const ph = String(s.staff.phone || '').replace(/\D/g, '').slice(-4);
+                        return 'አስተዳዳሪ' + (ph ? ' (' + ph + ')' : '');
+                    }
+                    if (n) return n;
+                }
             } catch (e) {}
             return 'አስተዳዳሪ';
         }
@@ -4956,7 +4983,7 @@ document.addEventListener('click', function (e) {
                     const time = formatEthDateTime(data.timestamp) || '—';
                     html += `<tr>
                         <td>${time}</td>
-                        <td>${data.user || '—'}</td>
+                        <td>${escHtml(data.user || '—')}</td>
                         <td>${data.action || '—'}</td>
                         <td>${data.details || '—'}</td>
                     </tr>`;
