@@ -11358,7 +11358,9 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
         function renderAllJobs() {
             const container = document.getElementById('allJobsContainer');
 
-            const _shownOrders = myOrders.filter(o => !techApprovedGone(o));
+            // 🗑️ የተመለሱ ስራዎች (ለሌላ ቀን፣ ዋጋ አልተስማሙም፣ ዛሬ አይመቻቸውም፣ ስልክ አይነሳም፣ ሌላ — ከቴክኒሻኑ ጋር ያልተያዙ) ምንም የሚሰራ ነገር የላቸውም — ከዝርዝሩ አይታዩም
+            const _returnedDead = (o) => { try { return TECH_CLOSED_STATUSES.includes(o.status) && o.status !== 'Completed' && !techIsHeld(o); } catch (e) { return false; } };
+            const _shownOrders = myOrders.filter(o => !techApprovedGone(o) && !_returnedDead(o));
             if (_shownOrders.length === 0) {
                 container.innerHTML = '<p class="text-center text-muted">ምንም ስራ የለም</p>';
                 return;
