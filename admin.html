@@ -5675,8 +5675,10 @@ document.addEventListener('click', function (e) {
         const ADM_UNFINISHED_STATUSES = ['PriceNotAgreed', 'Rescheduled', 'NotToday', 'PhoneNoAnswer', 'Other'];
         // 🆕 ❌ ያልተጠናቀቁ = ለቴክኒሻን የተመደበ እና ገና ያልተዘጋ (Assigned) ስራ — ከ«አዲስ ትዕዛዝ» (ያልተመደበ) ይወጣል
         //    ✅ ተጠናቋል = በ«አጠናቅ» ሀ–ረ ውጤት የተዘጋ ስራ (ተሰራ፣ ዋጋ አልተስማሙም፣ ለሌላ ቀን፣ ሌላ፣ ዛሬ አይመቻቸውም፣ ስልክ አይነሳም…)
-        const admIsInProgress = (o) => !!o && o.status === 'Assigned' && !admIsFutureAppt(o);
-        const admIsClosedJob = (o) => !!o && ADM_FINISHED_STATUSES.includes(o.status);
+        //    ከቴክኒሻኑ ጋር የተያዘ ስራ (ዋጋ አልተስማሙም/ስልክ አይነሳም/ሌላ + onHold) ለቴክኒሻኑ ክፍት ስራ ነው (ቴክኒሻን ገጽ techIsHeld ጋር አንድ ትርጉም) — «ያልተጠናቀቁ» ውስጥ ይቆጠራል እንጂ «ተጠናቋል» ውስጥ አይደለም
+        const admIsHeldJob = (o) => !!o && o.onHold === true && ['PriceNotAgreed', 'Other', 'PhoneNoAnswer'].includes(o.status) && !o.workTag;
+        const admIsInProgress = (o) => !!o && ((o.status === 'Assigned' && !admIsFutureAppt(o)) || admIsHeldJob(o));
+        const admIsClosedJob = (o) => !!o && ADM_FINISHED_STATUSES.includes(o.status) && !admIsHeldJob(o);
         const admWorkKind = (o) => (o && (o.workTag || o.orderType)) || '';
         function updateStats() {
             // ✅ FIX: Dashboard Today-scoping - "ጠቅላላ ትዕዛዝ"/"በመጠባበቅ ላይ"/"ተጠናቋል" ከዚህ በፊት
@@ -6549,8 +6551,11 @@ document.addEventListener('focusout', function (e) {
             const t = /^(\d{1,2}):(\d{2})/.exec(String(o.rescheduledTime || o.appointmentTime || ''));
             return (d && t) ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), +t[1], +t[2], 0, 0).getTime() : 0;
         }
+        // 📌 ለቴክኒሻን የተያዘ (scheduledTechnician + scheduledReleaseDate) Pending ስራ — Worker በቀጠሮ ሰዓቱ በራሱ ይልከዋል፤ እስከዚያ በ«እስከሚደርስ ቀጠሮ» ብቻ ይታያል
+        function admIsHeldForSchedule(o) { return !!(o && o.status === 'Pending' && o.scheduledTechnician && o.scheduledReleaseDate); }
         function admIsFutureAppt(o) {
             if (!o) return false;
+            if (admIsHeldForSchedule(o)) return true;   // ቀጠሮ ላይ ያለ ትዕዛዝ ቀጠሮ ላይ ብቻ ይታያል (ቀኑ ዛሬ ቢሆንም ሰዓቱ እስኪደርስ)
             if (o.returnReason || o.returnedAt || o.returnedFrom || o.returnedFromId || o.completionOption === 'return-job') return false; // የተመለሱ በራሳቸው ካርድ/ዝርዝር
             if (o.status === 'Pending') {
                 const d = schedApptDate(o); if (!d) return false;
@@ -6569,7 +6574,7 @@ document.addEventListener('focusout', function (e) {
             const badge = document.getElementById('dashApptBadge');
             if (!card || !list) return;
             const items = (allOrders || []).filter(admIsFutureAppt)
-                .map(o => ({ o, d: (o.status === 'Pending' ? schedApptDate(o) : (schedKeyToDate(o.appointmentDate) || schedKeyToDate(o.rescheduledDate))) }))
+                .map(o => ({ o, d: (o.status === 'Pending' ? (schedApptDate(o) || (admIsHeldForSchedule(o) ? schedKeyToDate(String(o.scheduledReleaseDate).slice(0, 10)) : null)) : (schedKeyToDate(o.appointmentDate) || schedKeyToDate(o.rescheduledDate))) }))
                 .sort((a, b) => a.d - b.d);
             if (badge) badge.textContent = items.length;
             card.style.display = items.length ? '' : 'none';
@@ -6579,7 +6584,7 @@ document.addEventListener('focusout', function (e) {
             list.innerHTML = items.map(({ o, d }) => {
                 const days = schedDaysUntil(d);
                 const tn = o.technician || o.scheduledTechnician || '';
-                const when = days === 0 ? ('ዛሬ ' + heEthClockHM(o.rescheduledTime || o.appointmentTime || '') + ' ላይ') : (days === 1 ? 'ነገ' : (days + ' ቀን ይቀራል'));
+                const when = days === 0 ? ('ዛሬ ' + heEthClockHM(o.rescheduledTime || o.appointmentTime || o.scheduledReleaseTime || '') + ' ላይ') : (days === 1 ? 'ነገ' : (days + ' ቀን ይቀራል'));
                 const note = tn
                     ? `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#EFF6FF; color:#1E40AF; font-size:0.78rem;">👷 <b>${escHtml(tn)}</b> — ቀኑ ሲደርስ ወደ ሰራተኛው ይገባል</div>`
                     : `<div style="margin-top:4px; padding:4px 8px; border-radius:6px; background:#F3F4F6; color:#374151; font-size:0.78rem;">⏳ ገና አልተመደበም — ቀኑ ሲደርስ ወደ «አዲስ ትዕዛዞች» ይገባል</div>`;
@@ -6897,7 +6902,7 @@ document.addEventListener('focusout', function (e) {
             try {
                 if (!o || !o.technician) return '';
                 if (o.status === 'Assigned') return String(o.technician);
-                if (o.onHold === true && ['PriceNotAgreed', 'Other', 'PhoneNoAnswer'].includes(o.status)) return String(o.technician);
+                if (o.onHold === true && !o.workTag && ['PriceNotAgreed', 'Other', 'PhoneNoAnswer'].includes(o.status)) return String(o.technician);
             } catch (e) {}
             return '';
         }
