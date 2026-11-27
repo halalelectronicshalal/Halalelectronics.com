@@ -67,9 +67,11 @@ window.heEthDay = function (k) {
         try { var _s = (typeof heGetSession === 'function') ? heGetSession() : null; if (_s && _s.staff && _s.staff.name) return String(_s.staff.name); } catch (e) {}
         return 'አስተዳዳሪ';
     }
+    function sid() { try { var s = (typeof heGetSession === 'function') ? heGetSession() : null; return (s && s.staff && s.staff.id) ? String(s.staff.id) : ''; } catch (e) { return ''; } }
+    function withId(e) { var i = sid(); if (i && e) e.byId = i; return e; }
     function mk(d) {
         var st = d.status;
-        if (!st && typeof d.scheduledTechnician === 'string' && d.scheduledTechnician) return { t: Date.now(), by: actor(), text: '📅 ለ ' + d.scheduledTechnician + ' ተይዟል (የቀጠሮ ቀን ሲደርስ ይመደባል)', st: 'scheduled' };
+        if (!st && typeof d.scheduledTechnician === 'string' && d.scheduledTechnician) return withId({ t: Date.now(), by: actor(), text: '📅 ለ ' + d.scheduledTechnician + ' ተይዟል (የቀጠሮ ቀን ሲደርስ ይመደባል)', st: 'scheduled' });
         if (!st) return null;
         var txt = '';
         if (st === 'Assigned') txt = '📋 ለ ' + (d.technician || '—') + ' ተመድቧል';
@@ -81,7 +83,7 @@ window.heEthDay = function (k) {
         else if (st === 'Other') txt = '📌 ሌላ ምክንያት' + (d.otherReason ? ' — ' + d.otherReason : '');
         else txt = '🔄 ሁኔታ ወደ «' + st + '» ተቀየረ';
         if ((st !== 'Pending' && st !== 'Assigned') && d.technician) txt += ' (ቴክኒሻን: ' + d.technician + ')';
-        return { t: Date.now(), by: actor(), text: txt, st: st };
+        return withId({ t: Date.now(), by: actor(), text: txt, st: st });
     }
     // ⚠️ ታሪክ መመዝገብ ዋናውን ስራ ፈጽሞ እንዳያግድ፦ ከታሪኩ ጋር ማዘመን ከተከለከለ/ካልተሳካ ያለ ታሪክ እንደገና ይሞክራል
     function patchUpdate(proto) {
@@ -5575,7 +5577,17 @@ document.addEventListener('click', function (e) {
         }
         function heAssignLockedMsg(name) { return '🔒 ይህ ስራ ቀድሞ ለ ' + name + ' ተመድቧል — እስኪጠናቀቅ ወይም ቴክኒሻኑ እስኪመልሰው ድረስ ለሌላ መመደብ አይቻልም'; }
 
+
+        // 🔒 አንድ ስራ በአንድ ጊዜ ከአንዴ በላይ እንዳይመደብ (ብዙ ጊዜ መንካት) — በሂደት ላይ ካለ ሌላ ጥያቄ ይታለፋል
         async function assignOrder(orderId, forcedTech) {
+            window.__asgBusy = window.__asgBusy || new Set();
+            if (window.__asgBusy.has(orderId)) return;
+            window.__asgBusy.add(orderId);
+            try { return await assignOrderCore(orderId, forcedTech); }
+            finally { window.__asgBusy.delete(orderId); }
+        }
+
+        async function assignOrderCore(orderId, forcedTech) {
             // ✅ NEW: ከ Dashboard ላይ ካለው quick-assign select ወይም ከ Orders ትር ላይ ካለው select ይነበብ (forcedTech ከተሰጠ በ DOM ላይ አይመካም)
             const dashSelect = forcedTech ? null : document.querySelector(`.dashAssignSelect[data-id="${orderId}"]`);
             const ordersSelect = forcedTech ? null : document.querySelector(`.assignSelect[data-id="${orderId}"]`);
@@ -5611,7 +5623,7 @@ document.addEventListener('click', function (e) {
                     technician: techName,  // store exact name
                     assignedAt: new Date(),
                     assignedBy: 'admin',
-                    history: firebase.firestore.FieldValue.arrayUnion({ t: Date.now(), by: (typeof heActorName === 'function' ? heActorName() : 'አስተዳዳሪ'), text: '📋 ለ ' + techName + ' ተመድቧል', st: 'Assigned' })
+                    history: firebase.firestore.FieldValue.arrayUnion({ t: Date.now(), by: (typeof heActorName === 'function' ? heActorName() : 'አስተዳዳሪ'), text: '📋 ለ ' + techName + ' ተመድቧል', st: 'Assigned', ...(function () { try { var s1 = heGetSession(); return (s1 && s1.staff && s1.staff.id) ? { byId: String(s1.staff.id) } : {}; } catch (e) { return {}; } })() })
                 };
                 // 🔒 በሰርቨር ላይ በ transaction ይፈትሻል (ለሌላ ሰው የተመደበ ስራ አይመደብም፤ ለተመሳሳይ ቴክኒሻን ዳግም መላክ ይፈቀዳል)
                 const _aref = db.collection('orders').doc(orderId);
@@ -5619,7 +5631,10 @@ document.addEventListener('click', function (e) {
                     const _s = await tx.get(_aref);
                     const _lk = _s.exists ? heAssignLockedTo(_s.data()) : '';
                     if (_lk && _lk !== techName) { const _e = new Error('ASSIGN_LOCKED'); _e.lockedTo = _lk; throw _e; }
-                    tx.update(_aref, _upd);
+                    // ለተመሳሳይ ቴክኒሻን ቀድሞ «ተመድቧል» ከሆነ የታሪክ መግቢያ ዳግም አይጨመርም (ድግግሞሽ እንዳይኖር)
+                    const _cur = _s.exists ? _s.data() : null;
+                    if (_cur && _cur.status === 'Assigned' && _cur.technician === techName) { const _u2 = Object.assign({}, _upd); delete _u2.history; tx.update(_aref, _u2); }
+                    else tx.update(_aref, _upd);
                 });
 
                 await db.collection('activity').add({
