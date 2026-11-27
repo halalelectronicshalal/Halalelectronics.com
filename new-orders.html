@@ -453,7 +453,7 @@ function heAssignLockedTo(o) {
     try {
         if (!o || !o.technician) return '';
         if (o.status === 'Assigned') return String(o.technician);
-        if (o.onHold === true && ['PriceNotAgreed', 'Other', 'PhoneNoAnswer'].includes(o.status)) return String(o.technician);
+        if (o.onHold === true && !o.workTag && ['PriceNotAgreed', 'Other', 'PhoneNoAnswer'].includes(o.status)) return String(o.technician);
     } catch (e) {}
     return '';
 }
@@ -803,7 +803,7 @@ function showStatDetail(kind, refresh) {
         title = '📅 እስከሚደርስ ቀጠሮ';
         const pend = visibleOrders().filter(o => o.status === 'Pending' && orderApptWaiting(o));
         const asg = visibleOrders().filter(o => o.status === 'Assigned' && orderHasFutureAppt(o));
-        const l = pend.concat(asg).sort((a, b) => orderApptDate(a) - orderApptDate(b) || toMs(b.createdAt) - toMs(a.createdAt));
+        const l = pend.concat(asg).sort((a, b) => (orderApptDate(a) || orderHeldDate(a)) - (orderApptDate(b) || orderHeldDate(b)) || toMs(b.createdAt) - toMs(a.createdAt));
         const keepSel = {};
         document.querySelectorAll('#modalBody .dashAssignSelect').forEach(x => { if (x.value) keepSel[x.dataset.id] = x.value; });
         const opts = techOptionsHtml();
@@ -897,7 +897,10 @@ function orderApptTimePending(o) {
     return d.getTime() > Date.now();
 }
 /** በቀን ወይም በሰዓት ገና ያልደረሰ ቀጠሮ (ለዝርዝር ማሳያ ብቻ — ለ«መድብ» hold ህግ orderIsScheduled ራሱ ይቀራል) */
-function orderApptWaiting(o) { return orderIsScheduled(o) || orderApptTimePending(o); }
+/** 📌 ለቴክኒሻን የተያዘ (scheduledTechnician + scheduledReleaseDate) Pending ስራ — Worker በቀጠሮ ሰዓቱ በራሱ ይልከዋል፤ እስከዚያ በ«እስከሚደርስ ቀጠሮ» ብቻ ይታያል (ከ«አዲስ ትዕዛዞች» ይወጣል) */
+function orderIsHeldForSchedule(o) { return !!(o && o.status === 'Pending' && o.scheduledTechnician && o.scheduledReleaseDate); }
+function orderHeldDate(o) { return orderIsHeldForSchedule(o) ? keyToLocalDate(String(o.scheduledReleaseDate).slice(0, 10)) : null; }
+function orderApptWaiting(o) { return orderIsHeldForSchedule(o) || orderIsScheduled(o) || orderApptTimePending(o); }
 function orderIsScheduled(o) {
     if (o.id === highlightOrderId) return false;
     const d = orderApptDate(o);
@@ -933,12 +936,12 @@ async function _holdOrderForDate(orderId, techName, hold) {
     } catch (error) { showToast('❌ ' + error.message, 'error'); console.error('Hold error:', error); }
 }
 function apptTagHtml(o) {
-    const d = orderApptDate(o);
+    const d = orderApptDate(o) || orderHeldDate(o);
     if (!d) return o.preferredDay ? `<span class="tag" style="color:var(--primary);">📅 ${escHtml(o.preferredDay)}</span>` : '';
     const n = daysUntil(d);
     const when = n === 0 ? 'ዛሬ' : n > 0 ? (n === 1 ? 'ነገ' : `ከ${n} ቀን በኋላ`) : `${-n} ቀን አልፏል`;
     const color = n > 0 ? '#B45309' : n === 0 ? 'var(--success)' : 'var(--emergency)';
-    const _tm = (o.rescheduledFrom && o.rescheduledTime) ? ' ⏰ ' + escHtml(heEthClockHM(o.rescheduledTime)) : '';
+    const _tm = (o.rescheduledFrom && o.rescheduledTime) ? ' ⏰ ' + escHtml(heEthClockHM(o.rescheduledTime)) : (orderIsHeldForSchedule(o) && o.scheduledReleaseTime ? ' ⏰ ' + escHtml(heEthClockHM(o.scheduledReleaseTime)) : '');
     return `<span class="tag" style="color:${color}; font-weight:700;">📅 ቀጠሮ: ${escHtml(formatEthDate(d, true))}${_tm} (${when})</span>`;
 }
 /** ⏰ «ያደረ» ስራ = ዛሬ ያልተፈጠረ/ያልተመለሰ/ቀጠሮው ያላለፈ ያልተጠናቀቀ ስራ (ያልተመደበ ወይም የተመደበ ክፍት) — ከአድሚን ገጽ ጋር አንድ ደንብ */
@@ -1021,7 +1024,7 @@ function renderDashNewOrders() {
     const fresh = pending.filter(o => !orderIsReturned(o));
     const due = fresh.filter(o => !orderApptWaiting(o));
     const scheduled = fresh.filter(o => orderApptWaiting(o))
-        .sort((a, b) => orderApptDate(a) - orderApptDate(b) || toMs(b.createdAt) - toMs(a.createdAt));
+        .sort((a, b) => (orderApptDate(a) || orderHeldDate(a)) - (orderApptDate(b) || orderHeldDate(b)) || toMs(b.createdAt) - toMs(a.createdAt));
 
     // ስታቲስቲክስ
     ['dashNewOrdersBadge', 'topBadge'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = due.length; });
