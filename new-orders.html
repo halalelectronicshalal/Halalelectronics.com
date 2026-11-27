@@ -54,9 +54,11 @@ window.heEthDay = function (k) {
         } catch (e) {}
         return 'አስተዳዳሪ';
     }
+    function sid() { try { var s = (typeof heGetSession === 'function') ? heGetSession() : null; return (s && s.staff && s.staff.id) ? String(s.staff.id) : ''; } catch (e) { return ''; } }
+    function withId(e) { var i = sid(); if (i && e) e.byId = i; return e; }
     function mk(d) {
         var st = d.status;
-        if (!st && typeof d.scheduledTechnician === 'string' && d.scheduledTechnician) return { t: Date.now(), by: actor(), text: '📅 ለ ' + d.scheduledTechnician + ' ተይዟል (የቀጠሮ ቀን ሲደርስ ይመደባል)', st: 'scheduled' };
+        if (!st && typeof d.scheduledTechnician === 'string' && d.scheduledTechnician) return withId({ t: Date.now(), by: actor(), text: '📅 ለ ' + d.scheduledTechnician + ' ተይዟል (የቀጠሮ ቀን ሲደርስ ይመደባል)', st: 'scheduled' });
         if (!st) return null;
         var txt = '';
         if (st === 'Assigned') txt = '📋 ለ ' + (d.technician || '—') + ' ተመድቧል';
@@ -68,7 +70,7 @@ window.heEthDay = function (k) {
         else if (st === 'Other') txt = '📌 ሌላ ምክንያት' + (d.otherReason ? ' — ' + d.otherReason : '');
         else txt = '🔄 ሁኔታ ወደ «' + st + '» ተቀየረ';
         if ((st !== 'Pending' && st !== 'Assigned') && d.technician) txt += ' (ቴክኒሻን: ' + d.technician + ')';
-        return { t: Date.now(), by: actor(), text: txt, st: st };
+        return withId({ t: Date.now(), by: actor(), text: txt, st: st });
     }
     // ⚠️ ታሪክ መመዝገብ ዋናውን ስራ ፈጽሞ እንዳያግድ፦ ከታሪኩ ጋር ማዘመን ከተከለከለ/ካልተሳካ ያለ ታሪክ እንደገና ይሞክራል
     function patchUpdate(proto) {
@@ -458,7 +460,17 @@ function heAssignLockedTo(o) {
 function heAssignLockedMsg(name) { return '🔒 ይህ ስራ ቀድሞ ለ ' + name + ' ተመድቧል — እስኪጠናቀቅ ወይም ቴክኒሻኑ እስኪመልሰው ድረስ ለሌላ መመደብ አይቻልም'; }
 function heAssignLockedBox(name) { return '<span style="padding:4px 8px;border-radius:6px;background:#FEF3C7;color:#92400E;font-size:0.78rem;font-weight:700;">🔒 ለ ' + String(name).replace(/[&<>"]/g, '') + ' ተመድቧል — እስኪጠናቀቅ ዝግ ነው</span>'; }
 
+
+// 🔒 አንድ ስራ በአንድ ጊዜ ከአንዴ በላይ እንዳይመደብ (ብዙ ጊዜ መንካት) — በሂደት ላይ ካለ ሌላ ጥያቄ ይታለፋል
 async function assignOrder(orderId) {
+    window.__asgBusy = window.__asgBusy || new Set();
+    if (window.__asgBusy.has(orderId)) return;
+    window.__asgBusy.add(orderId);
+    try { return await assignOrderCore(orderId); }
+    finally { window.__asgBusy.delete(orderId); }
+}
+
+async function assignOrderCore(orderId) {
     if (_assignInFlight.has(orderId)) { showToast('⏳ ምደባው በሂደት ላይ ነው፣ ትንሽ ይጠብቁ', 'error'); return; }
     _assignInFlight.add(orderId);
     try {
@@ -528,14 +540,17 @@ async function _assignOrderCore(orderId) {
         };
         if (_ord && _ord.scheduledReleaseDate) { _upd.scheduledTechnician = null; _upd.scheduledTechnicianId = null; _upd.scheduledReleaseDate = null; _upd.scheduledReleaseTime = null; } // ተይዞ የነበረ → አሁን ተመደበ
         // 📜 transaction.update ከነባሩ የታሪክ መመዝገቢያ ውጭ ስለሆነ ታሪኩን እዚህ በግልጽ እንጨምራለን
-        _upd.history = firebase.firestore.FieldValue.arrayUnion({ t: Date.now(), by: (function () { try { var s0 = heGetSession(); return (s0 && s0.staff && s0.staff.name) ? s0.staff.name + ' (መዳቢ)' : 'ስራ መዳቢ'; } catch (e) { return 'ስራ መዳቢ'; } })(), text: '📋 ለ ' + techName + ' ተመድቧል', st: 'Assigned' });
+        _upd.history = firebase.firestore.FieldValue.arrayUnion({ t: Date.now(), by: (function () { try { var s0 = heGetSession(); return (s0 && s0.staff && s0.staff.name) ? s0.staff.name + ' (መዳቢ)' : 'ስራ መዳቢ'; } catch (e) { return 'ስራ መዳቢ'; } })(), text: '📋 ለ ' + techName + ' ተመድቧል', st: 'Assigned', ...(function () { try { var s1 = heGetSession(); return (s1 && s1.staff && s1.staff.id) ? { byId: String(s1.staff.id) } : {}; } catch (e) { return {}; } })() });
         // 🔒 በሰርቨር ላይ በ transaction ይፈትሻል — ሁለት ሰዎች በአንድ ጊዜ ቢመድቡ አንደኛው ብቻ ይሳካል
         const _aref = db.collection('orders').doc(orderId);
         await db.runTransaction(async (tx) => {
             const _s = await tx.get(_aref);
             const _lk = _s.exists ? heAssignLockedTo(_s.data()) : '';
             if (_lk && _lk !== techName) { const _e = new Error('ASSIGN_LOCKED'); _e.lockedTo = _lk; throw _e; }
-            tx.update(_aref, _upd);
+            // ለተመሳሳይ ቴክኒሻን ቀድሞ «ተመድቧል» ከሆነ የታሪክ መግቢያ ዳግም አይጨመርም (ድግግሞሽ እንዳይኖር)
+                    const _cur = _s.exists ? _s.data() : null;
+                    if (_cur && _cur.status === 'Assigned' && _cur.technician === techName) { const _u2 = Object.assign({}, _upd); delete _u2.history; tx.update(_aref, _u2); }
+                    else tx.update(_aref, _upd);
         });
         // 🟢 ለቴክኒሻኑ ስራ ተመድቧል → «ነፃ ነኝ» ዝርዝር ውስጥ አይታይም (አዲስ «ነፃ ነኝ» እስከሚልክ)
         try {
