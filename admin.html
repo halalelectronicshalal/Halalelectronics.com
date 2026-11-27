@@ -1726,6 +1726,19 @@ document.addEventListener('click', function (e) {
                         <div class="label">🏢 ወደ ድርጅቱ የገባ ገቢ (ትላንት)</div>
                         <div class="label" id="statCompanyYesterdayNote" style="font-size:0.7rem; opacity:.75;">ከጸደቁ ሪፖርቶች ብቻ</div>
                     </div>
+                    <!-- 🏪 የሱቅ ሽያጭ — የዛሬ እና ያደረ (የትናንት)፤ ሲነኩ ዝርዝር ይታያል -->
+                    <div class="stat-card stat-clickable" role="button" tabindex="0" onclick="openShopDetail('today')" onkeydown="if(event.key==='Enter')openShopDetail('today')" title="ዝርዝር ለማየት ይጫኑ">
+                        <div class="icon"><i class="fas fa-store" style="color:#D97706;"></i></div>
+                        <div class="number" id="statShopToday" style="color:#D97706;">0 ብር</div>
+                        <div class="label">🏪 የሱቅ ሽያጭ (ዛሬ)</div>
+                        <div class="label" id="statShopTodayNote" style="font-size:0.7rem; opacity:.75;">0 እቃ · ወጪ 0 ብር</div>
+                    </div>
+                    <div class="stat-card stat-clickable" role="button" tabindex="0" onclick="openShopDetail('overnight')" onkeydown="if(event.key==='Enter')openShopDetail('overnight')" title="ዝርዝር ለማየት ይጫኑ">
+                        <div class="icon"><i class="fas fa-store" style="color:#9A3412;"></i></div>
+                        <div class="number" id="statShopOvernight" style="color:#9A3412;">0 ብር</div>
+                        <div class="label">🏪 ያደረ የሱቅ ሽያጭ (ትናንት)</div>
+                        <div class="label" id="statShopOvernightNote" style="font-size:0.7rem; opacity:.75;">0 እቃ · ወጪ 0 ብር</div>
+                    </div>
                     <div class="stat-card stat-clickable" role="button" tabindex="0" onclick="openStatDetail('today')" onkeydown="if(event.key==='Enter')openStatDetail('today')" title="ዝርዝር ለማየት ይጫኑ">
                         <div class="icon"><i class="fas fa-clipboard-list"></i></div>
                         <div class="number" id="statTotalOrders">0</div>
@@ -5215,6 +5228,72 @@ document.addEventListener('click', function (e) {
         // ============================================================
         // LOAD TRANSACTIONS
         // ============================================================
+        // ============================================================
+        // 🏪 የሱቅ ሽያጭ ካርዶች (የዛሬ + ያደረ/የትናንት) — ከ transactions (source:'shop') ይሰላል
+        //    የቀን መቀየሪያ ከሱቅ ሽያጭ ጋር አንድ ነው (8:30 ጠዋት)። ወጪ = source:'shop' የሆነ የወጪ መዝገብ ካለ።
+        // ============================================================
+        function admShopBizKey(daysAgo) { return new Date(Date.now() + 3 * 3600e3 - 8.5 * 3600e3 - (daysAgo || 0) * 86400e3).toISOString().slice(0, 10); }
+        function admShopRows() {
+            const rows = (allTransactions || []).filter(t => t && t.source === 'shop' && (t.type === 'income' || t.type === 'expense'));
+            return rows.map(t => {
+                const desc = String(t.description || '');
+                const m = /[×x]\s*(\d+)/.exec(desc);
+                const name = t.itemName || desc.replace(/^🏪\s*ሱቅ ሽያጭ\s*[—-]\s*/, '').replace(/\s*[×x]\s*\d+\s*$/, '');
+                const d = t.createdAt && t.createdAt.toDate ? t.createdAt.toDate() : null;
+                return { id: t.id, type: t.type, date: String(t.date || ''), amount: Number(t.amount) || 0, qty: t.type === 'income' ? (Number(t.qty) || (m ? Number(m[1]) : 1)) : 0, name: name || '—', staff: t.staff || '', at: d };
+            });
+        }
+        function admShopSum(rows) {
+            const inc = rows.filter(r => r.type === 'income'), exp = rows.filter(r => r.type === 'expense');
+            const sold = inc.reduce((n, r) => n + r.amount, 0), expense = exp.reduce((n, r) => n + r.amount, 0);
+            return { items: inc.reduce((n, r) => n + r.qty, 0), sales: inc.length, sold, expense, net: sold - expense };
+        }
+        function updateShopCards() {
+            const el = (id) => document.getElementById(id);
+            if (!el('statShopToday')) return;
+            const rows = admShopRows(), tk = admShopBizKey(0), yk = admShopBizKey(1);
+            const f = (n) => Number(n || 0).toLocaleString();
+            const t = admShopSum(rows.filter(r => r.date === tk)), y = admShopSum(rows.filter(r => r.date === yk));
+            el('statShopToday').textContent = f(t.sold) + ' ብር';
+            el('statShopTodayNote').textContent = t.items + ' እቃ · ወጪ ' + f(t.expense) + ' ብር';
+            el('statShopOvernight').textContent = f(y.sold) + ' ብር';
+            el('statShopOvernightNote').textContent = y.items + ' እቃ · ወጪ ' + f(y.expense) + ' ብር';
+        }
+        function openShopDetail(kind) {
+            const rows = admShopRows(), tk = admShopBizKey(0);
+            const f = (n) => Number(n || 0).toLocaleString();
+            let days;   // [{ key, rows }]
+            let title;
+            if (kind === 'today') { days = [{ key: tk, rows: rows.filter(r => r.date === tk) }]; title = '🏪 የዛሬ የሱቅ ሽያጭ'; }
+            else {
+                title = '🏪 ያደረ የሱቅ ሽያጭ (ትናንት እና ያለፉ 6 ቀናት)';
+                days = [];
+                for (let i = 1; i <= 7; i++) { const k = admShopBizKey(i); days.push({ key: k, rows: rows.filter(r => r.date === k) }); }
+            }
+            const all = admShopSum([].concat(...days.map(d => d.rows)));
+            const dayLabel = (k) => { try { return formatEthDate(new Date(k + 'T12:00:00'), true); } catch (e) { return k; } };
+            const rowHtml = (r) => {
+                const time = r.at ? r.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+                const isExp = r.type === 'expense';
+                return `<div style="display:flex; justify-content:space-between; gap:8px; padding:5px 0; border-bottom:1px dashed var(--border-light); font-size:0.85rem;">
+                    <div style="min-width:0;">${isExp ? '🧾 ወጪ — ' : ''}<b>${escHtml(r.name)}</b>${isExp ? '' : ' × ' + escHtml(r.qty)}<div style="color:var(--text-muted); font-size:0.75rem;">${escHtml(time)}${r.staff ? ' · 👤 ' + escHtml(r.staff) : ''}</div></div>
+                    <div style="font-weight:700; white-space:nowrap; color:${isExp ? '#DC2626' : 'inherit'};">${isExp ? '−' : ''}${f(r.amount)} ብር</div></div>`;
+            };
+            const sections = days.map(d => {
+                if (!d.rows.length) return kind === 'today' ? '<p class="text-center text-muted" style="padding:10px;">ዛሬ ምንም ሽያጭ የለም</p>' : '';
+                const s2 = admShopSum(d.rows);
+                const list = d.rows.slice().sort((a, b) => (b.at ? b.at.getTime() : 0) - (a.at ? a.at.getTime() : 0)).map(rowHtml).join('');
+                return `<div style="margin-top:10px;"><div style="font-weight:700; font-size:0.88rem;">📅 ${escHtml(dayLabel(d.key))} — ${s2.items} እቃ · ${f(s2.sold)} ብር${s2.expense ? ' · ወጪ ' + f(s2.expense) + ' ብር' : ''}</div>${list}</div>`;
+            }).join('') || '<p class="text-center text-muted" style="padding:10px;">በእነዚህ ቀናት ምንም ሽያጭ የለም</p>';
+            const body = `<div style="display:grid; grid-template-columns:repeat(2,1fr); gap:8px;">
+                    <div class="stat-card" style="margin:0;"><div class="number">${all.items}</div><div class="label">🛒 የተሸጠ እቃ ብዛት</div></div>
+                    <div class="stat-card" style="margin:0;"><div class="number" style="color:#D97706;">${f(all.sold)} ብር</div><div class="label">💰 የተሸጠ ብር</div></div>
+                    <div class="stat-card" style="margin:0;"><div class="number" style="color:#DC2626;">${f(all.expense)} ብር</div><div class="label">🧾 ወጪ</div></div>
+                    <div class="stat-card" style="margin:0;"><div class="number" style="color:#059669;">${f(all.net)} ብር</div><div class="label">📈 የተጣራ</div></div>
+                </div>${sections}`;
+            openModal(title, body, '<button class="btn btn-secondary" onclick="closeModal()">ዝጋ</button>');
+        }
+
         function loadTransactions() {
             db.collection('transactions').orderBy('createdAt', 'desc').onSnapshot((snapshot) => {
                 allTransactions = [];
@@ -5227,6 +5306,7 @@ document.addEventListener('click', function (e) {
                 updateFinanceStats();
                 renderTransactions();
                 updateStats();
+                try { updateShopCards(); } catch (e) { console.warn('shop cards failed', e); }
             });
         }
 
@@ -11105,13 +11185,17 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
             const total = filtered.length;
             const pending = filtered.filter(o => o.status === 'Pending').length;
             const assigned = filtered.filter(o => o.status === 'Assigned').length;
-            const completed = filtered.filter(o => o.status === 'Completed').length;
+            const completed = filtered.filter(admIsClosedJob).length;   // ከዳሽቦርዱ «ተጠናቋል» ጋር አንድ ትርጉም (በአጠናቅ የተዘጋ)
 
-            const income = allTransactions.filter(t => {
-                if (t.type !== 'income') return false;
-                const d = t.date ? new Date(t.date) : (t.createdAt?.toDate?.() || new Date(0));
-                return d >= startDate;
-            }).reduce((s, t) => s + parseFloat(t.amount || 0), 0);
+            // 💰 ጠቅላላ ገቢ — ከዳሽቦርዱ «የዛሬ ገቢ» ጋር አንድ ምንጭ እና አንድ የስራ ቀን (2:30 ኢት.)፦ የጸደቁ የቴክኒሻን ሪፖርቶች ገቢ።
+            //    (ድሮ ከ transactions ይሰላ ነበር — ሪፖርቱ ሲጸድቅ ብቻ ስለሚለቀቁ ከዳሽቦርዱ ጋር አይመሳሰልም ነበር)
+            const _bn = bizNow(), _sd = new Date(_bn.getFullYear(), _bn.getMonth(), _bn.getDate());
+            if (period === 'weekly') _sd.setDate(_sd.getDate() - 7); else if (period === 'monthly') _sd.setMonth(_sd.getMonth() - 1);
+            const _startKey = getDateKey(_sd), _todayKey = getDateKey(_bn);
+            const income = (financeReports() || []).filter(r => r.approved === true && admRepDayKey(r) >= _startKey && admRepDayKey(r) <= _todayKey)
+                .reduce((s, r) => s + admRepIncome(r), 0);
+            const shopIncome = (allTransactions || []).filter(t => t.type === 'income' && t.source === 'shop' && String(t.date || '') >= _startKey && String(t.date || '') <= _todayKey)
+                .reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
 
             // 💳 በወቅቱ የተከፈለ ብድር — ደንበኛ የከፈለን (ወደ ድርጅቱ የገባ) እና እኛ የከፈልነው (የወጣ)
             const _paidIn = allDebts.filter(d => d.status === 'paid' && d.paidAt && (d.paidAt.toDate ? d.paidAt.toDate() : new Date(d.paidAt)) >= startDate);
@@ -11139,6 +11223,7 @@ ${telegram ? `📱 *ቴሌግራም:* ${telegram}` : ''}
                     <div style="background:var(--bg); padding:16px; border-radius:var(--radius); text-align:center; border:1px solid var(--border); grid-column: span 2;">
                         <div style="font-size:2rem; font-weight:900; color:var(--primary);">${income.toFixed(2)} ብር</div>
                         <div style="color:var(--text-muted);">ጠቅላላ ገቢ (${label})</div>
+                        <div style="color:var(--text-muted); font-size:0.75rem;">ከጸደቁ የቴክኒሻን ሪፖርቶች${shopIncome > 0 ? ' · 🏪 የሱቅ ሽያጭ ' + shopIncome.toFixed(0) + ' ብር (ተጨማሪ)' : ''}</div>
                     </div>
                     <div style="background:var(--bg); padding:16px; border-radius:var(--radius); text-align:center; border:1px solid var(--border);">
                         <div style="font-size:1.4rem; font-weight:900; color:var(--success);">${debtCollected.toFixed(2)} ብር</div>
