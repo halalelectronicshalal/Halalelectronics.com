@@ -5571,7 +5571,7 @@ document.addEventListener('click', function (e) {
             try {
                 if (!o || !o.technician) return '';
                 if (o.status === 'Assigned') return String(o.technician);
-                if (o.onHold === true && ['PriceNotAgreed', 'Other', 'PhoneNoAnswer'].includes(o.status)) return String(o.technician);
+                if (o.onHold === true && !o.workTag && ['PriceNotAgreed', 'Other', 'PhoneNoAnswer'].includes(o.status)) return String(o.technician);
             } catch (e) {}
             return '';
         }
