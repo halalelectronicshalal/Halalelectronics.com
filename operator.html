@@ -40,9 +40,11 @@ window.heEthDay = function (k) {
         } catch (e) {}
         return 'አስተዳዳሪ';
     }
+    function sid() { try { var s = (typeof heGetSession === 'function') ? heGetSession() : null; return (s && s.staff && s.staff.id) ? String(s.staff.id) : ''; } catch (e) { return ''; } }
+    function withId(e) { var i = sid(); if (i && e) e.byId = i; return e; }
     function mk(d) {
         var st = d.status;
-        if (!st && typeof d.scheduledTechnician === 'string' && d.scheduledTechnician) return { t: Date.now(), by: actor(), text: '📅 ለ ' + d.scheduledTechnician + ' ተይዟል (የቀጠሮ ቀን ሲደርስ ይመደባል)', st: 'scheduled' };
+        if (!st && typeof d.scheduledTechnician === 'string' && d.scheduledTechnician) return withId({ t: Date.now(), by: actor(), text: '📅 ለ ' + d.scheduledTechnician + ' ተይዟል (የቀጠሮ ቀን ሲደርስ ይመደባል)', st: 'scheduled' });
         if (!st) return null;
         var txt = '';
         if (st === 'Assigned') txt = '📋 ለ ' + (d.technician || '—') + ' ተመድቧል';
@@ -54,7 +56,7 @@ window.heEthDay = function (k) {
         else if (st === 'Other') txt = '📌 ሌላ ምክንያት' + (d.otherReason ? ' — ' + d.otherReason : '');
         else txt = '🔄 ሁኔታ ወደ «' + st + '» ተቀየረ';
         if ((st !== 'Pending' && st !== 'Assigned') && d.technician) txt += ' (ቴክኒሻን: ' + d.technician + ')';
-        return { t: Date.now(), by: actor(), text: txt, st: st };
+        return withId({ t: Date.now(), by: actor(), text: txt, st: st });
     }
     function patchUpdate(proto, isBatch) {
         if (!proto || !proto.update) return;
@@ -824,6 +826,16 @@ async function submitOrder(pfx) {
       _hist = (_c && _c.key === (phoneVariants(phone)[0] || '')) ? _c.res : await lookupPhoneHistory(phone);
     } catch (e) { console.warn('history lookup failed (non-fatal)', e); }
     const _prev = _hist ? _hist.orders : [];
+    // ⚠️ ይህ ደንበኛ (ስልክ) ክፍት ትዕዛዝ ካለው ከመመዝገብ በፊት ያስጠነቅቃል (ሁለት ጊዜ እንዳይመዘገብ)። እርማት/ሪፈራል ሆን ተብሎ ለቀድሞ ደንበኛ ስለሚሆን አይጠየቅም
+    if (workType === 'new' && _hist && Array.isArray(_hist.open) && _hist.open.length) {
+      const _stL = { Pending: '⏳ ያልተመደበ', Assigned: '📋 ተመድቧል', PriceNotAgreed: '💰 ዋጋ አልተስማሙም', NotToday: '📝 ዛሬ አይመቻቸውም', PhoneNoAnswer: '📵 ስልክ አይነሳም', Other: '📌 ሌላ ምክንያት' };
+      const _lines = _hist.open.slice(0, 3).map(o => '• ' + (o.appliance || '—') + ' — ' + (_stL[o.status || 'Pending'] || (o.status || 'Pending')) + (o.technician ? ' (ቴክኒሻን: ' + o.technician + ')' : '')).join('\n');
+      if (!confirm('⚠️ ይህ ደንበኛ ክፍት ትዕዛዝ አለው (' + _hist.open.length + ')\n' + _lines + '\n\nቢሆንም አዲስ ትዕዛዝ ይመዝገብ?\n✅ OK = አዲስ ይመዝገብ\n❌ Cancel = አይመዝገብ')) {
+        toast('ℹ️ ትዕዛዙ አልተመዘገበም — ክፍት ትዕዛዝ ቀድሞ አለ');
+        btn.disabled = false;
+        return;
+      }
+    }
     // 🛠️ እርማት — ኦፕሬተር አይመድብም፤ ቀድሞ የሰራው ቴክኒሻን (ከተገኘ) እንደ መረጃ ብቻ ይመዘገባል፣ አድሚን በልዩ ምልክት አይቶ ይመድባል
     const order = {
       fullName, phone, address,
