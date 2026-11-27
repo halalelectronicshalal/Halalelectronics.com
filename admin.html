@@ -69,9 +69,11 @@ window.heEthDay = function (k) {
         try { var _s = (typeof heGetSession === 'function') ? heGetSession() : null; if (_s && _s.staff && _s.staff.name) return String(_s.staff.name); } catch (e) {}
         return 'አስተዳዳሪ';
     }
+    function sid() { try { var s = (typeof heGetSession === 'function') ? heGetSession() : null; return (s && s.staff && s.staff.id) ? String(s.staff.id) : ''; } catch (e) { return ''; } }
+    function withId(e) { var i = sid(); if (i && e) e.byId = i; return e; }
     function mk(d) {
         var st = d.status;
-        if (!st && typeof d.scheduledTechnician === 'string' && d.scheduledTechnician) return { t: Date.now(), by: actor(), text: '📅 ለ ' + d.scheduledTechnician + ' ተይዟል (የቀጠሮ ቀን ሲደርስ ይመደባል)', st: 'scheduled' };
+        if (!st && typeof d.scheduledTechnician === 'string' && d.scheduledTechnician) return withId({ t: Date.now(), by: actor(), text: '📅 ለ ' + d.scheduledTechnician + ' ተይዟል (የቀጠሮ ቀን ሲደርስ ይመደባል)', st: 'scheduled' });
         if (!st) return null;
         var txt = '';
         if (st === 'Assigned') txt = '📋 ለ ' + (d.technician || '—') + ' ተመድቧል';
@@ -83,7 +85,7 @@ window.heEthDay = function (k) {
         else if (st === 'Other') txt = '📌 ሌላ ምክንያት' + (d.otherReason ? ' — ' + d.otherReason : '');
         else txt = '🔄 ሁኔታ ወደ «' + st + '» ተቀየረ';
         if ((st !== 'Pending' && st !== 'Assigned') && d.technician) txt += ' (ቴክኒሻን: ' + d.technician + ')';
-        return { t: Date.now(), by: actor(), text: txt, st: st };
+        return withId({ t: Date.now(), by: actor(), text: txt, st: st });
     }
     // ⚠️ ታሪክ መመዝገብ ዋናውን ስራ ፈጽሞ እንዳያግድ፦ ከታሪኩ ጋር ማዘመን ከተከለከለ/ካልተሳካ ያለ ታሪክ እንደገና ይሞክራል
     function patchUpdate(proto) {
@@ -5955,16 +5957,43 @@ document.addEventListener('click', function (e) {
         }
 
         // 📜🧾 ሪፖርት ማጽደቂያ፦ እያንዳንዱ ስራ ከምደባ ጀምሮ ያለው ታሪክ + የወጪ ዝርዝር
+
+        // 🧹 ተደጋጋሚ የታሪክ መግቢያ (ተመሳሳይ ጽሁፍ + ተመሳሳይ ሰው በ10 ደቂቃ ውስጥ) አንድ ጊዜ ብቻ ይታያል
+        function heDedupeHistory(arr) {
+            const out = [];
+            (arr || []).forEach(h => {
+                const p = out[out.length - 1], t = Number(h && (h.t || h.at)) || 0;
+                if (p && String(p.text) === String(h.text) && String(p.by || '') === String(h.by || '') && Math.abs(t - (Number(p.t || p.at) || 0)) < 10 * 60 * 1000) return;
+                out.push(h);
+            });
+            return out;
+        }
+        // 👤 የታሪክ መግቢያው የሰውየው መለያ (byId) ካለው አሁን ባለው ስሙ ይታያል (ስሙ ከተሻሻለ ድሮ መግቢያዎችም ይታደሳሉ)
+        function heHistBy(h) {
+            try { if (h && h.byId && Array.isArray(allStaff)) { const s = allStaff.find(x => x && x.id === h.byId); if (s && s.name) return String(s.name); } } catch (e) {}
+            return (h && h.by) || '';
+        }
+        // ⚠️ የሪፖርት ድምር (የተላኩ/የተጠናቀቁ) በስራ ዝርዝሩ ካሉት በላይ ከሆነ — ቀሪው በእጅ የተጻፈ ነው (ታሪክ የለውም)
+        function admReportMismatch(r) {
+            try {
+                const jobs = Array.isArray(r.jobStatuses) ? r.jobStatuses : [];
+                const cnt = (j) => Number(j && j.count) || 1;
+                const listed = jobs.reduce((n, j) => n + cnt(j), 0);
+                const listedDone = jobs.filter(j => j && j.status === 'completed').reduce((n, j) => n + cnt(j), 0);
+                const sent = Number(r.totalSent) || 0, done = Number(r.completedCount) || 0;
+                return (sent > listed || done > listedDone) ? { sent, listed, done, listedDone } : null;
+            } catch (e) { return null; }
+        }
         function admReportExtraHtml(r) {
             try {
                 const jobs = Array.isArray(r.jobStatuses) ? r.jobStatuses : [];
                 const toT = (h) => Number(h && (h.t || h.at)) || 0;
                 const jobBlocks = jobs.map((j, i) => {
                     const o = (allOrders || []).find(x => x.id === j.orderId);
-                    let hist = o && Array.isArray(o.history) ? o.history.filter(h => h && h.text).slice().sort((a, b) => toT(a) - toT(b)) : [];
+                    let hist = o && Array.isArray(o.history) ? heDedupeHistory(o.history.filter(h => h && h.text).slice().sort((a, b) => toT(a) - toT(b))) : [];
                     const k = hist.findIndex(h => h.st === 'Assigned' || /ተመድቧል/.test(String(h.text || '')));
                     if (k > 0) hist = hist.slice(k);                          // ከምደባ ጀምሮ
-                    let lines = hist.map(h => `<div style="font-size:0.78rem; padding:2px 0; border-bottom:1px dashed var(--border-light);"><span style="color:var(--text-muted);">${escHtml(formatEthDateTime(new Date(toT(h))))}${h.by ? ' — 👤 ' + escHtml(h.by) : ''}</span> ${escHtml(h.text)}</div>`).join('');
+                    let lines = hist.map(h => `<div style="font-size:0.78rem; padding:2px 0; border-bottom:1px dashed var(--border-light);"><span style="color:var(--text-muted);">${escHtml(formatEthDateTime(new Date(toT(h))))}${heHistBy(h) ? ' — 👤 ' + escHtml(heHistBy(h)) : ''}</span> ${escHtml(h.text)}</div>`).join('');
                     if (!lines && o && o.assignedAt) lines = `<div style="font-size:0.78rem;"><span style="color:var(--text-muted);">${escHtml(formatEthDateTime(o.assignedAt) || '—')}</span> 📋 ለ ${escHtml(o.technician || r.technicianName || '')} ተመድቧል</div>`;
                     if (!lines) lines = '<div style="font-size:0.78rem; color:var(--text-muted);">ታሪክ አልተገኘም</div>';
                     const done = j.status === 'completed';
@@ -5974,11 +6003,14 @@ document.addEventListener('click', function (e) {
                 const expRows = exp.map(x => `<div style="font-size:0.82rem; display:flex; justify-content:space-between; gap:8px; padding:2px 0; border-bottom:1px dashed var(--border-light);"><span>• ${escHtml(x.location || '—')}</span><strong>${escHtml(x.amount != null ? x.amount : '')} ብር</strong></div>`).join('');
                 const expTotal = r.totalExpense != null ? r.totalExpense : r.expense;
                 const expBlock = `<div style="margin-top:8px;"><div style="font-weight:700; font-size:0.83rem;">🧾 የወጪ ዝርዝር${expTotal != null && expTotal !== '' ? ` — ጠቅላላ ${escHtml(expTotal)} ብር` : ''}</div>${expRows || '<div style="font-size:0.8rem; color:var(--text-muted);">የወጪ ዝርዝር አልተመዘገበም</div>'}${r.expenseDetails ? `<div style="font-size:0.8rem; margin-top:3px;">📝 ${escHtml(r.expenseDetails)}</div>` : ''}</div>`;
-                return `${jobBlocks ? `<div style="margin-top:8px;"><div style="font-weight:700; font-size:0.83rem;">📜 የእያንዳንዱ ስራ ታሪክ (ከምደባ ጀምሮ)</div>${jobBlocks}</div>` : ''}${expBlock}`;
+                const _mm = admReportMismatch(r);
+                const mmBlock = _mm ? `<div style="margin-top:8px; padding:6px 8px; border-radius:6px; background:#FEF3C7; color:#92400E; font-size:0.8rem;">⚠️ በሪፖርቱ የተላኩ ${_mm.sent} ስራ (የተጠናቀቁ ${_mm.done}) ይላል፤ በስራ ዝርዝሩ ግን ${_mm.listed} ስራ (የተጠናቀቁ ${_mm.listedDone}) ብቻ አለ። ቀሪው ቁጥር እና ገቢ በቴክኒሻኑ በእጅ የተጻፈ ነው — ከትዕዛዝ ጋር አልተያያዘም፣ ታሪክም የለውም።</div>` : '';
+                return `${mmBlock}${jobBlocks ? `<div style="margin-top:8px;"><div style="font-weight:700; font-size:0.83rem;">📜 የእያንዳንዱ ስራ ታሪክ (ከምደባ ጀምሮ)</div>${jobBlocks}</div>` : ''}${expBlock}`;
             } catch (e) { console.warn('admReportExtraHtml failed', e); return ''; }
         }
         function admReportBadges(r) {
-            return admHasCorrection(r) ? ' <span style="color:#DC2626; font-weight:700; font-size:0.75rem;">✍️ እርማት ጥያቄ</span>' : '';
+            const _mm = admReportMismatch(r);
+            return (admHasCorrection(r) ? ' <span style="color:#DC2626; font-weight:700; font-size:0.75rem;">✍️ እርማት ጥያቄ</span>' : '') + (_mm ? ` <span style="color:#B45309; font-weight:700; font-size:0.75rem;" title="በዝርዝር ${_mm.listed} ስራ ብቻ አለ">⚠️ ዝርዝር ያልተሟላ (${_mm.listed}/${_mm.sent})</span>` : '');
         }
         function admReportFullEditHtml(r) {
             const cr0 = r.correctionRequest || {};
@@ -6792,7 +6824,17 @@ document.addEventListener('focusout', function (e) {
         function heAssignLockedMsg(name) { return '🔒 ይህ ስራ ቀድሞ ለ ' + name + ' ተመድቧል — እስኪጠናቀቅ ወይም ቴክኒሻኑ እስኪመልሰው ድረስ ለሌላ መመደብ አይቻልም'; }
         function heAssignLockedBox(name) { return '<span style="padding:4px 8px;border-radius:6px;background:#FEF3C7;color:#92400E;font-size:0.78rem;font-weight:700;">🔒 ለ ' + String(name).replace(/[&<>"]/g, '') + ' ተመድቧል — እስኪጠናቀቅ ዝግ ነው</span>'; }
 
+
+        // 🔒 አንድ ስራ በአንድ ጊዜ ከአንዴ በላይ እንዳይመደብ (ብዙ ጊዜ መንካት) — በሂደት ላይ ካለ ሌላ ጥያቄ ይታለፋል
         async function assignOrder(orderId, forcedTech) {
+            window.__asgBusy = window.__asgBusy || new Set();
+            if (window.__asgBusy.has(orderId)) return;
+            window.__asgBusy.add(orderId);
+            try { return await assignOrderCore(orderId, forcedTech); }
+            finally { window.__asgBusy.delete(orderId); }
+        }
+
+        async function assignOrderCore(orderId, forcedTech) {
             // ✅ NEW: ከ Dashboard ላይ ካለው quick-assign select ወይም ከ Orders ትር ላይ ካለው select ይነበብ
             // 🆕 forcedTech ከተሰጠ (አዲስ ስራ ሲመዘገብ የተመረጠው ቴክኒሻን) ከ DOM select ላይ አይመካም
             const select = forcedTech ? null : pickAssignSelect(orderId);
@@ -6855,14 +6897,17 @@ document.addEventListener('focusout', function (e) {
                 };
                 if (_ord0 && _ord0.scheduledReleaseDate) { _upd.scheduledTechnician = null; _upd.scheduledTechnicianId = null; _upd.scheduledReleaseDate = null; _upd.scheduledReleaseTime = null; } // ተይዞ የነበረ → አሁን ተመደበ
                 // 📜 transaction.update ከነባሩ የታሪክ መመዝገቢያ (DocumentReference.update) ውጭ ስለሆነ ታሪኩን እዚህ በግልጽ እንጨምራለን
-                _upd.history = firebase.firestore.FieldValue.arrayUnion({ t: Date.now(), by: (typeof heActorName === 'function' ? heActorName() : 'አስተዳዳሪ'), text: '📋 ለ ' + techName + ' ተመድቧል', st: 'Assigned' });
+                _upd.history = firebase.firestore.FieldValue.arrayUnion({ t: Date.now(), by: (typeof heActorName === 'function' ? heActorName() : 'አስተዳዳሪ'), text: '📋 ለ ' + techName + ' ተመድቧል', st: 'Assigned', ...(function () { try { var s1 = heGetSession(); return (s1 && s1.staff && s1.staff.id) ? { byId: String(s1.staff.id) } : {}; } catch (e) { return {}; } })() });
                 // 🔒 በሰርቨር ላይ በ transaction ይፈትሻል — ሁለት ሰዎች በአንድ ጊዜ ቢመድቡ አንደኛው ብቻ ይሳካል
                 const _aref = db.collection('orders').doc(orderId);
                 await db.runTransaction(async (tx) => {
                     const _s = await tx.get(_aref);
                     const _lk = _s.exists ? heAssignLockedTo(_s.data()) : '';
                     if (_lk && _lk !== techName) { const _e = new Error('ASSIGN_LOCKED'); _e.lockedTo = _lk; throw _e; }
-                    tx.update(_aref, _upd);
+                    // ለተመሳሳይ ቴክኒሻን ቀድሞ «ተመድቧል» ከሆነ የታሪክ መግቢያ ዳግም አይጨመርም (ድግግሞሽ እንዳይኖር)
+                    const _cur = _s.exists ? _s.data() : null;
+                    if (_cur && _cur.status === 'Assigned' && _cur.technician === techName) { const _u2 = Object.assign({}, _upd); delete _u2.history; tx.update(_aref, _u2); }
+                    else tx.update(_aref, _upd);
                 });
 
                 await db.collection('activity').add({
@@ -7060,12 +7105,12 @@ ${locationLine}
 
             // Timeline
             let timelineHTML = '';
-            const _hist = Array.isArray(order.history) ? order.history.filter(h => h && h.text).slice().sort((a, b) => (a.t || 0) - (b.t || 0)) : [];
+            const _hist = Array.isArray(order.history) ? heDedupeHistory(order.history.filter(h => h && h.text).slice().sort((a, b) => (a.t || 0) - (b.t || 0))) : [];
             if (!_hist.some(h => h.st === 'created')) timelineHTML += `
                 <div class="timeline-item"><span>${formatEthDateTime(order.createdAt) || '—'}</span> 📦 ትዕዛዝ ተፈጠረ</div>
             `;
             _hist.forEach(h => {
-                timelineHTML += `<div class="timeline-item"><span>${formatEthDateTime(new Date(h.t || 0))}${h.by ? ' — 👤 ' + admEsc(h.by) : ''}</span> ${admEsc(h.text)}</div>`;
+                timelineHTML += `<div class="timeline-item"><span>${formatEthDateTime(new Date(h.t || 0))}${heHistBy(h) ? ' — 👤 ' + admEsc(heHistBy(h)) : ''}</span> ${admEsc(h.text)}</div>`;
             });
             if (!_hist.length && order.assignedAt) {
                 timelineHTML += `
@@ -9799,10 +9844,12 @@ ${locationLine}
                     createdByName: heActorName(),
                     createdAt: new Date()
                 };
+                let _openOrders = [];
                 // 📁 ቀድሞ የተመዘገበ ደንበኛ — ታሪኩ ከአዲሱ ስራ ጋር ይያያዛል
                 try {
                     const _pc = _admPl.phoneOrderPhone;
                     const _h = (_pc && _pc.key === custKey(phone)) ? _pc.res : await admLookupPhone(phone);
+                    _openOrders = (_h && Array.isArray(_h.open)) ? _h.open : [];
                     if (_h && _h.orders.length) {
                         orderData.returningCustomer = true;
                         orderData.previousOrdersCount = _h.orders.length;
@@ -9812,6 +9859,16 @@ ${locationLine}
                         if (_h.done[0]) orderData.lastCompletedOrderId = _h.done[0].id;
                     }
                 } catch (e) { console.warn('history link failed (non-fatal)', e); }
+
+                // ⚠️ ይህ ደንበኛ (ስልክ) ክፍት ትዕዛዝ ካለው ከመመዝገብ በፊት ያስጠነቅቃል (እርማት/ሪፈራል ሆን ተብሎ ለቀድሞ ደንበኛ ስለሚሆን አይጠየቅም)
+                if (workType === 'new' && _openOrders.length) {
+                    const _stL = { Pending: '⏳ ያልተመደበ', Assigned: '📋 ተመድቧል', PriceNotAgreed: '💰 ዋጋ አልተስማሙም', NotToday: '📝 ዛሬ አይመቻቸውም', PhoneNoAnswer: '📵 ስልክ አይነሳም', Other: '📌 ሌላ ምክንያት' };
+                    const _lines = _openOrders.slice(0, 3).map(o => '• ' + (o.appliance || '—') + ' — ' + (_stL[o.status || 'Pending'] || (o.status || 'Pending')) + (o.technician ? ' (ቴክኒሻን: ' + o.technician + ')' : '')).join('\n');
+                    if (!confirm('⚠️ ይህ ደንበኛ ክፍት ትዕዛዝ አለው (' + _openOrders.length + ')\n' + _lines + '\n\nቢሆንም አዲስ ትዕዛዝ ይመዝገብ?\n✅ OK = አዲስ ይመዝገብ\n❌ Cancel = አይመዝገብ')) {
+                        showToast('ℹ️ ትዕዛዙ አልተመዘገበም — ክፍት ትዕዛዝ ቀድሞ አለ', 'info');
+                        return;
+                    }
+                }
 
                 const docRef = await db.collection('orders').add(orderData);
 
